@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "useDefineForClassFields": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@aneriam/ui": ["packages/ui/src"],
+      "@aneriam/auth": ["packages/auth/src"],
+      "@aneriam/config/*": ["packages/config/*"],
+      "@aneriam/types": ["packages/types/src"]
+    },
+    "types": ["@total-typescript/ts-reset"]
+  }
+}

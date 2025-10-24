@@ -1,0 +1,13 @@
+{
+  "name": "@aneriam/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./eslint/react": "./eslint/react.cjs",
+    "./eslint/node": "./eslint/node.cjs",
+    "./prettier": "./prettier/index.cjs",
+    "./tsconfig/app": "./tsconfig/app.json",
+    "./tsconfig/library": "./tsconfig/library.json"
+  }
+}

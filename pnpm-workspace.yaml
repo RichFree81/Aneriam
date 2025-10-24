@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+  - infra/*
+  - docs
+  - .
+
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - esbuild
+  - msgpackr-extract
