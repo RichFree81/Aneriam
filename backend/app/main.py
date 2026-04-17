@@ -2,6 +2,9 @@ import json
 import logging
 import os
 
+from dotenv import load_dotenv
+load_dotenv()  # loads backend/.env before any module reads os.getenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -81,4 +84,4 @@ def on_startup():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8001, reload=True)

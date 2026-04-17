@@ -71,7 +71,7 @@ echo   Migrations complete.
 :: Step 4 — Start the backend API  (new window)
 :: ----------------------------------------------------------------
 echo.
-echo [4/5] Starting the backend API on http://localhost:8000 ...
+echo [4/5] Starting the backend API on http://localhost:8001 ...
 start "Aneriam Backend" cmd /k "cd /d "%~dp0backend" && python -m app.main"
 
 :: Give it a moment to start before launching frontend
@@ -92,8 +92,8 @@ echo ============================================================
 echo   All services starting up.
 echo.
 echo   Frontend  ->  http://localhost:5173
-echo   Backend   ->  http://localhost:8000
-echo   API docs  ->  http://localhost:8000/docs
+echo   Backend   ->  http://localhost:8001
+echo   API docs  ->  http://localhost:8001/docs
 echo.
 echo   Two new windows have opened:
 echo     "Aneriam Backend"  - API server (keep open)

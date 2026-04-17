@@ -24,9 +24,11 @@ pytest_*.txt
 venv/
 .venv/
 
-# Environment files
+# Environment files (backend/.env contains secrets — never commit)
 .env
 .env.local
+# frontend/.env is safe to commit (URL only, no secrets)
+!frontend/.env
 
 # Node
 node_modules/
