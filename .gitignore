@@ -38,3 +38,9 @@ coverage/
 # Claude Code (local tool config — may contain dev credentials)
 .claude/
 
+# SQLite databases (test artefacts)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
