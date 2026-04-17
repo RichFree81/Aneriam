@@ -1,0 +1,15 @@
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+sqlmodel>=0.0.16
+pydantic>=2.6.0
+pydantic[email]
+python-multipart
+psycopg2-binary
+alembic
+passlib[argon2]
+python-jose[cryptography]
+python-dotenv
+slowapi>=0.1.9
+pytest
+pytest-cov
+httpx

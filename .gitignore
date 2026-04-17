@@ -1,28 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Pytest
+.pytest_cache/
+
+# Debug scripts
+# Debug scripts
+debug_*.py
+cleanup_test_data.py
+tmp_*.py
+scratch_*.py
+*.log
+
+# Test output captures
+*_out*.txt
+test_output.txt
+pytest_*.txt
+
+# Virtual environments
+venv/
+.venv/
+
+# Environment files
+.env
+.env.local
+
 # Node
 node_modules/
-pnpm-lock.yaml
-package-lock.json
-yarn.lock
-
-# Build outputs
-.next/
 dist/
-coverage/
-out/
-apps/web/build-trace-*.json
-
-# Env
-.env
-.env.*
-
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# IDE
 .DS_Store
-Thumbs.db
-.idea/
+coverage/
 .vscode/
+
+# Claude Code (local tool config — may contain dev credentials)
+.claude/
+

@@ -1,0 +1,28 @@
+/* 
+  Global Styles
+  All component styling should be handled via Material UI (sx prop or styled components).
+  This file should remains minimal/empty to avoid conflicts.
+*/
+
+:root {
+  /* Ensure full height for app layout */
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  width: 100%;
+  min-width: 1024px; /* Prevent layout breakage/data overlap on small screens */
+  overflow-x: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}
