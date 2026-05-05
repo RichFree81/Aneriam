@@ -62,11 +62,10 @@
     <thead>
       <tr>
         <th style="width:130px;">Package No.</th>
-        <th style="width:220px;">Description</th>
-        <th style="width:280px;">Type</th>
+        <th style="width:280px;">Description</th>
+        <th>Type</th>
         <th style="width:90px;">Class</th>
         <th style="width:120px;">Stage</th>
-        <th class="num" style="width:80px;">Workstreams</th>
       </tr>
     </thead>
     <tbody>
@@ -90,7 +89,6 @@
           {% set stage_cls = "stage-" ~ pkg.package_stage | lower | replace(" ", "-") %}
           <span class="chip {{ stage_cls }}">{{ pkg.package_stage }}</span>
         </td>
-        <td class="num">{{ pkg.workstreams | length }}</td>
       </tr>
       {% endfor %}
     </tbody>

@@ -1,4 +1,10 @@
-"""Parse Package Register markdown files and upsert packages + workstreams."""
+"""Parse Package Register markdown files and upsert packages.
+
+Workstream parsing was removed 2026-05-05 — workstreams are no longer a
+modelled concept. The "WS-XX" rows in the markdown are still tolerated
+during parsing (just ignored), so existing register files don't need
+to be edited to remove them.
+"""
 from __future__ import annotations
 
 import re
@@ -6,7 +12,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from .models import Package, PackageScheduleStage, Workstream
+from .models import Package, PackageScheduleStage
 from .seed import SCHEDULE_STAGES, default_is_external, normalise_package_stage
 
 
@@ -59,9 +65,12 @@ def _parse_one(path: Path) -> dict | None:
                     "package_stage":  cells[3],
                 })
 
-    # ── Workstream Register sections ─────────────────────────────────────
-    # Each section starts with: ### <pkg_number> — <description>
-    workstream_data: dict[str, dict] = {}
+    # ── Per-package detail sections ───────────────────────────────────
+    # Each section starts with: ### <pkg_number> — <description>. We pull
+    # Package Type, Standard Applied, and Scope Summary out. WS-XX rows in
+    # the table body are tolerated but ignored — workstreams are no longer
+    # a modelled concept (removed 2026-05-05).
+    detail_data: dict[str, dict] = {}
     i = 0
     while i < len(lines):
         m = re.match(r"###\s+(\S+)\s+[—\-]+\s+(.+)", lines[i])
@@ -71,8 +80,6 @@ def _parse_one(path: Path) -> dict | None:
             pkg_type = None
             std_applied = None
             scope_parts: list[str] = []
-            workstreams: list[dict] = []
-            ws_order = 0
 
             while j < len(lines):
                 line = lines[j]
@@ -93,24 +100,12 @@ def _parse_one(path: Path) -> dict | None:
                     text_after = re.sub(r"\*\*Scope Summary:\*\*\s*", "", stripped).strip()
                     if text_after:
                         scope_parts.append(text_after)
-                # Workstream table row — only rows whose first cell starts "WS-"
-                elif "|" in stripped:
-                    cells = [c.strip() for c in stripped.split("|")[1:-1]]
-                    if cells and re.match(r"WS-\d+", cells[0]):
-                        ws_desc = cells[1] if len(cells) > 1 else ""
-                        workstreams.append({
-                            "ref":          cells[0],
-                            "description":  ws_desc,
-                            "display_order": ws_order,
-                        })
-                        ws_order += 1
                 j += 1
 
-            workstream_data[pkg_num] = {
+            detail_data[pkg_num] = {
                 "pkg_type":     pkg_type,
                 "std_applied":  std_applied,
                 "scope_summary": " ".join(scope_parts) if scope_parts else None,
-                "workstreams":  workstreams,
             }
             i = j
         else:
@@ -120,16 +115,15 @@ def _parse_one(path: Path) -> dict | None:
     packages: list[dict] = []
     for order, raw in enumerate(packages_raw):
         num = raw["package_number"]
-        ws = workstream_data.get(num, {})
+        d = detail_data.get(num, {})
         packages.append({
             "package_number":      num,
             "description":         raw["description"],
-            "package_type":        ws.get("pkg_type") or raw["package_type"],
+            "package_type":        d.get("pkg_type") or raw["package_type"],
             "package_stage":       raw["package_stage"],
-            "scope_summary":       ws.get("scope_summary"),
-            "estimation_standard": ws.get("std_applied"),
+            "scope_summary":       d.get("scope_summary"),
+            "estimation_standard": d.get("std_applied"),
             "display_order":       order,
-            "workstreams":         ws.get("workstreams", []),
         })
 
     return {"project_number": proj_num, "packages": packages}
@@ -194,25 +188,5 @@ def seed_packages(db: Session, register_dir: Path) -> None:
                 pkg.display_order      = pkg_data["display_order"]
 
             db.flush()
-
-            # Upsert workstreams
-            existing = {w.ref: w for w in db.query(Workstream).filter_by(package_id=pkg.id).all()}
-            seen: set[str] = set()
-            for ws in pkg_data["workstreams"]:
-                ref = ws["ref"]
-                seen.add(ref)
-                if ref in existing:
-                    existing[ref].description  = ws["description"]
-                    existing[ref].display_order = ws["display_order"]
-                else:
-                    db.add(Workstream(
-                        package_id=pkg.id,
-                        ref=ws["ref"],
-                        description=ws["description"],
-                        display_order=ws["display_order"],
-                    ))
-            for ref, ws_obj in existing.items():
-                if ref not in seen:
-                    db.delete(ws_obj)
 
     db.commit()

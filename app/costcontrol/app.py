@@ -131,6 +131,13 @@ def on_startup():
             # / Close-out). Idempotent: subsequent runs find no matching rows.
             "UPDATE packages SET package_stage = 'Procurement' WHERE package_stage = 'Planned'",
             "UPDATE packages SET package_stage = 'Close-out'   WHERE package_stage IN ('Closeout', 'Complete')",
+            # 2026-05-05 — Workstreams removed entirely. Drop the workstream_id
+            # FK columns from cost nodes and deliverables, then drop the table.
+            # Each statement is wrapped individually so a failed DROP COLUMN
+            # (e.g. column already gone on a re-run) doesn't block the others.
+            "ALTER TABLE package_cost_nodes DROP COLUMN workstream_id",
+            "ALTER TABLE package_deliverables DROP COLUMN workstream_id",
+            "DROP TABLE IF EXISTS workstreams",
             # Backfill: set is_external for existing packages whose type is
             # external by default. Re-runs are no-ops because the WHERE clause
             # only flips rows that are still at the column default of 0.

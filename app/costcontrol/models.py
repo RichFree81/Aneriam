@@ -221,9 +221,6 @@ class Package(Base):
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     project_ref: Mapped["Project"] = relationship(back_populates="packages")
-    workstreams: Mapped[list["Workstream"]] = relationship(
-        back_populates="package_ref", cascade="all, delete-orphan", order_by="Workstream.display_order"
-    )
     schedule_stages: Mapped[list["PackageScheduleStage"]] = relationship(
         back_populates="package_ref", cascade="all, delete-orphan", order_by="PackageScheduleStage.stage_order"
     )
@@ -238,20 +235,6 @@ class Package(Base):
     deliverables: Mapped[list["PackageDeliverable"]] = relationship(
         back_populates="package_ref", cascade="all, delete-orphan"
     )
-
-
-class Workstream(Base):
-    __tablename__ = "workstreams"
-    __table_args__ = (UniqueConstraint("package_id", "ref"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    package_id: Mapped[int] = mapped_column(Integer, ForeignKey("packages.id", ondelete="CASCADE"), nullable=False)
-    ref: Mapped[str] = mapped_column(String(20), nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=False)
-    display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-
-    package_ref: Mapped["Package"] = relationship(back_populates="workstreams")
-    deliverables: Mapped[list["PackageDeliverable"]] = relationship(back_populates="workstream_ref")
 
 
 class PackageScheduleStage(Base):
@@ -317,9 +300,6 @@ class PackageCostNode(Base):
     cc_code: Mapped[str | None] = mapped_column(
         String(3), ForeignKey("control_accounts.code"), nullable=True
     )
-    workstream_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("workstreams.id", ondelete="SET NULL"), nullable=True
-    )
 
     # Baseline
     unit: Mapped[str] = mapped_column(String(20), nullable=False, default="Sum")
@@ -354,7 +334,6 @@ class PackageCostNode(Base):
         order_by="PackageCostNode.display_order",
     )
     cc_ref: Mapped["ControlAccount | None"] = relationship(foreign_keys=[cc_code])
-    workstream_ref: Mapped["Workstream | None"] = relationship(foreign_keys=[workstream_id])
 
 
 class CostNodeAuditLog(Base):
@@ -380,7 +359,6 @@ class PackageDeliverable(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     package_id: Mapped[int] = mapped_column(Integer, ForeignKey("packages.id", ondelete="CASCADE"), nullable=False)
-    workstream_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("workstreams.id", ondelete="SET NULL"), nullable=True)
     ref: Mapped[str | None] = mapped_column(String(50), nullable=True)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     doc_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
@@ -391,7 +369,6 @@ class PackageDeliverable(Base):
     location_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     package_ref: Mapped["Package"] = relationship(back_populates="deliverables")
-    workstream_ref: Mapped["Workstream | None"] = relationship(back_populates="deliverables")
 
 
 class RTO(Base):
