@@ -1,0 +1,840 @@
+{% extends "base.html" %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% set pkg_base  = "/project/" ~ project.project_number ~ "/packages/" ~ package.package_number %}
+{% block title %}{{ package.package_number }} — {{ active_pkg_tab | title }} — Cost Control{% endblock %}
+
+{% block actions_items %}
+<a href="/import">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/></svg>
+  Import Data
+</a>
+{% if active_pkg_tab == 'cost' %}
+<a href="#" onclick="event.preventDefault(); closeActions(); openSectionModal('add')">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zM2.5 2a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zM1 10.5A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3z"/></svg>
+  Add Section
+</a>
+<a href="#" onclick="event.preventDefault(); closeActions(); openItemModal('add')">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
+  Add Cost Item
+</a>
+<a style="opacity:0.4;cursor:default;pointer-events:none;">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
+  Export Cost Schedule
+</a>
+{% if not package.is_contracted %}
+<a href="#" onclick="event.preventDefault(); closeActions(); openAwardModal()">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>
+  Award Contract
+</a>
+{% else %}
+<a style="opacity:0.4;cursor:default;pointer-events:none;">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM8 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>
+  Contract Awarded
+</a>
+{% endif %}
+{% elif active_pkg_tab == 'deliverables' %}
+<a style="opacity:0.4;cursor:default;pointer-events:none;">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
+  Add Deliverable
+</a>
+{% elif active_pkg_tab == 'scope' %}
+<a style="opacity:0.4;cursor:default;pointer-events:none;">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
+  Add Workstream
+</a>
+{% endif %}
+{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb">
+      <a href="/">Portfolio</a>
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a>
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}/packages">Packages</a>
+    </div>
+    <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
+    <div class="tab-bar">
+      <a href="{{ pkg_base }}/scope"
+         class="{% if active_pkg_tab == 'scope' %}active{% endif %}">Scope</a>
+      <a href="{{ pkg_base }}/schedule"
+         class="{% if active_pkg_tab == 'schedule' %}active{% endif %}">Schedule</a>
+      <a href="{{ pkg_base }}/cost"
+         class="{% if active_pkg_tab == 'cost' %}active{% endif %}">Cost</a>
+      <a href="{{ pkg_base }}/deliverables"
+         class="{% if active_pkg_tab == 'deliverables' %}active{% endif %}">Deliverables</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<div class="card">
+
+  {# ════════════════════════════════════════════════════════
+     SCOPE TAB
+     ════════════════════════════════════════════════════════ #}
+  {% if active_pkg_tab == 'scope' %}
+
+  {% if package.workstreams %}
+  <table style="margin-top:0;">
+    <thead>
+      <tr>
+        <th style="width:80px;">Ref.</th>
+        <th>Workstream Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ws in package.workstreams %}
+      <tr>
+        <td style="font-family:monospace;font-size:12px;color:#1a4a80;font-weight:600;">{{ ws.ref }}</td>
+        <td>{{ ws.description }}</td>
+      </tr>
+      {% endfor %}
+      <tr class="subtotal">
+        <td>Total</td>
+        <td>{{ package.workstreams | length }} workstream{{ 's' if package.workstreams | length != 1 else '' }}</td>
+      </tr>
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <strong>No workstreams defined</strong>
+    Workstream data is loaded from the Package Register files.
+  </div>
+  {% endif %}
+
+  {# ════════════════════════════════════════════════════════
+     SCHEDULE TAB
+     ════════════════════════════════════════════════════════ #}
+  {% elif active_pkg_tab == 'schedule' %}
+
+  {% set stages = package.schedule_stages %}
+  {% if stages %}
+  <div style="margin-top:0;">
+    <p class="meta" style="margin-bottom:12px;">
+      Standard: <strong>{{ package.estimation_standard or 'Not yet assigned' }}</strong>
+      &nbsp;·&nbsp; Schedule inputs and stage durations are pending estimation.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:140px;">Stage</th>
+          <th class="num" style="width:100px;">Base (wks)</th>
+          <th class="num" style="width:100px;">R&amp;A (wks)</th>
+          <th class="num" style="width:100px;">Expert Adj.</th>
+          <th class="num" style="width:100px;">Total (wks)</th>
+          <th style="width:110px;">Start</th>
+          <th style="width:110px;">End</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set ns = namespace(grand=0) %}
+        {% for st in stages %}
+        {% if st.total_weeks is not none %}{% set ns.grand = ns.grand + st.total_weeks %}{% endif %}
+        <tr>
+          <td style="font-weight:600;">{{ st.stage }}</td>
+          <td class="num">{{ "%.1f"|format(st.base_weeks) if st.base_weeks is not none else '—' }}</td>
+          <td class="num">{{ "%.1f"|format(st.review_approval_weeks) if st.review_approval_weeks is not none else '—' }}</td>
+          <td class="num">
+            {% if st.expert_adjustment_weeks is not none %}
+              {{ "%+.1f"|format(st.expert_adjustment_weeks) }}
+              {% if st.expert_reason %}<span title="{{ st.expert_reason }}" style="cursor:help;color:#aab;">ⓘ</span>{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td class="num" style="font-weight:600;">{{ "%.1f"|format(st.total_weeks) if st.total_weeks is not none else '—' }}</td>
+          <td>{{ st.start_date.strftime('%d %b %Y') if st.start_date else '—' }}</td>
+          <td>{{ st.end_date.strftime('%d %b %Y') if st.end_date else '—' }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="subtotal">
+          <td>Total</td>
+          <td class="num" colspan="3"></td>
+          <td class="num">{{ "%.1f wks"|format(ns.grand) if ns.grand > 0 else '—' }}</td>
+          <td colspan="2"></td>
+        </tr>
+      </tbody>
+    </table>
+    {% if ns.grand == 0 %}
+    <div class="empty-state" style="padding:20px 0 0;">
+      <strong>Schedule not yet estimated</strong>
+      Complete the schedule inputs using the Estimation Standard to generate stage durations.
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <strong>Schedule not yet estimated</strong>
+    Stage rows will appear here once schedule estimation is completed.
+  </div>
+  {% endif %}
+
+  {# ════════════════════════════════════════════════════════
+     COST TAB — Bill of Quantities
+     ════════════════════════════════════════════════════════ #}
+  {% elif active_pkg_tab == 'cost' %}
+
+  <style>
+    .row-act { font-size:11px; color:#999; text-decoration:none; padding:2px 4px; background:none; border:none; cursor:pointer; line-height:1; display:inline-flex; align-items:center; border-radius:3px; }
+    .row-act:hover { color:#1a4a80; background:#e8f0fb; }
+    .row-act-del:hover { color:#c00 !important; background:#fdecea !important; }
+    .row-act-lock:hover { color:#0a5233 !important; background:#e6f4ec !important; }
+    td.act-col { white-space:nowrap; padding:3px 6px !important; text-align:right; }
+    tr.hier-leaf td { background:#fff; font-style:normal; color:inherit; }
+    tr.row-incomplete td { background:#fffbe6; }
+  </style>
+
+  {% set pre_award_label = "Pre-award Estimate" %}
+  {% set contracted = package.is_contracted %}
+
+  {% set ns = namespace(grand_base=0, grand_pre=0, grand_contract=0) %}
+  {% for row in cost_rows %}
+    {% if row.depth == 0 %}
+      {% set ns.grand_base     = ns.grand_base     + row._subtotals.baseline %}
+      {% set ns.grand_pre      = ns.grand_pre      + row._subtotals.pre_award %}
+      {% set ns.grand_contract = ns.grand_contract + row._subtotals.contract %}
+    {% endif %}
+  {% endfor %}
+
+  <div style="overflow-x:auto;">
+  <table style="margin-top:0;width:100%;table-layout:fixed;">
+    <colgroup>
+      <col>
+      <col style="width:18%;">
+      <col style="width:18%;">
+      <col style="width:18%;">
+      <col style="width:88px;">
+    </colgroup>
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th class="num">Baseline Est.</th>
+        <th class="num">{{ pre_award_label }}{% if contracted %} <span style="font-size:10px;font-weight:400;color:#888;">(frozen)</span>{% endif %}</th>
+        <th class="num" style="color:{% if contracted %}#0a5233{% else %}#888{% endif %};border-right:1px solid #d0d7e3;">Contract Value</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in cost_rows %}
+      {% set node       = row.node %}
+      {% set depth      = row.depth %}
+      {% set sub        = row._subtotals %}
+      {% set indent_px  = depth * 20 %}
+      {% set is_section = not node.is_item %}
+      {% set anc_attr   = row.ancestor_ids | join(' ') %}
+
+      {% if is_section %}
+      {# ── Section / group row ── #}
+      <tr class="hier-l{{ [depth + 1, 3] | min }}"
+          data-cn-ancestors="{{ anc_attr }}"
+          data-cn-id="{{ node.id }}"
+          data-node-id="{{ node.id }}"
+          data-node-code="{{ node.code | e }}"
+          data-node-desc="{{ node.description | e }}">
+        <td style="padding-left:{{ 12 + indent_px }}px;">
+          {% if node.children %}
+          <span class="hier-toggle" data-toggle-key="cn-{{ node.id }}"
+                onclick="cnToggle('{{ node.id }}')">&#9658;</span>
+          {% else %}
+          <span style="display:inline-block;width:14px;"></span>
+          {% endif %}
+          <strong>{% if node.code %}{{ node.code }}: {% endif %}{{ node.description }}</strong>
+        </td>
+        <td class="num">{{ sub.baseline | zar if sub.baseline else '—' }}</td>
+        <td class="num">{{ sub.pre_award | zar if sub.pre_award else '—' }}</td>
+        <td class="num" style="border-right:1px solid #d0d7e3;{% if contracted and sub.contract %}color:#0a5233;font-weight:600;{% endif %}">
+          {{ sub.contract | zar if sub.contract else '—' }}
+        </td>
+        <td class="act-col">
+          <a href="#" class="row-act" onclick="editSectionFromRow(this); return false;" title="Edit section">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207l6.5-6.5zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.499.499 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11l.178-.178z"/></svg>
+          </a>
+          <form method="post" action="{{ pkg_base }}/cost/delete-node/{{ node.id }}" style="display:inline;"
+                onsubmit="return confirm('Delete this section and all items inside it?')">
+            <button type="submit" class="row-act row-act-del" title="Delete section">
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+            </button>
+          </form>
+        </td>
+      </tr>
+
+      {% else %}
+      {# ── Cost item row ── #}
+      <tr class="hier-leaf{% if not node.cc_code %} row-incomplete{% endif %}"
+          data-cn-ancestors="{{ anc_attr }}"
+          data-node-id="{{ node.id }}"
+          data-node-code="{{ node.code | e }}"
+          data-node-desc="{{ node.description | e }}"
+          data-node-cc="{{ node.cc_code or '' }}"
+          data-node-parent="{{ node.parent_id if node.parent_id is not none else '' }}"
+          data-node-bl-unit="{{ node.unit | e }}"
+          data-node-bl-qty="{{ node.qty if node.qty is not none else '' }}"
+          data-node-bl-rate="{{ node.rate if node.rate is not none else '' }}"
+          data-node-bl-amount="{{ node.baseline_amount if node.baseline_amount is not none else '' }}"
+          data-node-pa-unit="{{ node.pre_award_unit | e }}"
+          data-node-pa-qty="{{ node.pre_award_qty if node.pre_award_qty is not none else '' }}"
+          data-node-pa-rate="{{ node.pre_award_rate if node.pre_award_rate is not none else '' }}"
+          data-node-pa-amount="{{ node.pre_award_amount if node.pre_award_amount is not none else '' }}"
+          data-node-ct-unit="{{ node.contract_unit | e }}"
+          data-node-ct-qty="{{ node.contract_qty if node.contract_qty is not none else '' }}"
+          data-node-ct-rate="{{ node.contract_rate if node.contract_rate is not none else '' }}"
+          data-node-ct-amount="{{ node.contract_amount if node.contract_amount is not none else '' }}">
+        <td style="padding-left:{{ 12 + indent_px }}px;">
+          <span style="display:inline-block;width:14px;"></span>
+          {% if node.code %}{{ node.code }}: {% endif %}{{ node.description }}
+        </td>
+        <td class="num">{{ node.baseline_amount | zar if node.baseline_amount is not none else '—' }}</td>
+        <td class="num">{{ node.pre_award_amount | zar if node.pre_award_amount is not none else '—' }}</td>
+        <td class="num" style="border-right:1px solid #d0d7e3;{% if contracted and node.contract_amount %}color:#0a5233;font-weight:600;{% endif %}">
+          {{ node.contract_amount | zar if node.contract_amount is not none else '—' }}
+        </td>
+        <td class="act-col">
+          <a href="#" class="row-act" onclick="openViewModal(this); return false;" title="View cost build-up">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg>
+          </a>
+          <a href="#" class="row-act" onclick="editItemFromRow(this); return false;" title="Edit cost item">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207l6.5-6.5zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.499.499 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11l.178-.178z"/></svg>
+          </a>
+          <form method="post" action="{{ pkg_base }}/cost/delete-node/{{ node.id }}" style="display:inline;"
+                onsubmit="return confirm('Delete this cost item?')">
+            <button type="submit" class="row-act row-act-del" title="Delete cost item">
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+
+      {% if not cost_rows %}
+      <tr>
+        <td colspan="5" style="text-align:center;color:#999;padding:28px;font-style:italic;">
+          No cost items yet — use the actions menu to add a section, then add cost items inside it.
+        </td>
+      </tr>
+      {% endif %}
+
+      <tr class="subtotal">
+        <td>Total</td>
+        <td class="num">{{ ns.grand_base | zar }}</td>
+        <td class="num">{{ ns.grand_pre | zar }}</td>
+        <td class="num" style="border-right:1px solid #d0d7e3;{% if contracted %}color:#0a5233;{% endif %}">{{ ns.grand_contract | zar }}</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  {# ── Modals ── #}
+
+  {# Add / Edit Section modal #}
+  <div class="filter-overlay" id="sectionOverlay" onclick="closeSectionModal()"></div>
+  <div class="filter-modal" id="sectionModal" style="width:420px;">
+    <div class="fm-header">
+      <span id="sectionModalTitle">Add Section</span>
+      <button class="fm-close" onclick="closeSectionModal()" aria-label="Close">&times;</button>
+    </div>
+    <form id="sectionForm" method="post">
+      <div class="fm-fields">
+        <label>Code
+          <input type="text" name="code" id="sectionCode" placeholder="e.g. A" maxlength="30">
+        </label>
+        <label>Description *
+          <input type="text" name="description" id="sectionDesc" required placeholder="e.g. Preliminaries">
+        </label>
+        <div id="sectionParentRow">
+          <label>Parent Section
+            <select name="parent_id" id="sectionParent">
+              <option value="">No parent (root level)</option>
+              {% for sec in all_sections %}
+              <option value="{{ sec.id }}">{% if sec.code %}{{ sec.code }}: {% endif %}{{ sec.description }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="fm-footer">
+        <button type="button" class="btn btn-sm btn-ghost" onclick="closeSectionModal()">Cancel</button>
+        <button type="submit" class="btn btn-sm">Save Section</button>
+      </div>
+    </form>
+  </div>
+
+  {# Add / Edit Cost Item modal #}
+  <div class="filter-overlay" id="itemOverlay" onclick="closeItemModal()"></div>
+  <div class="filter-modal" id="itemModal" style="width:760px;max-height:90vh;overflow-y:auto;">
+    <div class="fm-header">
+      <span id="itemModalTitle">Add Cost Item</span>
+      <button class="fm-close" onclick="closeItemModal()" aria-label="Close">&times;</button>
+    </div>
+    <form id="itemForm" method="post">
+      <div class="fm-fields">
+        <div style="display:flex;gap:10px;">
+          <label style="width:110px;">Code
+            <input type="text" name="code" id="itemCode" placeholder="e.g. A.1" maxlength="30">
+          </label>
+          <label style="flex:1;">Description *
+            <input type="text" name="description" id="itemDesc" required placeholder="Item description">
+          </label>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <label style="flex:1;">Related Control Account
+            <select name="cc_code" id="itemCCCode">
+              <option value="">— None —</option>
+              {% for ca in control_accounts %}
+              <option value="{{ ca.code }}">{{ ca.code }} — {{ ca.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <div id="itemParentRow" style="flex:1;">
+            <label style="width:100%;">Related Section
+              <select name="parent_id" id="itemParent" style="width:100%;">
+                <option value="">— None —</option>
+                {% for sec in all_sections %}
+                <option value="{{ sec.id }}">{% if sec.code %}{{ sec.code }}: {% endif %}{{ sec.description }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:4px;">
+        <div style="border:1px solid #dde3ec;border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:11px;font-weight:700;color:#1a4a80;text-transform:uppercase;letter-spacing:.06em;">Baseline</div>
+          <label style="margin:0;">Unit
+            <select name="baseline_unit" id="bl_unit" onchange="colUnitChanged('bl')">
+              <option value="Sum">Sum</option>
+              <option value="P.Sum">P.Sum</option>
+              <option value="Nr">Nr</option>
+              <option value="m">m</option>
+              <option value="m²">m²</option>
+              <option value="m³">m³</option>
+              <option value="kg">kg</option>
+              <option value="t">t</option>
+              <option value="l">l</option>
+              <option value="hr">hr</option>
+              <option value="day">day</option>
+              <option value="week">week</option>
+              <option value="month">month</option>
+            </select>
+          </label>
+          <div id="bl_sum_row">
+            <label style="margin:0;">Amount (R)
+              <input type="number" name="baseline_amount" id="bl_amount" step="0.01" min="0" placeholder="0.00" oninput="colAmtChanged('bl')">
+            </label>
+          </div>
+          <div id="bl_qty_row" style="display:none;">
+            <label style="margin:0 0 4px;">Qty
+              <input type="number" name="baseline_qty" id="bl_qty" step="any" min="0" placeholder="0" oninput="colCalcTotal('bl')">
+            </label>
+            <label style="margin:0;">Rate (R)
+              <input type="number" name="baseline_rate" id="bl_rate" step="0.01" min="0" placeholder="0.00" oninput="colCalcTotal('bl')">
+            </label>
+          </div>
+          <div style="font-size:12px;color:#444;padding-top:2px;border-top:1px solid #eee;">Total: <strong id="bl_total">—</strong></div>
+        </div>
+        <div style="border:1px solid #dde3ec;border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:11px;font-weight:700;color:#1a4a80;text-transform:uppercase;letter-spacing:.06em;">Pre-Award Estimate</div>
+          <label style="margin:0;">Unit
+            <select name="pre_award_unit" id="pa_unit" onchange="colUnitChanged('pa')">
+              <option value="Sum">Sum</option>
+              <option value="P.Sum">P.Sum</option>
+              <option value="Nr">Nr</option>
+              <option value="m">m</option>
+              <option value="m²">m²</option>
+              <option value="m³">m³</option>
+              <option value="kg">kg</option>
+              <option value="t">t</option>
+              <option value="l">l</option>
+              <option value="hr">hr</option>
+              <option value="day">day</option>
+              <option value="week">week</option>
+              <option value="month">month</option>
+            </select>
+          </label>
+          <div id="pa_sum_row">
+            <label style="margin:0;">Amount (R)
+              <input type="number" name="pre_award_amount" id="pa_amount" step="0.01" min="0" placeholder="0.00" oninput="colAmtChanged('pa')">
+            </label>
+          </div>
+          <div id="pa_qty_row" style="display:none;">
+            <label style="margin:0 0 4px;">Qty
+              <input type="number" name="pre_award_qty" id="pa_qty" step="any" min="0" placeholder="0" oninput="colCalcTotal('pa')">
+            </label>
+            <label style="margin:0;">Rate (R)
+              <input type="number" name="pre_award_rate" id="pa_rate" step="0.01" min="0" placeholder="0.00" oninput="colCalcTotal('pa')">
+            </label>
+          </div>
+          <div style="font-size:12px;color:#444;padding-top:2px;border-top:1px solid #eee;">Total: <strong id="pa_total">—</strong></div>
+        </div>
+        <div style="border:1px solid #dde3ec;border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:11px;font-weight:700;color:#1a4a80;text-transform:uppercase;letter-spacing:.06em;">Contract Value</div>
+          <label style="margin:0;">Unit
+            <select name="contract_unit" id="ct_unit" onchange="colUnitChanged('ct')">
+              <option value="Sum">Sum</option>
+              <option value="P.Sum">P.Sum</option>
+              <option value="Nr">Nr</option>
+              <option value="m">m</option>
+              <option value="m²">m²</option>
+              <option value="m³">m³</option>
+              <option value="kg">kg</option>
+              <option value="t">t</option>
+              <option value="l">l</option>
+              <option value="hr">hr</option>
+              <option value="day">day</option>
+              <option value="week">week</option>
+              <option value="month">month</option>
+            </select>
+          </label>
+          <div id="ct_sum_row">
+            <label style="margin:0;">Amount (R)
+              <input type="number" name="contract_amount" id="ct_amount" step="0.01" min="0" placeholder="0.00" oninput="colAmtChanged('ct')">
+            </label>
+          </div>
+          <div id="ct_qty_row" style="display:none;">
+            <label style="margin:0 0 4px;">Qty
+              <input type="number" name="contract_qty" id="ct_qty" step="any" min="0" placeholder="0" oninput="colCalcTotal('ct')">
+            </label>
+            <label style="margin:0;">Rate (R)
+              <input type="number" name="contract_rate" id="ct_rate" step="0.01" min="0" placeholder="0.00" oninput="colCalcTotal('ct')">
+            </label>
+          </div>
+          <div style="font-size:12px;color:#444;padding-top:2px;border-top:1px solid #eee;">Total: <strong id="ct_total">—</strong></div>
+        </div>
+        </div>
+      </div>
+      <div class="fm-footer">
+        <button type="button" class="btn btn-sm btn-ghost" onclick="closeItemModal()">Cancel</button>
+        <button type="submit" class="btn btn-sm">Save Item</button>
+      </div>
+    </form>
+  </div>
+
+
+  {# View Cost Build-up modal (read-only) #}
+  <div class="filter-overlay" id="viewOverlay" onclick="closeViewModal()"></div>
+  <div class="filter-modal" id="viewModal" style="width:680px;max-height:90vh;overflow-y:auto;">
+    <div class="fm-header">
+      <span id="viewModalTitle">Cost Build-up</span>
+      <button class="fm-close" onclick="closeViewModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="fm-fields">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+        <div style="border:1px solid #dde3ec;border-radius:6px;padding:12px;">
+          <div style="font-size:11px;font-weight:700;color:#1a4a80;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Baseline</div>
+          <div style="font-size:12px;color:#555;margin-bottom:4px;">Unit: <strong id="vbl_unit"></strong></div>
+          <div id="vbl_qtyrow">
+            <div style="font-size:12px;color:#555;margin-bottom:2px;">Qty: <strong id="vbl_qty"></strong></div>
+            <div style="font-size:12px;color:#555;margin-bottom:4px;">Rate: <strong id="vbl_rate"></strong></div>
+          </div>
+          <div style="font-size:13px;color:#222;padding-top:6px;border-top:1px solid #eee;">Total: <strong id="vbl_total"></strong></div>
+        </div>
+        <div style="border:1px solid #dde3ec;border-radius:6px;padding:12px;">
+          <div style="font-size:11px;font-weight:700;color:#1a4a80;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Pre-Award Estimate</div>
+          <div style="font-size:12px;color:#555;margin-bottom:4px;">Unit: <strong id="vpa_unit"></strong></div>
+          <div id="vpa_qtyrow">
+            <div style="font-size:12px;color:#555;margin-bottom:2px;">Qty: <strong id="vpa_qty"></strong></div>
+            <div style="font-size:12px;color:#555;margin-bottom:4px;">Rate: <strong id="vpa_rate"></strong></div>
+          </div>
+          <div style="font-size:13px;color:#222;padding-top:6px;border-top:1px solid #eee;">Total: <strong id="vpa_total"></strong></div>
+        </div>
+        <div style="border:1px solid #dde3ec;border-radius:6px;padding:12px;">
+          <div style="font-size:11px;font-weight:700;color:#0a5233;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Contract Value</div>
+          <div style="font-size:12px;color:#555;margin-bottom:4px;">Unit: <strong id="vct_unit"></strong></div>
+          <div id="vct_qtyrow">
+            <div style="font-size:12px;color:#555;margin-bottom:2px;">Qty: <strong id="vct_qty"></strong></div>
+            <div style="font-size:12px;color:#555;margin-bottom:4px;">Rate: <strong id="vct_rate"></strong></div>
+          </div>
+          <div style="font-size:13px;color:#222;padding-top:6px;border-top:1px solid #eee;">Total: <strong id="vct_total"></strong></div>
+        </div>
+      </div>
+      <div style="margin-top:16px;border-top:2px solid #e5e9f0;padding-top:14px;">
+        <div style="font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Change History</div>
+        <div id="viewAuditLog" style="max-height:220px;overflow-y:auto;border:1px solid #e5e9f0;border-radius:6px;padding:2px 0;"></div>
+      </div>
+    </div>
+    <div class="fm-footer">
+      <button type="button" class="btn btn-sm btn-ghost" onclick="closeViewModal()">Close</button>
+    </div>
+  </div>
+
+  {# Award Contract confirmation modal #}
+  <div class="filter-overlay" id="awardOverlay" onclick="closeAwardModal()"></div>
+  <div class="filter-modal" id="awardModal" style="width:400px;">
+    <div class="fm-header">
+      <span>Award Contract</span>
+      <button class="fm-close" onclick="closeAwardModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="fm-fields">
+      <p style="margin:0;">Awarding the contract will <strong>freeze</strong> the Pre-award Estimate column for this package. The Contract Value column becomes the live cost basis.</p>
+      <p style="margin:10px 0 0;font-size:12px;color:#888;">This action cannot be undone. Ensure all contract amounts are entered before awarding.</p>
+    </div>
+    <div class="fm-footer">
+      <button type="button" class="btn btn-sm btn-ghost" onclick="closeAwardModal()">Cancel</button>
+      <form method="post" action="{{ pkg_base }}/cost/award" style="display:inline;">
+        <button type="submit" class="btn btn-sm" style="background:#0a5233;">Award Contract</button>
+      </form>
+    </div>
+  </div>
+
+  {# ════════════════════════════════════════════════════════
+     DELIVERABLES TAB
+     ════════════════════════════════════════════════════════ #}
+  {% elif active_pkg_tab == 'deliverables' %}
+
+  {% if package.deliverables %}
+  <table style="margin-top:0;">
+    <thead>
+      <tr>
+        <th style="width:80px;">Ref.</th>
+        <th>Title</th>
+        <th style="width:100px;">Type</th>
+        <th style="width:80px;">WS</th>
+        <th style="width:110px;">Status</th>
+        <th style="width:90px;">Rev.</th>
+        <th style="width:110px;">Planned Issue</th>
+        <th style="width:110px;">Actual Issue</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in package.deliverables %}
+      <tr>
+        <td style="font-family:monospace;font-size:12px;">{{ d.ref or '—' }}</td>
+        <td>
+          {% if d.location_url %}<a href="{{ d.location_url }}" target="_blank">{{ d.title }}</a>
+          {% else %}{{ d.title }}{% endif %}
+        </td>
+        <td style="font-size:12px;">{{ d.doc_type or '—' }}</td>
+        <td style="font-size:12px;font-family:monospace;">{{ d.workstream_ref.ref if d.workstream_ref else '—' }}</td>
+        <td><span class="badge">{{ d.status }}</span></td>
+        <td style="font-size:12px;">{{ d.revision or '—' }}</td>
+        <td style="font-size:12px;">{{ d.planned_issue_date.strftime('%d %b %Y') if d.planned_issue_date else '—' }}</td>
+        <td style="font-size:12px;">{{ d.actual_issue_date.strftime('%d %b %Y') if d.actual_issue_date else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <strong>No deliverables registered</strong>
+    Add document deliverables (drawings, specifications, reports, as-builts) for this package.
+  </div>
+  {% endif %}
+
+  {% endif %}{# end tab selection #}
+
+</div>{# end package card #}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const PKG_BASE   = {{ (pkg_base) | tojson }};
+  const COST_AUDIT = {{ audit_data | tojson }};
+
+  // ── Cost node collapse/expand ──────────────────────────
+  const cnCollapsed = {};
+
+  function cnToggle(nodeId) {
+    cnCollapsed[nodeId] = !cnCollapsed[nodeId];
+    const icon = document.querySelector('[data-toggle-key="cn-' + nodeId + '"]');
+    if (icon) icon.classList.toggle('collapsed', !!cnCollapsed[nodeId]);
+    cnUpdateVisibility();
+  }
+
+  function cnUpdateVisibility() {
+    document.querySelectorAll('tr[data-cn-ancestors]').forEach(function(row) {
+      const ancestors = row.dataset.cnAncestors ? row.dataset.cnAncestors.split(' ') : [];
+      const hidden = ancestors.some(function(id) { return cnCollapsed[id]; });
+      row.style.display = hidden ? 'none' : '';
+    });
+  }
+
+  // ── Section modal ──────────────────────────────────────
+  function openSectionModal(mode, nodeId, code, description) {
+    const isEdit = mode === 'edit';
+    document.getElementById('sectionModalTitle').textContent = isEdit ? 'Edit Section' : 'Add Section';
+    document.getElementById('sectionForm').action = isEdit
+      ? PKG_BASE + '/cost/update-section/' + nodeId
+      : PKG_BASE + '/cost/add-section';
+    document.getElementById('sectionCode').value = code || '';
+    document.getElementById('sectionDesc').value = description || '';
+    document.getElementById('sectionParentRow').style.display = isEdit ? 'none' : '';
+    if (!isEdit) document.getElementById('sectionParent').value = '';
+    document.getElementById('sectionOverlay').classList.add('open');
+    document.getElementById('sectionModal').classList.add('open');
+    setTimeout(function() { document.getElementById('sectionDesc').focus(); }, 60);
+  }
+
+  function closeSectionModal() {
+    document.getElementById('sectionOverlay').classList.remove('open');
+    document.getElementById('sectionModal').classList.remove('open');
+  }
+
+  function editSectionFromRow(btn) {
+    const d = btn.closest('tr').dataset;
+    openSectionModal('edit', d.nodeId, d.nodeCode, d.nodeDesc);
+  }
+
+  // ── Item modal ─────────────────────────────────────────────────────
+  function openItemModal(mode, nodeId, code, description, ccCode, parentId,
+      blUnit, blQty, blRate, blAmount,
+      paUnit, paQty, paRate, paAmount,
+      ctUnit, ctQty, ctRate, ctAmount) {
+    const isEdit = mode === 'edit';
+    document.getElementById('itemModalTitle').textContent = isEdit ? 'Edit Cost Item' : 'Add Cost Item';
+    document.getElementById('itemForm').action = isEdit
+      ? PKG_BASE + '/cost/update-item/' + nodeId
+      : PKG_BASE + '/cost/add-item';
+    document.getElementById('itemCode').value = code || '';
+    document.getElementById('itemDesc').value = description || '';
+    document.getElementById('itemCCCode').value = ccCode || '';
+    document.getElementById('itemParentRow').style.display = isEdit ? 'none' : '';
+    if (!isEdit) document.getElementById('itemParent').value = parentId || '';
+    colInit('bl', blUnit, blQty, blRate, blAmount);
+    colInit('pa', paUnit, paQty, paRate, paAmount);
+    colInit('ct', ctUnit, ctQty, ctRate, ctAmount);
+    document.getElementById('itemOverlay').classList.add('open');
+    document.getElementById('itemModal').classList.add('open');
+    setTimeout(function() { document.getElementById('itemDesc').focus(); }, 60);
+  }
+
+  function closeItemModal() {
+    document.getElementById('itemOverlay').classList.remove('open');
+    document.getElementById('itemModal').classList.remove('open');
+  }
+
+  function editItemFromRow(btn) {
+    const d = btn.closest('tr').dataset;
+    openItemModal('edit', d.nodeId, d.nodeCode, d.nodeDesc, d.nodeCc, d.nodeParent,
+      d.nodeBlUnit, d.nodeBlQty, d.nodeBlRate, d.nodeBlAmount,
+      d.nodePaUnit, d.nodePaQty, d.nodePaRate, d.nodePaAmount,
+      d.nodeCtUnit, d.nodeCtQty, d.nodeCtRate, d.nodeCtAmount);
+  }
+
+  // ── Cost column helpers ────────────────────────────────────────────
+  function colInit(p, unit, qty, rate, amount) {
+    document.getElementById(p + '_unit').value = unit || 'Sum';
+    document.getElementById(p + '_qty').value = qty || '';
+    document.getElementById(p + '_rate').value = rate || '';
+    document.getElementById(p + '_amount').value = amount || '';
+    colUnitChanged(p);
+  }
+
+  function colUnitChanged(p) {
+    const unit = document.getElementById(p + '_unit').value;
+    const isSum = unit === 'Sum' || unit === 'P.Sum';
+    document.getElementById(p + '_sum_row').style.display = isSum ? '' : 'none';
+    document.getElementById(p + '_qty_row').style.display = isSum ? 'none' : '';
+    isSum ? colAmtChanged(p) : colCalcTotal(p);
+  }
+
+  function colAmtChanged(p) {
+    const amt = parseFloat(document.getElementById(p + '_amount').value) || 0;
+    document.getElementById(p + '_total').textContent = amt
+      ? 'R ' + amt.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '—';
+  }
+
+  function colCalcTotal(p) {
+    const qty  = parseFloat(document.getElementById(p + '_qty').value) || 0;
+    const rate = parseFloat(document.getElementById(p + '_rate').value) || 0;
+    const total = qty * rate;
+    document.getElementById(p + '_total').textContent = total
+      ? 'R ' + total.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '—';
+  }
+
+
+  // ── View cost build-up modal (read-only) ──────────────────────────────
+  function openViewModal(btn) {
+    const d = btn.closest('tr').dataset;
+    const code = d.nodeCode;
+    const desc = d.nodeDesc;
+    document.getElementById('viewModalTitle').textContent = (code ? code + ': ' : '') + (desc || 'Cost Build-up');
+    viewColFill('vbl', d.nodeBlUnit, d.nodeBlQty, d.nodeBlRate, d.nodeBlAmount);
+    viewColFill('vpa', d.nodePaUnit, d.nodePaQty, d.nodePaRate, d.nodePaAmount);
+    viewColFill('vct', d.nodeCtUnit, d.nodeCtQty, d.nodeCtRate, d.nodeCtAmount);
+
+    // Populate audit log (most recent first)
+    const nodeId = parseInt(d.nodeId, 10);
+    const entries = (COST_AUDIT[nodeId] || []).slice().reverse();
+    const logEl = document.getElementById('viewAuditLog');
+    if (entries.length === 0) {
+      logEl.innerHTML = '<div style="padding:10px 12px;color:#999;font-size:12px;font-style:italic;">No history recorded yet.</div>';
+    } else {
+      logEl.innerHTML = entries.map(function(e, i) {
+        const s = e.snapshot;
+        const blAmt = viewFmtAmt(s.bl_amount);
+        const paAmt = viewFmtAmt(s.pa_amount);
+        const ctAmt = viewFmtAmt(s.ct_amount);
+        const isCreated = e.action === 'Created';
+        const actionColor = isCreated ? '#1a4a80' : '#6b5000';
+        const border = i < entries.length - 1 ? 'border-bottom:1px solid #f0f2f5;' : '';
+        return '<div style="padding:8px 12px;' + border + '">' +
+          '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">' +
+            '<span style="font-size:11px;font-weight:700;color:' + actionColor + ';text-transform:uppercase;letter-spacing:.04em;">' + e.action + '</span>' +
+            '<span style="font-size:11px;color:#999;">' + e.changed_at + '</span>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:12px;color:#444;">' +
+            '<div><span style="color:#888;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Baseline</span><br>' + blAmt + '</div>' +
+            '<div><span style="color:#888;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Pre-Award</span><br>' + paAmt + '</div>' +
+            '<div><span style="color:#888;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Contract</span><br>' + ctAmt + '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    document.getElementById('viewOverlay').classList.add('open');
+    document.getElementById('viewModal').classList.add('open');
+  }
+
+  function closeViewModal() {
+    document.getElementById('viewOverlay').classList.remove('open');
+    document.getElementById('viewModal').classList.remove('open');
+  }
+
+  function viewFmtAmt(amount) {
+    const n = parseFloat(amount);
+    if (amount === null || amount === undefined || isNaN(n) || n === 0) return '<span style="color:#bbb;">—</span>';
+    return 'R ' + n.toLocaleString('en-ZA', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+
+  function viewColFill(p, unit, qty, rate, amount) {
+    const isSum = !unit || unit === 'Sum' || unit === 'P.Sum';
+    document.getElementById(p + '_unit').textContent = unit || 'Sum';
+    const qtyRow = document.getElementById(p + '_qtyrow');
+    qtyRow.style.display = isSum ? 'none' : '';
+    if (!isSum) {
+      document.getElementById(p + '_qty').textContent  = qty  ? parseFloat(qty).toFixed(2) : '—';
+      document.getElementById(p + '_rate').textContent = rate ? 'R ' + parseFloat(rate).toLocaleString('en-ZA', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+    }
+    const amt = isSum ? parseFloat(amount) : (parseFloat(qty)||0) * (parseFloat(rate)||0);
+    document.getElementById(p + '_total').textContent = amt
+      ? 'R ' + amt.toLocaleString('en-ZA', {minimumFractionDigits:2, maximumFractionDigits:2})
+      : '—';
+  }
+
+  // ── Award contract modal ───────────────────────────────────────────────
+  function openAwardModal() {
+    document.getElementById('awardOverlay').classList.add('open');
+    document.getElementById('awardModal').classList.add('open');
+  }
+
+  function closeAwardModal() {
+    document.getElementById('awardOverlay').classList.remove('open');
+    document.getElementById('awardModal').classList.remove('open');
+  }
+
+  // Close modals on Escape
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      closeSectionModal();
+      closeItemModal();
+      closeViewModal();
+      closeAwardModal();
+    }
+  });
+</script>
+{% endblock %}

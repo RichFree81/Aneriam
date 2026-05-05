@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block title %}Portfolio — Cost Control{% endblock %}
+
+{# ── Portfolio: actions menu items ────────────────────────────────── #}
+{% block actions_items %}
+<a href="/import">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/></svg>
+  Import Data
+</a>
+<a href="/export/csv">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
+  Export Portfolio CSV
+</a>
+{% endblock %}
+
+{# ── Portfolio: project filter button + modal ─────────────────────── #}
+{% block header_filter %}
+<button class="filter-btn {% if selected_projs %}active{% endif %}"
+        onclick="openFilter()"
+        title="Filter projects"
+        aria-label="Filter projects">
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+    <path d="M1.5 2.5A.5.5 0 0 1 2 2h12a.5.5 0 0 1 .354.854L10 9.207V13.5a.5.5 0 0 1-.276.447l-3 1.5A.5.5 0 0 1 6 15V9.207L1.646 2.854A.5.5 0 0 1 1.5 2.5z"/>
+  </svg>
+  {% if selected_projs %}
+  <span class="filter-count">{{ selected_projs | length }}</span>
+  {% endif %}
+</button>
+
+<div class="filter-overlay" id="filterOverlay" onclick="closeFilter()"></div>
+<div class="filter-modal" id="filterModal">
+  <div class="fm-header">
+    <span>Filter Projects</span>
+    <button class="fm-close" onclick="closeFilter()" aria-label="Close">&times;</button>
+  </div>
+  <div class="fm-body">
+    <div class="fm-col">
+      <div class="fm-col-title">Available<span class="fm-col-count" id="availCount"></span></div>
+      <ul class="fm-list" id="availList"></ul>
+      <button type="button" class="fm-move-all" onclick="moveAll('avail')">Add all &rarr;</button>
+    </div>
+    <div class="fm-col">
+      <div class="fm-col-title">Displayed<span class="fm-col-count" id="dispCount"></span></div>
+      <ul class="fm-list" id="dispList"></ul>
+      <button type="button" class="fm-move-all" onclick="moveAll('disp')">&larr; Remove all</button>
+    </div>
+  </div>
+  <div class="fm-footer">
+    <a href="/" class="btn btn-sm btn-ghost" style="text-decoration:none;">Reset</a>
+    <button type="button" class="btn btn-sm" onclick="applyFilter()">Apply</button>
+  </div>
+</div>
+{% endblock %}
+
+{# ── Main content ─────────────────────────────────────────────────── #}
+{% block content %}
+<div class="card">
+  <h2>Capex Projects Portfolio Summary</h2>
+
+  {% if last_batch %}
+  <p class="meta">
+    Data as at import on
+    <strong>{{ last_batch.imported_at.strftime("%Y-%m-%d %H:%M UTC") }}</strong>
+    {% if selected_projs %}
+    &nbsp;·&nbsp;
+    <span class="badge" style="background:#fff0d0;color:#7a4800;">
+      {{ selected_projs | length }} of {{ all_projects | length }} projects shown
+    </span>
+    {% endif %}
+  </p>
+  {% else %}
+  <p class="meta" style="color:#c00;">No data imported yet. Use the actions menu to run an import.</p>
+  {% endif %}
+
+  <table>
+    <thead>
+      <colgroup>
+        <col style="width:48px">
+        <col style="width:210px">
+        <col style="width:105px">
+        <col style="width:105px">
+        <col style="width:105px">
+        <col style="width:105px">
+        <col style="width:115px">
+        <col style="width:115px">
+        <col style="width:105px">
+        <col style="width:105px">
+        <col style="width:105px">
+        <col style="width:105px">
+      </colgroup>
+      <tr>
+        <th>#</th>
+        <th>Project</th>
+        <th class="num">Current Budget</th>
+        <th class="num">Approved Capex</th>
+        <th class="num">Actual Cost</th>
+        <th class="num">Committed Cost</th>
+        <th class="num" title="Excludes capitalised / expensed">Project Cost to Date</th>
+        <th class="num">Capitalised / Expensed</th>
+        <th class="num">Net WIP Balance</th>
+        <th class="num fy">Planned Spend FY2027</th>
+        <th class="num fy-inner">Forecast Spend FY2027</th>
+        <th class="num fy-inner">Actual Spend FY2027</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set ns = namespace(grand_budget=0, grand_approved=0, grand_actual=0, grand_committed=0, grand_project_cost=0, grand_capitalised=0, grand_net_wip=0, grand_planned27=0, grand_forecast27=0, grand_actual27=0) %}
+      {% for row in projects %}
+      {% set ns.grand_budget       = ns.grand_budget       + (row.current_budget or 0) %}
+      {% set ns.grand_approved     = ns.grand_approved     + (row.approved_capex or 0) %}
+      {% set ns.grand_actual       = ns.grand_actual       + (row.actual or 0) %}
+      {% set ns.grand_committed    = ns.grand_committed    + (row.committed or 0) %}
+      {% set ns.grand_project_cost = ns.grand_project_cost + (row.project_cost or 0) %}
+      {% set ns.grand_capitalised  = ns.grand_capitalised  + (row.capitalised or 0) %}
+      {% set ns.grand_net_wip      = ns.grand_net_wip      + (row.net_wip or 0) %}
+      {% set ns.grand_planned27    = ns.grand_planned27    + (row.planned_fy2027 or 0) %}
+      {% set ns.grand_forecast27   = ns.grand_forecast27   + (row.forecast_fy2027 or 0) %}
+      {% set ns.grand_actual27     = ns.grand_actual27     + (row.actual_fy2027 or 0) %}
+      <tr>
+        <td>{{ row.project_number }}</td>
+        <td><a href="/project/{{ row.project_number }}">{{ row.project_name | replace(row.project_number ~ ' ', '') }}</a></td>
+        <td class="num">{{ row.current_budget | zar }}</td>
+        <td class="num">{{ (row.approved_capex or 0) | zar }}</td>
+        <td class="num">{{ row.actual | zar }}</td>
+        <td class="num">{{ row.committed | zar }}</td>
+        <td class="num">{{ row.project_cost | zar }}</td>
+        <td class="num">{{ row.capitalised | zar }}</td>
+        <td class="num">{{ row.net_wip | zar }}</td>
+        <td class="num fy">{{ row.planned_fy2027 | zar }}</td>
+        <td class="num fy-inner">{{ row.forecast_fy2027 | zar }}</td>
+        <td class="num fy-inner">{{ row.actual_fy2027 | zar }}</td>
+      </tr>
+      {% endfor %}
+
+      <tr class="subtotal">
+        <td colspan="2">
+          {% if selected_projs %}Filtered Total ({{ projects | length }} projects)
+          {% else %}Portfolio Total{% endif %}
+        </td>
+        <td class="num">{{ ns.grand_budget | zar }}</td>
+        <td class="num">{{ ns.grand_approved | zar }}</td>
+        <td class="num">{{ ns.grand_actual | zar }}</td>
+        <td class="num">{{ ns.grand_committed | zar }}</td>
+        <td class="num">{{ ns.grand_project_cost | zar }}</td>
+        <td class="num">{{ ns.grand_capitalised | zar }}</td>
+        <td class="num">{{ ns.grand_net_wip | zar }}</td>
+        <td class="num fy">{{ ns.grand_planned27 | zar }}</td>
+        <td class="num fy-inner">{{ ns.grand_forecast27 | zar }}</td>
+        <td class="num fy-inner">{{ ns.grand_actual27 | zar }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{# ── Filter modal JS ──────────────────────────────────────────────── #}
+{% block scripts %}
+<script>
+  // Project master list from server
+  const ALL_PROJECTS = [
+    {% for p in all_projects %}
+    { num: {{ p.project_number | tojson }}, name: {{ p.project_name | tojson }} },
+    {% endfor %}
+  ];
+
+  // Which project numbers are currently selected (empty = show all)
+  const INIT_SELECTED = new Set({{ selected_projs | list | tojson }});
+
+  let available = [];
+  let displayed = [];
+
+  function initLists() {
+    if (INIT_SELECTED.size === 0) {
+      // No filter active — everything is displayed
+      available = [];
+      displayed = ALL_PROJECTS.slice();
+    } else {
+      available = ALL_PROJECTS.filter(p => !INIT_SELECTED.has(p.num));
+      displayed = ALL_PROJECTS.filter(p =>  INIT_SELECTED.has(p.num));
+    }
+    renderLists();
+  }
+
+  function renderLists() {
+    renderList('availList', available, moveToDisplayed);
+    renderList('dispList',  displayed, moveToAvailable);
+    document.getElementById('availCount').textContent = ' (' + available.length + ')';
+    document.getElementById('dispCount').textContent  = ' (' + displayed.length + ')';
+  }
+
+  function renderList(id, items, onClick) {
+    const ul = document.getElementById(id);
+    ul.innerHTML = '';
+    if (items.length === 0) {
+      const empty = document.createElement('li');
+      empty.className = 'fm-list-empty';
+      empty.textContent = 'None';
+      ul.appendChild(empty);
+      return;
+    }
+    items.forEach(function(p) {
+      const li = document.createElement('li');
+      const numSpan = document.createElement('span');
+      numSpan.className = 'fm-num';
+      numSpan.textContent = p.num;
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = p.name.replace(p.num + ' ', '');
+      li.appendChild(numSpan);
+      li.appendChild(nameSpan);
+      li.addEventListener('click', function() { onClick(p.num); });
+      ul.appendChild(li);
+    });
+  }
+
+  function moveToDisplayed(num) {
+    const item = available.find(p => p.num === num);
+    if (!item) return;
+    available = available.filter(p => p.num !== num);
+    displayed.push(item);
+    displayed.sort(function(a, b) {
+      return ALL_PROJECTS.findIndex(p => p.num === a.num) -
+             ALL_PROJECTS.findIndex(p => p.num === b.num);
+    });
+    renderLists();
+  }
+
+  function moveToAvailable(num) {
+    const item = displayed.find(p => p.num === num);
+    if (!item) return;
+    displayed = displayed.filter(p => p.num !== num);
+    available.push(item);
+    available.sort(function(a, b) {
+      return ALL_PROJECTS.findIndex(p => p.num === a.num) -
+             ALL_PROJECTS.findIndex(p => p.num === b.num);
+    });
+    renderLists();
+  }
+
+  function moveAll(from) {
+    if (from === 'avail') {
+      // Add all available → displayed
+      displayed = ALL_PROJECTS.slice();
+      available = [];
+    } else {
+      // Remove all displayed → available
+      available = ALL_PROJECTS.slice();
+      displayed = [];
+    }
+    renderLists();
+  }
+
+  function openFilter() {
+    document.getElementById('filterOverlay').classList.add('open');
+    document.getElementById('filterModal').classList.add('open');
+  }
+
+  function closeFilter() {
+    document.getElementById('filterOverlay').classList.remove('open');
+    document.getElementById('filterModal').classList.remove('open');
+  }
+
+  function applyFilter() {
+    const form = document.createElement('form');
+    form.method = 'get';
+    form.action = '/';
+    // If all projects are displayed, submit with no proj params (= show all / reset)
+    if (displayed.length < ALL_PROJECTS.length) {
+      displayed.forEach(function(p) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'proj';
+        input.value = p.num;
+        form.appendChild(input);
+      });
+    }
+    document.body.appendChild(form);
+    form.submit();
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { closeFilter(); closeActions(); }
+  });
+
+  initLists();
+</script>
+{% endblock %}

@@ -1,0 +1,19 @@
+# Active CapEx projects for the current financial year.
+# Format: <project_number> - <project name>
+# Lines starting with `#` and blank lines are ignored.
+# Maintained by Richard; the cost-control app reads this file on startup.
+5009 - 5009 New Roads and Stormwater Network
+5010 - 5010 New Security and Personnel Buildings
+5017 - 5017 New Arc Furnace 03
+5022 - 5022 New Raw Materials Storage Facility
+5032 - 5032 Overhead Cranes Upgrades
+5033 - 5033 New 11kV Municipal Supply Line
+5034 - 5034 LT Distribution and Control Upgrade
+5042 - 5042 Furnace 5 Transformer Replacement
+5043 - 5043 Buried Services and Utilities Rerouting
+5045 - 5045 New Process Cooling Water Plant
+5046 - 5046 Process Automation System Upgrade
+5050 - 5050 New Final Product Crushing Baghouse
+5051 - 5051 New Furnace 5 Slag Taphole Mudgun & Drill
+5053 - 5053 MK10 Induction Furnace Upgrade
+5055 - 5055 New Fire Assaying Room

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% block title %}{{ project.project_number }} — Packages — Cost Control{% endblock %}
+
+{% block actions_items %}
+<a href="/import">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/></svg>
+  Import Data
+</a>
+<a style="opacity:0.4;cursor:default;pointer-events:none;">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M4.406 1.342A5.53 5.53 0 0 1 8 0c2.69 0 4.923 2 5.166 4.579C14.758 4.804 16 6.137 16 7.773 16 9.569 14.502 11 12.687 11H10a.5.5 0 0 1 0-1h2.688C13.979 10 15 8.988 15 7.773c0-1.216-1.02-2.228-2.313-2.228h-.5v-.5C12.188 2.825 10.328 1 8 1a4.53 4.53 0 0 0-2.941 1.1c-.757.652-1.153 1.438-1.153 2.055v.448l-.445.049C2.064 4.805 1 5.952 1 7.318 1 8.785 2.23 10 3.781 10H6a.5.5 0 0 1 0 1H3.781C1.708 11 0 9.366 0 7.318c0-1.763 1.266-3.223 2.942-3.593.143-.863.698-1.723 1.464-2.383z"/><path d="M7.646 15.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 14.293V5.5a.5.5 0 0 0-1 0v8.793l-2.146-2.147a.5.5 0 0 0-.708.708l3 3z"/></svg>
+  Refresh Package Register
+</a>
+{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb">
+      <a href="/">Portfolio</a>
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a>
+    </div>
+    <div class="subheader-title">{{ project.project_number }}: {{ proj_name }}</div>
+    <div class="tab-bar">
+      <a href="/project/{{ project.project_number }}">Cost Work Sheet</a>
+      <a href="/project/{{ project.project_number }}/packages" class="active">Packages
+        <span class="pkg-count">({{ packages | length }})</span>
+      </a>
+      <a class="disabled">Documents</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<div class="summary-cards">
+  <div class="summary-card sc-main">
+    <div class="sc-label">Current Budget</div>
+    <div class="sc-value">{{ project.current_budget | zar }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Approved Capex</div>
+    <div class="sc-value">{{ (project.approved_capex or 0) | zar }}</div>
+  </div>
+  <div class="summary-card fy">
+    <div class="sc-label">Total Allocated Budget</div>
+    <div class="sc-value">{{ pkg_stats.total_alloc | zar }}</div>
+  </div>
+  <div class="summary-card fy">
+    <div class="sc-label">Unallocated Budget</div>
+    <div class="sc-value">{{ pkg_stats.unallocated | zar }}</div>
+  </div>
+  <div class="summary-card fy">
+    <div class="sc-label">% Allocated</div>
+    <div class="sc-value">{{ "%.1f"|format(pkg_stats.alloc_pct) }}%</div>
+  </div>
+</div>
+
+<div class="card">
+  {% if packages %}
+  <table>
+    <thead>
+      <tr>
+        <th style="width:130px;">Package No.</th>
+        <th style="width:220px;">Description</th>
+        <th style="width:300px;">Type</th>
+        <th style="width:100px;">Stage</th>
+        <th class="num" style="width:80px;">Workstreams</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for pkg in packages %}
+      <tr>
+        <td style="font-family:monospace;font-size:12px;">
+          <a href="/project/{{ project.project_number }}/packages/{{ pkg.package_number }}">
+            {{ pkg.package_number }}
+          </a>
+        </td>
+        <td>{{ pkg.description }}</td>
+        <td style="font-size:12px;">{{ pkg.package_type }}</td>
+        <td>
+          {% set stage_cls = "stage-" ~ pkg.package_stage | lower | replace(" ", "-") %}
+          <span class="chip {{ stage_cls }}">{{ pkg.package_stage }}</span>
+        </td>
+        <td class="num">{{ pkg.workstreams | length }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <strong>No packages registered</strong>
+    Package data is loaded from the Package Register files in Collab/Inputs/Package Register/.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

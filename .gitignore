@@ -45,4 +45,16 @@ coverage/
 *.db-journal
 *.db-wal
 *.db-shm
+*.db.backup-*
+*.db.backup-*-wal
+*.db.backup-*-shm
+
+# Cost control app — build artefacts and binaries (regenerable from source)
+app/build/
+app/dist/
+*.exe
+*.exe.old
+
+# OneDrive sync ghost files
+.fuse_hidden*
 

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Import — Cost Control{% endblock %}
+{% block content %}
+
+{% if msg %}
+<div class="msg ok">&#10003; {{ msg }}</div>
+{% endif %}
+{% if error %}
+<div class="msg err">&#9888; {{ error }}</div>
+{% endif %}
+
+<div class="card">
+  <h2>Import NetSuite Exports</h2>
+  <p class="meta">
+    Runs a <strong>full replace</strong>: all existing transactions, PO lines,
+    journal lines and GL lines are deleted and reloaded from the selected files.
+    Import history is preserved.
+  </p>
+  <p class="meta">
+    Select all 8 NetSuite exports together. Files are matched by filename prefix:
+  </p>
+  <ul class="meta" style="margin-top:0;">
+    <li><code>PMOProjectsReport</code> — required (PMO Projects Report, cr=657)</li>
+    <li><code>PMOProjectTasksResults</code> — task hierarchy (id=787)</li>
+    <li><code>PMOPurchaseOrdersDetailedResults</code> — PO line detail (id=633)</li>
+    <li><code>PMOPurchaseOrdersSummaryResults</code> — PO header lookup (id=635)</li>
+    <li><code>PMOVendorBillsDetailedResults</code> — bill line detail (id=634)</li>
+    <li><code>PMOVendorBillsSummaryResults</code> — bill header fallback (id=638)</li>
+    <li><code>PMOJournalEntriesDetailedResults</code> — journal lines (id=790, new)</li>
+    <li><code>PMOProjectGLDetailedResults</code> — project GL postings (id=791, new)</li>
+  </ul>
+
+  <form method="post" action="/import/run" enctype="multipart/form-data">
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px;color:#555;display:block;margin-bottom:6px;">
+        Select NetSuite export files (.xls)
+      </label>
+      <input
+        type="file"
+        name="files"
+        multiple
+        accept=".xls"
+        style="font-size:13px;"
+      >
+    </div>
+    <button type="submit" class="btn">&#8635; Run Import</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Import History</h2>
+  {% if batches %}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Imported at (UTC)</th>
+        <th class="num">Rows</th>
+        <th>Source files</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in batches %}
+      <tr {% if loop.first %}style="font-weight:600;"{% endif %}>
+        <td>{{ b.id }}</td>
+        <td>{{ b.imported_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+        <td class="num">{{ b.row_count }}</td>
+        <td style="font-size:12px;color:#555;">{{ b.source_files }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#888;">No imports have been run yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

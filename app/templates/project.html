@@ -1,0 +1,783 @@
+{% extends "base.html" %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% block title %}{{ project.project_number }} — Cost Control{% endblock %}
+
+{# ── Sub-header: project title + project tab bar ─────────────────── #}
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb"><a href="/">Portfolio</a></div>
+    <div class="subheader-title">{{ project.project_number }}: {{ proj_name }}</div>
+    <div class="tab-bar">
+      <a href="/project/{{ project.project_number }}" class="active">Cost Work Sheet</a>
+      <a href="/project/{{ project.project_number }}/packages">Packages</a>
+      <a class="disabled">Documents</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{# ── Project: actions menu items ──────────────────────────────────── #}
+{% block actions_items %}
+<a href="/import">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/></svg>
+  Import Data
+</a>
+<a href="/project/{{ project.project_number }}/export/csv">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
+  Export Project CSV
+</a>
+{% endblock %}
+
+{# ── Project: transaction filter button + modal ───────────────────── #}
+{% block header_filter %}
+{% set active_filters = (1 if filter_cc else 0) + (1 if filter_date_from else 0) + (1 if filter_date_to else 0) %}
+<button class="filter-btn {% if active_filters %}active{% endif %}"
+        onclick="openFilter()"
+        title="Filter transactions"
+        aria-label="Filter transactions">
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+    <path d="M1.5 2.5A.5.5 0 0 1 2 2h12a.5.5 0 0 1 .354.854L10 9.207V13.5a.5.5 0 0 1-.276.447l-3 1.5A.5.5 0 0 1 6 15V9.207L1.646 2.854A.5.5 0 0 1 1.5 2.5z"/>
+  </svg>
+  {% if active_filters %}
+  <span class="filter-count">{{ active_filters }}</span>
+  {% endif %}
+</button>
+
+<div class="filter-overlay" id="filterOverlay" onclick="closeFilter()"></div>
+<div class="filter-modal" id="filterModal" style="width:400px;max-height:none;">
+  <div class="fm-header">
+    <span>Filter Transactions</span>
+    <button class="fm-close" onclick="closeFilter()" aria-label="Close">&times;</button>
+  </div>
+  <div class="fm-fields">
+    <label>
+      Control Account
+      <select id="fmCC">
+        <option value="">All</option>
+        {% for cc in cc_options %}
+        <option value="{{ cc.derived_cc_code }}"
+          {% if filter_cc == cc.derived_cc_code %}selected{% endif %}>
+          {{ cc.derived_cc_code }} — {{ cc.derived_cc_name }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Date from
+      <input type="date" id="fmDateFrom" value="{{ filter_date_from }}">
+    </label>
+    <label>
+      Date to
+      <input type="date" id="fmDateTo" value="{{ filter_date_to }}">
+    </label>
+  </div>
+  <div class="fm-footer">
+    <a href="/project/{{ project.project_number }}" class="btn btn-sm btn-ghost" style="text-decoration:none;">Reset</a>
+    <button type="button" class="btn btn-sm" onclick="applyFilter()">Apply</button>
+  </div>
+</div>
+{% endblock %}
+
+{# ── Main content ─────────────────────────────────────────────────── #}
+{% block content %}
+
+{# ── KPI cards ── #}
+{# C-14 — totals tuple is (actual, committed, project_cost, capitalised, net_wip, actual_fy2027) #}
+<div class="summary-cards">
+  <div class="summary-card sc-main">
+    <div class="sc-label">Current Budget</div>
+    <div class="sc-value">{{ project.current_budget | zar }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Approved Capex</div>
+    <div class="sc-value">{{ (project.approved_capex or 0) | zar }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Actual Cost</div>
+    <div class="sc-value">{{ (totals[0] or 0) | zar }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Committed Cost</div>
+    <div class="sc-value">{{ (totals[1] or 0) | zar }}</div>
+  </div>
+  <div class="summary-card sc-main" title="Excludes capitalised / expensed">
+    <div class="sc-label">Project Cost to Date</div>
+    <div class="sc-value">{{ (totals[2] or 0) | zar }}</div>
+    <div class="sc-sub" style="font-size:11px;color:#888;">excludes capitalised / expensed</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Capitalised / Expensed</div>
+    <div class="sc-value">{{ (totals[3] or 0) | zar }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Net WIP Balance</div>
+    <div class="sc-value">{{ (totals[4] or 0) | zar }}</div>
+  </div>
+  <div class="summary-card fy">
+    <div class="sc-label">Planned FY2027</div>
+    <div class="sc-value">{{ project.planned_fy2027 | zar }}</div>
+  </div>
+  <div class="summary-card fy">
+    <div class="sc-label">Forecast FY2027</div>
+    <div class="sc-value">{{ 0 | zar }}</div>
+  </div>
+  <div class="summary-card fy">
+    <div class="sc-label">Actual FY2027</div>
+    <div class="sc-value">{{ (totals[5] or 0) | zar }}</div>
+  </div>
+</div>
+
+<div class="card">
+  {# ── Cost breakdown table ── #}
+  <table>
+    <thead>
+      <tr>
+        <th>Cost Account / Task</th>
+        <th class="num">Actual Cost</th>
+        <th class="num">Committed Cost</th>
+        <th class="num">Total Cost</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% set ns = namespace(grand_actual=0, grand_committed=0, grand_total=0) %}
+
+    {% for l1 in hierarchy %}
+      {% set l1_idx = loop.index0 %}
+      {% set ns.grand_actual    = ns.grand_actual    + l1.actual %}
+      {% set ns.grand_committed = ns.grand_committed + l1.committed %}
+      {% set ns.grand_total     = ns.grand_total     + l1.total %}
+
+      {# ── Level 1 — Control Account header ── #}
+      <tr class="hier-l1">
+        <td>
+          <span class="hier-toggle" data-toggle-key="l1-{{ l1_idx }}"
+                onclick="toggleGroup('l1-{{ l1_idx }}')">&#9658;</span>
+          {{ l1.name }}
+        </td>
+        <td class="num dd" data-l1="{{ l1.name | e }}"
+            onclick="openDrilldown('actual', this)">{{ l1.actual | zar }}</td>
+        <td class="num dd" data-l1="{{ l1.name | e }}"
+            onclick="openDrilldown('committed', this)">{{ l1.committed | zar }}</td>
+        <td class="num">{{ l1.total | zar }}</td>
+      </tr>
+
+      {# Direct L1 costs (no L2 sub-task) #}
+      {% if l1.direct %}
+      <tr class="hier-leaf" data-l1="{{ l1_idx }}">
+        <td class="hier-indent-1"><em>Unmapped cost item</em></td>
+        <td class="num dd" data-l1="{{ l1.name | e }}" data-direct="1"
+            onclick="openDrilldown('actual', this)">{{ l1.direct.actual | zar }}</td>
+        <td class="num dd" data-l1="{{ l1.name | e }}" data-direct="1"
+            onclick="openDrilldown('committed', this)">{{ l1.direct.committed | zar }}</td>
+        <td class="num">{{ l1.direct.total | zar }}</td>
+      </tr>
+      {% endif %}
+
+      {% for l2 in l1.l2_groups %}
+        {% set l2_key = l1_idx ~ '-' ~ loop.index0 %}
+        {% set l2_has_children = l2.l3_items | length > 0 or l2.direct %}
+
+        {# ── Level 2 — Sub-task header ── #}
+        <tr class="hier-l2" data-l1="{{ l1_idx }}">
+          <td class="hier-indent-1">
+            {% if l2_has_children %}
+            <span class="hier-toggle" data-toggle-key="l2-{{ l2_key }}"
+                  onclick="toggleGroup('l2-{{ l2_key }}')">&#9658;</span>
+            {% else %}
+            <span style="display:inline-block;width:14px;"></span>
+            {% endif %}
+            {{ l2.name }}
+          </td>
+          <td class="num dd" data-l1="{{ l1.name | e }}" data-l2="{{ l2.name | e }}"
+              onclick="openDrilldown('actual', this)">{{ l2.actual | zar }}</td>
+          <td class="num dd" data-l1="{{ l1.name | e }}" data-l2="{{ l2.name | e }}"
+              onclick="openDrilldown('committed', this)">{{ l2.committed | zar }}</td>
+          <td class="num">{{ l2.total | zar }}</td>
+        </tr>
+
+        {# Direct L2 costs (no L3) #}
+        {% if l2.direct %}
+        <tr class="hier-leaf" data-l1="{{ l1_idx }}" data-l2="{{ l2_key }}">
+          <td class="hier-indent-2"><em>Unmapped cost item</em></td>
+          <td class="num dd" data-l1="{{ l1.name | e }}" data-l2="{{ l2.name | e }}" data-direct="1"
+              onclick="openDrilldown('actual', this)">{{ l2.direct.actual | zar }}</td>
+          <td class="num dd" data-l1="{{ l1.name | e }}" data-l2="{{ l2.name | e }}" data-direct="1"
+              onclick="openDrilldown('committed', this)">{{ l2.direct.committed | zar }}</td>
+          <td class="num">{{ l2.direct.total | zar }}</td>
+        </tr>
+        {% endif %}
+
+        {% for item in l2.l3_items %}
+        {# ── Level 3 — Cost item ── #}
+        <tr class="hier-l3" data-l1="{{ l1_idx }}" data-l2="{{ l2_key }}">
+          <td class="hier-indent-2">{{ item.name }}</td>
+          <td class="num dd" data-l1="{{ l1.name | e }}" data-l2="{{ l2.name | e }}" data-l3="{{ item.name | e }}"
+              onclick="openDrilldown('actual', this)">{{ item.actual | zar }}</td>
+          <td class="num dd" data-l1="{{ l1.name | e }}" data-l2="{{ l2.name | e }}" data-l3="{{ item.name | e }}"
+              onclick="openDrilldown('committed', this)">{{ item.committed | zar }}</td>
+          <td class="num">{{ item.total | zar }}</td>
+        </tr>
+        {% endfor %}
+
+      {% endfor %}
+    {% endfor %}
+
+    {% if hierarchy %}
+    <tr class="subtotal">
+      <td>Total</td>
+      <td class="num">{{ ns.grand_actual    | zar }}</td>
+      <td class="num">{{ ns.grand_committed | zar }}</td>
+      <td class="num">{{ ns.grand_total     | zar }}</td>
+    </tr>
+    {% else %}
+    <tr>
+      <td colspan="4" style="text-align:center;color:#888;padding:20px;">
+        No transactions match the current filter.
+      </td>
+    </tr>
+    {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{# ── Drilldown modal ──────────────────────────────────────────────── #}
+<div class="filter-overlay" id="ddOverlay" onclick="closeDrilldown()"></div>
+<div class="filter-modal" id="ddModal"
+     style="width:960px;max-width:calc(100vw - 48px);max-height:calc(100vh - 80px);">
+  <div class="fm-header">
+    <div style="display:flex;flex-direction:column;gap:1px;min-width:0;overflow:hidden;">
+      <span id="ddTitle" style="font-size:15px;font-weight:700;color:#1a2e4a;"></span>
+      <span id="ddSubtitle" style="font-size:12px;font-weight:400;color:#667;"></span>
+    </div>
+    <button class="fm-close" onclick="closeDrilldown()" aria-label="Close">&times;</button>
+  </div>
+  <div id="ddBody" style="overflow-y:auto;flex:1;padding:0 16px 4px;min-height:0;">
+    <div id="ddLoading" style="padding:28px;text-align:center;color:#778;">Loading&hellip;</div>
+    <table id="ddTable" style="display:none;width:100%;table-layout:auto;">
+      <thead>
+        <tr>
+          <th style="width:92px;">Date</th>
+          <th style="width:150px;" id="ddColDoc">Document #</th>
+          <th>Vendor</th>
+          <th class="num" style="width:130px;" id="ddColAmt">Amount</th>
+        </tr>
+      </thead>
+      <tbody id="ddRows"></tbody>
+    </table>
+    <div id="ddEmpty" style="display:none;padding:28px;text-align:center;color:#778;font-style:italic;">
+      No transactions found for this selection.
+    </div>
+  </div>
+  <div id="ddFooter"
+       style="display:none;padding:10px 20px;border-top:1px solid #e8edf3;text-align:right;font-size:13px;font-weight:600;color:#1a2e4a;flex-shrink:0;">
+    <span id="ddFooterLabel">Total</span>: <span id="ddTotal"></span>
+    <span style="font-size:11px;font-weight:400;color:#778;margin-left:10px;" id="ddRowCount"></span>
+  </div>
+</div>
+{# ── PO / Invoice detail modal ────────────────────────────────────── #}
+<div class="filter-overlay" id="dd2Overlay" onclick="closeDetail()"></div>
+<div class="filter-modal" id="dd2Modal"
+     style="width:900px;max-width:calc(100vw - 48px);max-height:calc(100vh - 80px);">
+  <div class="fm-header">
+    <div style="display:flex;flex-direction:column;gap:1px;min-width:0;overflow:hidden;">
+      <span id="dd2Title" style="font-size:15px;font-weight:700;color:#1a2e4a;"></span>
+      <span id="dd2Subtitle" style="font-size:12px;font-weight:400;color:#667;"></span>
+    </div>
+    <button class="fm-close" onclick="closeDetail()" aria-label="Close">&times;</button>
+  </div>
+  <div id="dd2Info"
+       style="padding:8px 20px 10px;border-bottom:1px solid #e8edf3;font-size:13px;color:#334;flex-shrink:0;"></div>
+  <div id="dd2Body" style="overflow-y:auto;flex:1;padding:0 16px 4px;min-height:0;">
+    <div id="dd2Loading" style="padding:28px;text-align:center;color:#778;">Loading&hellip;</div>
+    <table id="dd2Table" style="display:none;width:100%;table-layout:auto;">
+      <thead id="dd2Head"></thead>
+      <tbody id="dd2Rows"></tbody>
+    </table>
+    <div id="dd2Empty" style="display:none;padding:28px;text-align:center;color:#778;font-style:italic;">
+      No line items found.
+    </div>
+  </div>
+  <div id="dd2Footer"
+       style="display:none;padding:10px 20px;border-top:1px solid #e8edf3;text-align:right;font-size:13px;font-weight:600;color:#1a2e4a;flex-shrink:0;">
+  </div>
+</div>
+{% endblock %}
+
+{# ── Filter modal JS ──────────────────────────────────────────────── #}
+{% block scripts %}
+<style>
+  td.dd { cursor: pointer; }
+  td.dd:hover { background: #c8dff5 !important; color: #0a2040; }
+  #ddTable td { vertical-align: middle; }
+  #ddTable td:nth-child(2) { font-weight: 600; color: #1a2e4a; font-family: monospace; font-size: 12px; }
+  #ddTable td:nth-child(3) { font-size: 11px; color: #445; }
+  tr.dd-group { background: #eef2f7; }
+  tr.dd-group td { font-size: 11px; font-weight: 700; color: #1a2e4a; text-transform: uppercase;
+                   letter-spacing: 0.5px; padding: 6px 8px 4px; border-bottom: 2px solid #c8d4e0; }
+  tr.dd-po-hdr { background: #1a3a60; }
+  tr.dd-po-hdr td { font-size: 12px; font-weight: 700; color: #fff; padding: 7px 8px 5px; border-bottom: 1px solid #0d2240; }
+  tr.dd-po-hdr td:last-child { text-align: right; }
+  .dd-link { color: #1565c0; cursor: pointer; text-decoration: underline; font-weight: 600; }
+  .dd-link:hover { color: #0d47a1; }
+  #dd2Table th { background: #f0f4f8; font-size: 12px; font-weight: 700; color: #334; padding: 7px 8px; border-bottom: 2px solid #c8d4e0; }
+  #dd2Table td { font-size: 12px; padding: 5px 8px; border-bottom: 1px solid #eef2f7; vertical-align: middle; }
+  #dd2Table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  #dd2Table th.num { text-align: right; }
+  #dd2Table tr.dd2-total td { font-weight: 700; background: #f7fafc; border-top: 2px solid #c8d4e0; }
+</style>
+<script>
+  const PROJECT_NUM = {{ project.project_number | tojson }};
+  const FILTER_CC        = {{ filter_cc        | tojson }};
+  const FILTER_DATE_FROM = {{ filter_date_from | tojson }};
+  const FILTER_DATE_TO   = {{ filter_date_to   | tojson }};
+
+  // ── Hierarchy collapse/expand ──
+  const collapseState = {};
+
+  function toggleGroup(key) {
+    collapseState[key] = !collapseState[key];
+    const icon = document.querySelector('[data-toggle-key="' + key + '"]');
+    if (icon) icon.classList.toggle('collapsed', !!collapseState[key]);
+    updateVisibility();
+  }
+
+  function updateVisibility() {
+    document.querySelectorAll('tr[data-l1]').forEach(function(row) {
+      const l1key = 'l1-' + row.dataset.l1;
+      const l2    = row.dataset.l2;
+      const l2key = l2 ? 'l2-' + l2 : null;
+      if (collapseState[l1key]) {
+        row.style.display = 'none';
+      } else if (l2key && collapseState[l2key]) {
+        row.style.display = 'none';
+      } else {
+        row.style.display = '';
+      }
+    });
+  }
+
+  // Default view: L1 expanded, L2 collapsed
+  document.querySelectorAll('.hier-toggle').forEach(function(el) {
+    const key = el.dataset.toggleKey;
+    if (key && key.startsWith('l2-')) {
+      collapseState[key] = true;
+      el.classList.add('collapsed');
+    } else {
+      el.classList.remove('collapsed');
+    }
+  });
+  updateVisibility();
+
+  // ── Filter modal ──
+  function openFilter() {
+    document.getElementById('filterOverlay').classList.add('open');
+    document.getElementById('filterModal').classList.add('open');
+  }
+  function closeFilter() {
+    document.getElementById('filterOverlay').classList.remove('open');
+    document.getElementById('filterModal').classList.remove('open');
+  }
+  function applyFilter() {
+    const params = new URLSearchParams();
+    const cc = document.getElementById('fmCC').value;
+    const df = document.getElementById('fmDateFrom').value;
+    const dt = document.getElementById('fmDateTo').value;
+    if (cc) params.set('cc_code', cc);
+    if (df) params.set('date_from', df);
+    if (dt) params.set('date_to', dt);
+    const qs = params.toString();
+    window.location.href = '/project/' + PROJECT_NUM + (qs ? '?' + qs : '');
+  }
+
+  // ── Drilldown modal ──
+  function openDrilldown(costType, cell) {
+    var l1     = cell.dataset.l1     || '';
+    var l2     = cell.dataset.l2     || '';
+    var l3     = cell.dataset.l3     || '';
+    var direct = cell.dataset.direct === '1';
+
+    document.getElementById('ddColDoc').textContent =
+      costType === 'actual' ? 'Invoice / Journal #' : 'Document #';
+    document.getElementById('ddColAmt').textContent =
+      costType === 'actual' ? 'Actual Cost' : 'Committed Cost';
+    document.getElementById('ddOverlay').classList.add('open');
+    document.getElementById('ddModal').classList.add('open');
+    document.getElementById('ddLoading').style.display = '';
+    document.getElementById('ddTable').style.display   = 'none';
+    document.getElementById('ddEmpty').style.display   = 'none';
+    document.getElementById('ddFooter').style.display  = 'none';
+    document.getElementById('ddTitle').textContent     = costType === 'actual' ? 'Actual Cost' : 'Committed Cost';
+    document.getElementById('ddSubtitle').textContent  = '';
+
+    var params = new URLSearchParams();
+    params.set('cost_type', costType);
+    if (l1)     params.set('l1', l1);
+    if (l2)     params.set('l2', l2);
+    if (l3)     params.set('l3', l3);
+    if (direct) params.set('direct', '1');
+    if (FILTER_CC)        params.set('cc_code',   FILTER_CC);
+    if (FILTER_DATE_FROM) params.set('date_from', FILTER_DATE_FROM);
+    if (FILTER_DATE_TO)   params.set('date_to',   FILTER_DATE_TO);
+
+    fetch('/project/' + PROJECT_NUM + '/drilldown?' + params.toString())
+      .then(function(r) { return r.json(); })
+      .then(function(data) { renderDrilldown(data); })
+      .catch(function() {
+        document.getElementById('ddLoading').textContent = 'Error loading transactions.';
+      });
+  }
+
+  function classifySrc(src) {
+    src = (src || '').toLowerCase();
+    if (src.includes('journal'))        return 'journal';
+    if (src.includes('purchase order')) return 'po';
+    if (src.includes('bill') || src.includes('invoice')) return 'bill';
+    return 'other';
+  }
+
+  function appendGroupHdr(tbody, label, count) {
+    var tr = document.createElement('tr');
+    tr.className = 'dd-group';
+    tr.innerHTML = '<td colspan="4">' + esc(label) +
+      ' <span style="font-weight:400;color:#889;">(' + count + ')</span></td>';
+    tbody.appendChild(tr);
+  }
+
+  function appendPoGroupHdr(tbody, po, desc, count) {
+    var tr = document.createElement('tr');
+    tr.className = 'dd-group';
+    var poHtml = '<span class="dd-link" onclick="openPoDetail(\'' + po.replace(/'/g, "\\'") + '\')">' + esc(po) + '</span>';
+    var labelHtml = poHtml + (desc ? ': ' + esc(desc) : '');
+    tr.innerHTML = '<td colspan="4">' + labelHtml +
+      ' <span style="font-weight:400;color:#889;">(' + count + ')</span></td>';
+    tbody.appendChild(tr);
+  }
+
+  function appendPoHdr(tbody, po, desc, vendor, subtotal) {
+    var tr = document.createElement('tr');
+    tr.className = 'dd-po-hdr';
+    var poLink = '<span class="dd-link" style="color:#90caf9;" onclick="openPoDetail(\'' + po.replace(/'/g, "\\'") + '\')">' + esc(po) + '</span>';
+    tr.innerHTML =
+      '<td colspan="2">' + poLink + (desc ? ': ' + esc(desc) : '') + '</td>' +
+      '<td>' + esc(vendor) + '</td>' +
+      '<td class="num">' + fmtZAR(subtotal) + '</td>';
+    tbody.appendChild(tr);
+  }
+
+  function appendTxnRow(tbody, row, amtField) {
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + esc(row.date) + '</td>' +
+      '<td>' + esc(row.document_number) + '</td>' +
+      '<td>' + esc(row.vendor_name) + '</td>' +
+      '<td class="num">' + fmtZAR(row[amtField]) + '</td>';
+    tbody.appendChild(tr);
+  }
+
+  function appendBillRow(tbody, row, amtField) {
+    var tr = document.createElement('tr');
+    var invLink = row.document_number
+      ? '<span class="dd-link" onclick="openInvoiceDetail(\'' + row.document_number.replace(/'/g, "\\'") + '\')">' + esc(row.document_number) + '</span>'
+      : '';
+    tr.innerHTML =
+      '<td>' + esc(row.date) + '</td>' +
+      '<td>' + invLink + '</td>' +
+      '<td>' + esc(row.vendor_name) + '</td>' +
+      '<td class="num">' + fmtZAR(row[amtField]) + '</td>';
+    tbody.appendChild(tr);
+  }
+
+  function appendCommittedRow(tbody, row, amtField) {
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + esc(row.date) + '</td>' +
+      '<td></td>' +
+      '<td>' + esc(row.po_description) + '</td>' +
+      '<td class="num">' + fmtZAR(row[amtField]) + '</td>';
+    tbody.appendChild(tr);
+  }
+
+  function renderDrilldown(data) {
+    document.getElementById('ddSubtitle').textContent  = data.level_name || '';
+    document.getElementById('ddLoading').style.display = 'none';
+
+    var tbody    = document.getElementById('ddRows');
+    var rows     = data.rows || [];
+    var ct       = data.cost_type;
+    var amtField = ct === 'actual' ? 'actual' : 'committed';
+    tbody.innerHTML = '';
+
+    if (rows.length === 0) {
+      document.getElementById('ddEmpty').style.display = '';
+      return;
+    }
+
+    if (ct === 'actual') {
+      var poGroups    = {};   // po_number → {vendor, desc, rows[]}
+      var directBills = [], journals = [], others = [];
+      rows.forEach(function(row) {
+        var cls = classifySrc(row.source);
+        if (cls === 'journal') {
+          journals.push(row);
+        } else if (cls === 'bill') {
+          if (row.po_number) {
+            if (!poGroups[row.po_number])
+              poGroups[row.po_number] = { vendor: row.vendor_name, desc: row.po_description, rows: [] };
+            poGroups[row.po_number].rows.push(row);
+          } else {
+            directBills.push(row);
+          }
+        } else {
+          others.push(row);
+        }
+      });
+
+      Object.keys(poGroups).sort().forEach(function(po) {
+        var g = poGroups[po];
+        appendPoGroupHdr(tbody, po, g.desc, g.rows.length);
+        g.rows.forEach(function(r) { appendBillRow(tbody, r, amtField); });
+      });
+      if (directBills.length) {
+        appendGroupHdr(tbody, 'Direct Bills (no PO)', directBills.length);
+        directBills.forEach(function(r) { appendTxnRow(tbody, r, amtField); });
+      }
+      if (journals.length) {
+        appendGroupHdr(tbody, 'Journals', journals.length);
+        journals.forEach(function(r) { appendTxnRow(tbody, r, amtField); });
+      }
+      if (others.length) {
+        appendGroupHdr(tbody, 'Other', others.length);
+        others.forEach(function(r) { appendTxnRow(tbody, r, amtField); });
+      }
+
+    } else {
+      // Committed: each PO gets its own dark header row, then its line items
+      var poGroups = {};   // po_number → {vendor, desc, rows[], subtotal}
+      var journals = [], others = [];
+      rows.forEach(function(row) {
+        var cls = classifySrc(row.source);
+        if (cls === 'journal') {
+          journals.push(row);
+        } else if (cls === 'po') {
+          var po = row.po_number || row.document_number;
+          if (!poGroups[po])
+            poGroups[po] = { vendor: row.vendor_name, desc: row.po_description, rows: [], subtotal: 0 };
+          poGroups[po].rows.push(row);
+          poGroups[po].subtotal += row[amtField];
+        } else {
+          others.push(row);
+        }
+      });
+
+      Object.keys(poGroups).sort().forEach(function(po) {
+        var g = poGroups[po];
+        appendPoHdr(tbody, po, g.desc, g.vendor, g.subtotal);
+        g.rows.forEach(function(r) { appendCommittedRow(tbody, r, amtField); });
+      });
+      if (journals.length) {
+        appendGroupHdr(tbody, 'Journals', journals.length);
+        journals.forEach(function(r) { appendTxnRow(tbody, r, amtField); });
+      }
+      if (others.length) {
+        appendGroupHdr(tbody, 'Other', others.length);
+        others.forEach(function(r) { appendTxnRow(tbody, r, amtField); });
+      }
+    }
+
+    document.getElementById('ddTable').style.display = '';
+    document.getElementById('ddFooterLabel').textContent =
+      ct === 'actual' ? 'Total Actual' : 'Total Committed';
+    document.getElementById('ddTotal').textContent = fmtZAR(data.total);
+    document.getElementById('ddRowCount').textContent =
+      rows.length + ' transaction' + (rows.length === 1 ? '' : 's');
+    document.getElementById('ddFooter').style.display = '';
+  }
+
+  function closeDrilldown() {
+    document.getElementById('ddOverlay').classList.remove('open');
+    document.getElementById('ddModal').classList.remove('open');
+  }
+
+  // ── PO / Invoice detail modal ──
+  function _openDetail() {
+    document.getElementById('dd2Overlay').classList.add('open');
+    document.getElementById('dd2Modal').classList.add('open');
+    document.getElementById('dd2Loading').style.display = '';
+    document.getElementById('dd2Table').style.display   = 'none';
+    document.getElementById('dd2Empty').style.display   = 'none';
+    document.getElementById('dd2Footer').style.display  = 'none';
+    document.getElementById('dd2Info').textContent      = '';
+    document.getElementById('dd2Head').innerHTML        = '';
+    document.getElementById('dd2Rows').innerHTML        = '';
+  }
+
+  function openPoDetail(po) {
+    _openDetail();
+    document.getElementById('dd2Title').textContent    = 'Purchase Order: ' + po;
+    document.getElementById('dd2Subtitle').textContent = '';
+    fetch('/project/' + PROJECT_NUM + '/po-detail/' + encodeURIComponent(po))
+      .then(function(r) { return r.json(); })
+      .then(function(data) { renderPoDetail(data); })
+      .catch(function() {
+        document.getElementById('dd2Loading').textContent = 'Error loading purchase order.';
+      });
+  }
+
+  function openInvoiceDetail(inv) {
+    _openDetail();
+    document.getElementById('dd2Title').textContent    = 'Invoice: ' + inv;
+    document.getElementById('dd2Subtitle').textContent = '';
+    fetch('/project/' + PROJECT_NUM + '/invoice-detail/' + encodeURIComponent(inv))
+      .then(function(r) { return r.json(); })
+      .then(function(data) { renderInvoiceDetail(data); })
+      .catch(function() {
+        document.getElementById('dd2Loading').textContent = 'Error loading invoice.';
+      });
+  }
+
+  function closeDetail() {
+    document.getElementById('dd2Overlay').classList.remove('open');
+    document.getElementById('dd2Modal').classList.remove('open');
+  }
+
+  function renderPoDetail(data) {
+    document.getElementById('dd2Subtitle').textContent  = data.description || '';
+    // C-16 — show PO Status as a badge alongside the vendor
+    var infoEl = document.getElementById('dd2Info');
+    var statusBadge = '';
+    if (data.po_status) {
+      var statusLower = (data.po_status || '').toLowerCase();
+      var bg = '#666';
+      if (statusLower === 'closed' || statusLower === 'fully billed') bg = '#888';
+      else if (statusLower.indexOf('partial') >= 0) bg = '#c47b00';
+      else if (statusLower.indexOf('pending') >= 0) bg = '#1c7ed6';
+      else if (statusLower === 'open') bg = '#2f9e44';
+      statusBadge = '<span style="display:inline-block;padding:2px 8px;border-radius:10px;'
+                  + 'background:' + bg + ';color:#fff;font-size:11px;font-weight:600;'
+                  + 'margin-left:8px;">' + esc(data.po_status) + '</span>';
+    }
+    infoEl.innerHTML = esc(data.vendor || '') + statusBadge;
+    document.getElementById('dd2Loading').style.display = 'none';
+
+    var groups = data.task_groups || [];
+    if (groups.length === 0) {
+      document.getElementById('dd2Empty').style.display = '';
+      return;
+    }
+
+    var head = document.getElementById('dd2Head');
+    head.innerHTML = '<tr>' +
+      '<th style="width:55px;">Code</th>' +
+      '<th>Line Description</th>' +
+      '<th class="num" style="width:150px;">Order Amount</th>' +
+      '</tr>';
+
+    var tbody = document.getElementById('dd2Rows');
+    groups.forEach(function(g) {
+      // Task header row
+      var th = document.createElement('tr');
+      th.style.cssText = 'background:#eef2f7;';
+      th.innerHTML =
+        '<td style="font-family:monospace;font-size:11px;font-weight:700;color:#1a2e4a;">' + esc(g.cc_code) + '</td>' +
+        '<td style="font-size:11px;font-weight:700;color:#1a2e4a;" colspan="2">' + esc(g.task) + '</td>';
+      tbody.appendChild(th);
+
+      g.lines.forEach(function(l) {
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td></td>' +
+          '<td style="padding-left:16px;">' + esc(l.memo) + '</td>' +
+          '<td class="num">' + fmtZAR(l.amount) + '</td>';
+        tbody.appendChild(tr);
+      });
+    });
+
+    // C-16 — Accurate totals. For closed POs, surface the agreed-shortfall
+    // separately rather than reporting it as live remaining commitment.
+    var totalsRows = [
+      ['Total Order Value',         data.total_order],
+      ['Actuals to Date',           data.total_actual],
+      ['Effective Remaining',       data.effective_remaining],
+    ];
+    if ((data.agreed_shortfall || 0) > 0) {
+      totalsRows.push(['Agreed Shortfall (closed)', data.agreed_shortfall]);
+    }
+    totalsRows.forEach(function(r) {
+      var tr = document.createElement('tr');
+      tr.className = 'dd2-total';
+      tr.innerHTML = '<td colspan="2">' + r[0] + '</td><td class="num">' + fmtZAR(r[1]) + '</td>';
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('dd2Table').style.display  = '';
+    document.getElementById('dd2Footer').style.display = 'none';
+  }
+
+  function renderInvoiceDetail(data) {
+    var poLabel = data.po_number
+      ? data.po_number + (data.po_description ? ': ' + data.po_description : '')
+      : '—';
+    document.getElementById('dd2Subtitle').textContent = 'Order: ' + poLabel;
+    document.getElementById('dd2Info').textContent     = data.vendor || '';
+    document.getElementById('dd2Loading').style.display = 'none';
+
+    var head = document.getElementById('dd2Head');
+    head.innerHTML = '<tr>' +
+      '<th style="width:60px;">Code</th>' +
+      '<th>Task / Description</th>' +
+      '<th class="num" style="width:150px;">Amount</th>' +
+      '</tr>';
+
+    var lines = data.lines || [];
+    if (lines.length === 0) {
+      document.getElementById('dd2Empty').style.display = '';
+      return;
+    }
+
+    var tbody = document.getElementById('dd2Rows');
+    lines.forEach(function(l) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td style="font-family:monospace;font-size:11px;color:#556;">' + esc(l.cc_code) + '</td>' +
+        '<td>' + esc(l.task || l.cc_name) + '</td>' +
+        '<td class="num">' + fmtZAR(l.amount) + '</td>';
+      tbody.appendChild(tr);
+    });
+
+    var tot = document.createElement('tr');
+    tot.className = 'dd2-total';
+    tot.innerHTML =
+      '<td colspan="2">Total</td>' +
+      '<td class="num">' + fmtZAR(data.total) + '</td>';
+    tbody.appendChild(tot);
+
+    document.getElementById('dd2Table').style.display  = '';
+    document.getElementById('dd2Footer').style.display = 'none';
+  }
+
+  function esc(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function fmtZAR(v) {
+    if (v === null || v === undefined) return 'R 0.00';
+    var n   = Math.abs(Number(v));
+    var str = n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return (Number(v) < 0 ? '−' : '') + 'R ' + str;
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      closeDetail();
+      closeDrilldown();
+      closeFilter();
+    }
+  });
+</script>
+{% endblock %}
