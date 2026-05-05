@@ -470,6 +470,44 @@ class Bidder(Base):
     )
 
 
+class EvaluationCriterion(Base):
+    """A weighted criterion against which bidders are scored. Defined once
+    per tender; bidders are scored on each criterion via BidEvaluation rows.
+    Weights are intended to sum to 100 across criteria for a tender — soft
+    constraint enforced as a UI warning, not a DB invariant."""
+
+    __tablename__ = "evaluation_criterion"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tender_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tender.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    criterion_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    weight: Mapped[float] = mapped_column(Numeric(5, 2, asdecimal=False), nullable=False, default=0)
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class BidEvaluation(Base):
+    """One score per (bidder, criterion). Score is 0-100; the weighted total
+    per bidder is sum(score * weight) / sum(weights), surfaced on the
+    Adjudication view."""
+
+    __tablename__ = "bid_evaluation"
+    __table_args__ = (UniqueConstraint("bidder_id", "criterion_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bidder_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("bidder.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    criterion_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("evaluation_criterion.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    score: Mapped[float] = mapped_column(Numeric(5, 2, asdecimal=False), nullable=False, default=0)
+    evaluator: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
 class BidDocument(Base):
     """Reference to a bid-related document. v1 stores a name + link/URL/path
     only — no binary uploads. The user pastes a network-drive link or

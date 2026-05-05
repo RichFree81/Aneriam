@@ -17,9 +17,9 @@ from .config import BUNDLE_DIR, CAPITALISATION_ACCOUNT_KEYWORDS, REGISTER_DIR
 from .database import Base, SessionLocal, engine, get_db
 from .ingest import run_import
 from .models import (
-    BidDocument, Bidder, ControlAccount, CostNodeAuditLog, ImportBatch,
-    Package, PackageCostNode, PORtoLink, Project, ProjectTask, RTO,
-    Tender, Transaction,
+    BidDocument, BidEvaluation, Bidder, ControlAccount, CostNodeAuditLog,
+    EvaluationCriterion, ImportBatch, Package, PackageCostNode, PORtoLink,
+    Project, ProjectTask, RTO, Tender, Transaction,
 )
 from .packages_ingest import seed_packages
 from . import rto as rto_helpers
@@ -1584,6 +1584,263 @@ def package_bid_document_delete(project_number: str, package_number: str, doc_id
     tender.updated_at = datetime.now()
     db.commit()
     return _tender_redirect(project_number, package_number)
+
+
+# ---------------------------------------------------------------------------
+# Adjudication routes — Slice D
+# ---------------------------------------------------------------------------
+
+def _adjudication_redirect(project_number: str, package_number: str):
+    return RedirectResponse(
+        f"/project/{project_number}/packages/{package_number}/adjudication",
+        status_code=303,
+    )
+
+
+@app.get("/project/{project_number}/packages/{package_number}/adjudication")
+def package_adjudication_view(project_number: str, package_number: str, request: Request, db: DbDep):
+    """Show the criterion-x-bidder scoring matrix and weighted-total
+    recommendation. Available once a tender exists; the parent tab is
+    Procurement (visible only on external packages)."""
+    project = _get_project_or_404(db, project_number)
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+
+    if tender is None:
+        return templates.TemplateResponse("package_adjudication.html", {
+            "request": request,
+            "project": project,
+            "package": pkg,
+            "tender": None,
+            "criteria": [],
+            "bidders": [],
+            "scores": {},
+            "weighted_totals": {},
+            "weight_sum": 0,
+            "valid_targets": [],
+        })
+
+    criteria = (
+        db.query(EvaluationCriterion)
+        .filter_by(tender_id=tender.id)
+        .order_by(EvaluationCriterion.display_order, EvaluationCriterion.id)
+        .all()
+    )
+    bidders = sorted(tender.bidders, key=lambda b: b.display_order)
+
+    # scores[bidder_id][criterion_id] = (score, evaluator, notes)
+    scores: dict[int, dict[int, tuple[float, str, str]]] = {b.id: {} for b in bidders}
+    rows = (
+        db.query(BidEvaluation)
+        .join(Bidder, Bidder.id == BidEvaluation.bidder_id)
+        .filter(Bidder.tender_id == tender.id)
+        .all()
+    )
+    for r in rows:
+        scores.setdefault(r.bidder_id, {})[r.criterion_id] = (
+            float(r.score or 0), r.evaluator or "", r.notes or "",
+        )
+
+    weights_by_id = {c.id: float(c.weight or 0) for c in criteria}
+    weight_sum = sum(weights_by_id.values())
+
+    weighted_totals: dict[int, float | None] = {}
+    for b in bidders:
+        bidder_scores = {cid: triple[0] for cid, triple in scores.get(b.id, {}).items()}
+        weighted_totals[b.id] = tender_helpers.weighted_score(bidder_scores, weights_by_id)
+
+    valid_targets = sorted(tender_helpers.ALLOWED_TRANSITIONS.get(tender.status, set()))
+    return templates.TemplateResponse("package_adjudication.html", {
+        "request": request,
+        "project": project,
+        "package": pkg,
+        "tender": tender,
+        "criteria": criteria,
+        "bidders": bidders,
+        "scores": scores,
+        "weighted_totals": weighted_totals,
+        "weight_sum": weight_sum,
+        "valid_targets": valid_targets,
+    })
+
+
+@app.post("/project/{project_number}/packages/{package_number}/adjudication/criteria/add")
+def package_criterion_add(
+    project_number: str,
+    package_number: str,
+    db: DbDep,
+    criterion_name: str = Form(...),
+    weight: str = Form("0"),
+):
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    if tender is None:
+        raise HTTPException(status_code=404, detail="No tender for this package")
+    try:
+        w = float(weight)
+    except ValueError:
+        w = 0.0
+    next_order = (
+        db.query(EvaluationCriterion).filter_by(tender_id=tender.id).count()
+    )
+    db.add(EvaluationCriterion(
+        tender_id=tender.id,
+        criterion_name=criterion_name.strip(),
+        weight=max(0.0, w),
+        display_order=next_order,
+    ))
+    tender.updated_at = datetime.now()
+    db.commit()
+    return _adjudication_redirect(project_number, package_number)
+
+
+@app.post("/project/{project_number}/packages/{package_number}/adjudication/criteria/{criterion_id}/edit")
+def package_criterion_edit(
+    project_number: str,
+    package_number: str,
+    criterion_id: int,
+    db: DbDep,
+    criterion_name: str = Form(...),
+    weight: str = Form("0"),
+):
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    crit = db.get(EvaluationCriterion, criterion_id)
+    if tender is None or crit is None or crit.tender_id != tender.id:
+        raise HTTPException(status_code=404, detail="Criterion not found")
+    try:
+        crit.weight = max(0.0, float(weight))
+    except ValueError:
+        pass
+    crit.criterion_name = criterion_name.strip()
+    tender.updated_at = datetime.now()
+    db.commit()
+    return _adjudication_redirect(project_number, package_number)
+
+
+@app.post("/project/{project_number}/packages/{package_number}/adjudication/criteria/{criterion_id}/delete")
+def package_criterion_delete(
+    project_number: str,
+    package_number: str,
+    criterion_id: int,
+    db: DbDep,
+):
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    crit = db.get(EvaluationCriterion, criterion_id)
+    if tender is None or crit is None or crit.tender_id != tender.id:
+        raise HTTPException(status_code=404, detail="Criterion not found")
+    db.delete(crit)
+    tender.updated_at = datetime.now()
+    db.commit()
+    return _adjudication_redirect(project_number, package_number)
+
+
+@app.post("/project/{project_number}/packages/{package_number}/adjudication/score")
+async def package_scores_save(
+    project_number: str,
+    package_number: str,
+    request: Request,
+    db: DbDep,
+):
+    """Bulk save: form fields named `score_{bidder_id}_{criterion_id}` and
+    `evaluator_{bidder_id}_{criterion_id}`. Empty score deletes any existing
+    BidEvaluation row for that cell so the weighted total recalculates
+    correctly."""
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    if tender is None:
+        raise HTTPException(status_code=404, detail="No tender for this package")
+
+    form = await request.form()
+    # Build {(bidder_id, criterion_id): (score_str, evaluator, notes)}
+    cells: dict[tuple[int, int], dict[str, str]] = {}
+    for key, value in form.items():
+        if "_" not in key:
+            continue
+        prefix, _, rest = key.partition("_")
+        try:
+            bidder_id_str, criterion_id_str = rest.split("_", 1)
+            bidder_id = int(bidder_id_str)
+            criterion_id = int(criterion_id_str)
+        except (ValueError, IndexError):
+            continue
+        cell = cells.setdefault((bidder_id, criterion_id), {})
+        if prefix == "score":
+            cell["score"] = value
+        elif prefix == "evaluator":
+            cell["evaluator"] = value
+        elif prefix == "notes":
+            cell["notes"] = value
+
+    # Validate all bidder/criterion ids belong to this tender
+    valid_bidder_ids = {b.id for b in tender.bidders}
+    valid_criterion_ids = {
+        c.id for c in db.query(EvaluationCriterion.id).filter_by(tender_id=tender.id).all()
+    }
+
+    for (bidder_id, criterion_id), data in cells.items():
+        if bidder_id not in valid_bidder_ids or criterion_id not in valid_criterion_ids:
+            continue
+        score_str = (data.get("score") or "").strip()
+        evaluator = (data.get("evaluator") or "").strip()
+        notes = (data.get("notes") or "").strip()
+        existing = (
+            db.query(BidEvaluation)
+            .filter_by(bidder_id=bidder_id, criterion_id=criterion_id)
+            .first()
+        )
+        if not score_str:
+            # Empty score -> remove any existing evaluation
+            if existing is not None:
+                db.delete(existing)
+            continue
+        try:
+            score = float(score_str)
+        except ValueError:
+            continue
+        score = max(0.0, min(100.0, score))
+        if existing is None:
+            db.add(BidEvaluation(
+                bidder_id=bidder_id,
+                criterion_id=criterion_id,
+                score=score,
+                evaluator=evaluator,
+                notes=notes,
+            ))
+        else:
+            existing.score = score
+            existing.evaluator = evaluator
+            existing.notes = notes
+
+    tender.updated_at = datetime.now()
+    db.commit()
+    return _adjudication_redirect(project_number, package_number)
+
+
+@app.post("/project/{project_number}/packages/{package_number}/adjudication/bidders/{bidder_id}/status")
+def package_bidder_status(
+    project_number: str,
+    package_number: str,
+    bidder_id: int,
+    db: DbDep,
+    target_status: str = Form(...),
+):
+    """Flip a bidder's status to one of the adjudication-stage values.
+    Slice D allows Submitted <-> Shortlisted <-> Disqualified moves; the
+    Awarded transition (and consequent Tender → Awarded auto-flip) is
+    Slice E's territory and intentionally not handled here yet."""
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    bidder = db.get(Bidder, bidder_id)
+    if tender is None or bidder is None or bidder.tender_id != tender.id:
+        raise HTTPException(status_code=404, detail="Bidder not found")
+    if target_status not in tender_helpers.BIDDER_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Unknown bidder status: {target_status}")
+    bidder.status = target_status
+    tender.updated_at = datetime.now()
+    db.commit()
+    return _adjudication_redirect(project_number, package_number)
 
 
 def _get_package(db: Session, project_number: str, package_number: str) -> Package:

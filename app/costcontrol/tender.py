@@ -31,10 +31,11 @@ ALL_STATUSES = (
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     STATUS_DRAFT:        {STATUS_ISSUED, STATUS_CANCELLED},
     STATUS_ISSUED:       {STATUS_CLOSED, STATUS_DRAFT, STATUS_CANCELLED},
-    # Closed → Adjudicating becomes user-reachable in Slice D once scoring
-    # is available; for now Closed can only go back to Issued or be cancelled.
-    STATUS_CLOSED:       {STATUS_ISSUED, STATUS_CANCELLED},
+    STATUS_CLOSED:       {STATUS_ADJUDICATING, STATUS_ISSUED, STATUS_CANCELLED},
     STATUS_ADJUDICATING: {STATUS_AWARDED, STATUS_CLOSED, STATUS_CANCELLED},
+    # STATUS_AWARDED is reached automatically when a bidder is marked Awarded
+    # via the Adjudication UI in Slice E. v1 has no manual user transition
+    # back out of Awarded — to undo, the user re-marks a different bidder.
     STATUS_AWARDED:      set(),
     STATUS_CANCELLED:    set(),
 }
@@ -75,3 +76,25 @@ def next_tender_number(db: Session, package_number: str, package_id: int) -> str
             if n > max_n:
                 max_n = n
     return f"{package_number}.TND.{max_n + 1:03d}"
+
+
+def weighted_score(scores_by_criterion: dict[int, float], weights_by_criterion: dict[int, float]) -> float | None:
+    """Compute a weighted-average score across criteria for one bidder.
+
+    `scores_by_criterion` maps criterion_id -> raw score (0-100).
+    `weights_by_criterion` maps criterion_id -> weight.
+
+    Returns None if no scored criteria, otherwise sum(score*weight) /
+    sum(weight). Criteria with no score for this bidder are excluded
+    from BOTH the numerator and denominator so the user can leave a
+    cell blank without it dragging the total to zero.
+    """
+    num = 0.0
+    den = 0.0
+    for cid, score in scores_by_criterion.items():
+        w = weights_by_criterion.get(cid, 0)
+        if w <= 0:
+            continue
+        num += float(score) * float(w)
+        den += float(w)
+    return num / den if den > 0 else None
