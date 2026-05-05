@@ -375,3 +375,45 @@ class PackageDeliverable(Base):
 
     package_ref: Mapped["Package"] = relationship(back_populates="deliverables")
     workstream_ref: Mapped["Workstream | None"] = relationship(back_populates="deliverables")
+
+
+class RTO(Base):
+    """Request To Order — a header-only record raised before a NetSuite PO is
+    issued. Carries vendor, total amount, and a status that walks through
+    Draft → Submitted → Approved → Issued for PO → Cancelled. Linked to one
+    NetSuite PO via `po_rto_links` once Procurement raises it.
+    """
+
+    __tablename__ = "rto"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    rto_number: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
+    project_number: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    package_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    vendor_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    total_amount: Mapped[float] = mapped_column(Numeric(18, 2, asdecimal=False), nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="Draft")
+    request_date: Mapped[date] = mapped_column(Date, nullable=False)
+    originator: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Local-time stamps, same convention as cost_node_audit_log.
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class PORtoLink(Base):
+    """Link between a NetSuite PO and an RTO. One PO can be linked to at most
+    one RTO (UNIQUE on po_number). Source distinguishes manual user link from
+    future auto-matchers (e.g. memo-regex)."""
+
+    __tablename__ = "po_rto_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    po_number: Mapped[str] = mapped_column(String(30), nullable=False, unique=True, index=True)
+    rto_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("rto.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
+    linked_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    linked_by: Mapped[str] = mapped_column(Text, nullable=False, default="")
