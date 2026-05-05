@@ -58,3 +58,6 @@ app/dist/
 # OneDrive sync ghost files
 .fuse_hidden*
 
+# Collaboration working artefacts (business inputs, briefs, assessments — not source)
+Collab/
+
