@@ -10,10 +10,23 @@ Aneriam is a multi-tenant portfolio and project management platform. Companies m
 
 ## Architecture at a glance
 
+The repo contains **two distinct applications** that share git history but otherwise stand alone:
+
+- **Aneriam platform** — the multi-tenant portfolio product described above. Lives in `/frontend` and `/backend`.
+- **Cost Control MVP** — a tactical Windows desktop app for RST internal use, packaged as a single `.exe` via PyInstaller. Lives in `/app`. Independent of the platform; its own SQLite DB, its own templates, its own deployment story. See `app/CLAUDE.md` for its rules.
+
+### Aneriam platform
+
 - **Frontend:** React 19 + TypeScript (strict) + MUI v7 + Vite, served as an SPA. Lives in `/frontend`.
 - **Backend:** FastAPI + SQLModel + PostgreSQL, Alembic migrations, JWT auth with refresh rotation. Lives in `/backend`.
 - **Data contract:** the source of truth for types is the backend's Pydantic schemas, surfaced via FastAPI's OpenAPI document. Frontend TypeScript types are generated from that document using `openapi-typescript`. Hand-editing generated types is forbidden.
 - **Multi-tenancy:** every tenant-scoped table carries `company_id`. Every portfolio-scoped endpoint routes through `get_valid_portfolio` (`backend/app/api/deps.py`) — this is the single chokepoint for tenant isolation.
+
+### Cost Control MVP
+
+- **Stack:** FastAPI + SQLModel + SQLite, Jinja2 server-side templates (no SPA), packaged as a portable Windows `.exe` via PyInstaller.
+- **Scope:** single-user desktop tool used inside RST for project cost reconciliation against NetSuite PMO exports. Not multi-tenant, not networked, no auth.
+- **Independence:** does NOT share code, schemas, migrations, or types with the Aneriam platform. The two stay separate by design — don't cross-import.
 
 ## The golden rules
 
@@ -33,31 +46,45 @@ These rules override stylistic preferences, convenience, and "I'll just quickly.
 ```
 /
 ├── CLAUDE.md                    # This file — project-wide rules
-├── FRONTEND_AUDIT.md            # Reference: last frontend audit
-├── BACKEND_AUDIT.md             # Reference: last backend audit
-├── frontend/
+├── README.md                    # Setup / quick-start
+├── CHANGELOG.md
+├── docs/
+│   ├── README.md                # Docs governance
+│   ├── frontend/                # Detailed UI standards (page layout, spacing, forms, a11y)
+│   └── specs/                   # Architecture specs (PORTFOLIO_MODULE, field-library, etc.)
+├── reports/
+│   ├── README.md                # Reports are temporary analytical artefacts
+│   ├── FRONTEND_AUDIT.md        # Reference: last frontend audit (2026-04-17 — pre cost-control)
+│   └── BACKEND_AUDIT.md         # Reference: last backend audit (2026-04-17 — pre cost-control)
+├── frontend/                    # Aneriam platform — React 19 + MUI v7 SPA
 │   ├── CLAUDE.md                # Frontend-specific rules
-│   ├── src/
-│   │   ├── api/                 # API client + per-domain modules + generated types
-│   │   ├── components/          # App-aware UI (dashboard widgets, dialogs, etc.)
-│   │   ├── ui/                  # Headless primitives (feedback, typography)
-│   │   ├── layouts/             # Three shells: Toolpad, Settings, Public
-│   │   ├── pages/               # Route-level components
-│   │   ├── context/             # 5 React contexts: auth, portfolio, projectFilter, actions, notifications
-│   │   ├── hooks/               # useDataFetch, useFeatureFlag, usePermission
-│   │   ├── theme/               # MUI theme + tokens (palette, typography, components)
-│   │   └── types/               # TS types (generated + hand-written domain types)
-│   └── docs/frontend/           # Detailed UI standards (page layout, spacing, forms, a11y)
-└── backend/
-    ├── CLAUDE.md                # Backend-specific rules
-    ├── app/
-    │   ├── api/                 # Routers (one per domain) + deps.py (auth/tenancy)
-    │   ├── core/                # security, database, audit, money, workflow
-    │   ├── models/              # SQLModel tables + mixins
-    │   ├── schemas.py           # Pydantic request/response schemas
-    │   └── scripts/             # seed.py, cleanup
-    ├── alembic/versions/        # Migration chain — append only
-    └── tests/                   # pytest + rollback fixture
+│   └── src/
+│       ├── api/                 # API client + per-domain modules + generated types
+│       ├── components/          # App-aware UI (dashboard widgets, dialogs, etc.)
+│       ├── ui/                  # Headless primitives (feedback, typography)
+│       ├── layouts/             # Three shells: Toolpad, Settings, Public
+│       ├── pages/               # Route-level components
+│       ├── context/             # 5 React contexts: auth, portfolio, projectFilter, actions, notifications
+│       ├── hooks/               # useDataFetch, useFeatureFlag, usePermission
+│       ├── theme/               # MUI theme + tokens (palette, typography, components)
+│       └── types/               # TS types (generated + hand-written domain types)
+├── backend/                     # Aneriam platform — FastAPI + SQLModel + PostgreSQL
+│   ├── CLAUDE.md                # Backend-specific rules
+│   ├── app/
+│   │   ├── api/                 # Routers (one per domain) + deps.py (auth/tenancy)
+│   │   ├── core/                # security, database, audit, money, workflow
+│   │   ├── models/              # SQLModel tables + mixins
+│   │   ├── schemas.py           # Pydantic request/response schemas
+│   │   └── scripts/             # seed.py, cleanup
+│   ├── alembic/versions/        # Migration chain — append only
+│   └── tests/                   # pytest + rollback fixture
+└── app/                         # Cost Control MVP — FastAPI + SQLite, packaged as Windows .exe
+    ├── CLAUDE.md                # Cost-control-specific rules
+    ├── costcontrol/             # FastAPI app, models, ingest pipeline
+    ├── templates/               # Jinja2 server-side templates
+    ├── inputs/                  # active_projects.txt, project_budgets.csv (seed data)
+    ├── run.py                   # Entry point (also wraps PyInstaller exe launch)
+    └── cost_control.spec        # PyInstaller build spec
 ```
 
 ## How frontend and backend stay in sync
@@ -117,7 +144,10 @@ A task is done when:
 ## How to start a new session
 
 1. Read this file (you're doing it).
-2. Read `frontend/CLAUDE.md` if touching frontend, `backend/CLAUDE.md` if touching backend. Read both if touching either.
+2. Read the sub-CLAUDE.md for whichever app you're touching:
+   - `frontend/CLAUDE.md` and/or `backend/CLAUDE.md` for the Aneriam platform.
+   - `app/CLAUDE.md` for the Cost Control MVP.
+   Don't mix the two — a request to "add a project page" means very different things in each.
 3. If the task involves an endpoint or schema that already exists, read it before writing anything.
 4. If the task involves a component that already exists, read it before creating a similar one.
 5. Before writing a new component or endpoint, ask: does one like this already exist? If yes, extend or reuse; if no, follow the patterns in the existing code.

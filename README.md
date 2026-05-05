@@ -49,17 +49,13 @@ A modular application with a React+MUI frontend and FastAPI+SQLite backend.
    The app will be available at `http://localhost:5173` (or similar).
 
 ## Structure
-- `backend/`: FastAPI application
-- `frontend/`: React + TypeScript application
-- `docs/`: Centralized documentation ([see governance rules](docs/README.md))
-  - `docs/frontend/`: Frontend UI standards and theme documentation
-  - `docs/backend/`: Backend API and service documentation
-  - `docs/architecture/`: Architecture decision records
-  - `docs/product/`: Product specifications
-  - `docs/operations/`: Deployment and operations guides
-  - `docs/process/`: Development workflows and conventions
-  - `docs/decisions/`: ADRs and technical decisions
-- `reports/`: AI-generated reports and audits
+- `frontend/`: Aneriam platform — React + TypeScript SPA. See [`frontend/CLAUDE.md`](frontend/CLAUDE.md).
+- `backend/`: Aneriam platform — FastAPI + PostgreSQL API. See [`backend/CLAUDE.md`](backend/CLAUDE.md).
+- `app/`: Cost Control MVP — separate FastAPI + SQLite Windows desktop app. See [`app/CLAUDE.md`](app/CLAUDE.md).
+- `docs/`: Centralised documentation ([see governance rules](docs/README.md)).
+  - `docs/frontend/`: Frontend UI standards and theme documentation.
+  - `docs/specs/`: Architecture specifications (portfolio module, field library, etc.).
+- `reports/`: AI-generated reports and audits ([temporary artefacts](reports/README.md)).
 
 ## Documentation
 
