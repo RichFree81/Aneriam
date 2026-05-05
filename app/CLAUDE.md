@@ -14,8 +14,10 @@ A tactical Windows desktop tool used inside RST for project cost reconciliation 
 
 Every Package has an `is_external` boolean (defaulted at seed time from `package_type` — Construction L&M, Engineering Construction, and Supply default external; Design and Services default internal):
 
-- **Internal package** — done in-house (RST EPCM time, in-house design). Has a Cost Buildup tab. **No procurement workflow** — no Tender, no RTO, no Award. Procurement-stage column on the Packages list shows `—`.
-- **External package** — outsourced to a third-party vendor. Goes through the full lifecycle: **Tender → Adjudication → Award → RTO → Original PO → Variations**. The package's procurement-stage chip surfaces where it currently sits.
+- **Internal package** — done in-house (RST EPCM time, in-house design). Has a Cost Buildup tab. **No procurement workflow** — no Tender, no RTO, no Award.
+- **External package** — outsourced to a third-party vendor. Goes through the full procurement workflow inside the package's Procurement tab: **Tender → Adjudication → Award → RTO → Original PO → Variations**.
+
+Both kinds share the canonical four-stage lifecycle from the Schedule Estimation Standards (`package_stage`): **Definition → Procurement → Execution → Close-out**, plus the modifier states `On Hold` and `Cancelled`. The Packages list shows that single stage chip per row — there is no separate "procurement stage" field; sub-states inside the Procurement stage live on the Tender record (`tender.status`).
 
 The Procurement tab on a package is hidden entirely for internal packages. UI gating uses `package.is_external` everywhere.
 
@@ -66,7 +68,7 @@ Every external package walks through five sub-tabs under its **Procurement** tab
 
 1. **Tender** — issue a tender, register bidders, attach document refs (URLs / network paths). Tender status: `Draft → Issued → Closed → Adjudicating → Awarded → Cancelled`.
 2. **Adjudication** — define weighted criteria (e.g. Price 40, Schedule 25, Technical 25, BBBEE 10), score each bidder against each criterion (0–100), see weighted totals computed by `tender.weighted_score()`.
-3. **Award** — marking a bidder as Awarded triggers `_award_package_to_bidder` in app.py: copies vendor + amount + date onto the Package, sets `is_contracted=True`, advances `procurement_stage='Awarded'`, flips Tender to Awarded, demotes any previously-awarded bidder to Shortlisted (re-award path).
+3. **Award** — marking a bidder as Awarded triggers `_award_package_to_bidder` in app.py: copies vendor + amount + date onto the Package, sets `is_contracted=True`, advances `package_stage` from `Procurement` to `Execution` (per the Schedule Estimation Standards' four-stage lifecycle), flips Tender to Awarded, demotes any previously-awarded bidder to Shortlisted (re-award path).
 4. **Orders (RTO)** — one RTO per external package, numbered `{package}.RTO.NNN`. Walks `Draft → Submitted → Approved → Issued for PO → Cancelled`. NetSuite POs link to it via `po_rto_links`. **First link = Original** (auto-flagged); **subsequent links = Variations**.
 5. **Variance** — Award page rolls up `original_total + variation_total = committed_total`, then `variance = committed_total − awarded_amount` (positive red, negative green).
 

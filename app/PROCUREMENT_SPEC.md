@@ -23,18 +23,33 @@ Every Package has an `is_external` boolean. Defaulted from `package_type` at see
 
 Internal packages have only the **Cost Buildup** tab — the entire procurement workflow is hidden from the UI for them. External packages also expose a **Procurement** tab with four sub-tabs.
 
-## 3. External package lifecycle
+## 3. Lifecycle stages — single source of truth
+
+The canonical lifecycle is defined by every Schedule Estimation Standard (Construction, Design, Services, Supply — all use the same four stages):
 
 ```
-Definition → Cost Buildup → Tender → Adjudication → Award → RTO → Original PO ⤴
-                                                                                └→ Variations (0..n)
+Definition → Procurement → Execution → Close-out
 ```
 
-`Package.procurement_stage` mirrors the workflow position and surfaces as a chip on the Packages list:
+These four (plus the modifier states `On Hold` and `Cancelled`) are what `Package.package_stage` carries. A separate `procurement_stage` field used to exist; it duplicated the same lifecycle and was deprecated 2026-05-05. The column remains in the schema for back-compat but the app no longer reads or writes it.
 
-`Pre-Tender → Tender Issued → Bids In → Adjudicating → Awarded → Active → Closed`
+Sub-states inside the Procurement stage (Tender Draft / Issued / Closed / Adjudicating / Awarded / Cancelled) live on the **Tender record** (`tender.status`) — that's the right place because Tender is the entity going through those sub-states, not the Package.
 
-Most transitions are mirrored automatically from Tender status flips; `Awarded` is set by the award handler.
+External package activities map onto the four stages like this:
+
+| Stage | Activity | Relevant records |
+|---|---|---|
+| Definition | Scope writing, technical basis | Package.scope_summary, Workstreams |
+| **Procurement** | Tender → Adjudication → Award | Tender + Bidder + EvaluationCriterion + BidEvaluation |
+| Execution | RTO + Original PO + Variations | RTO + PORtoLink (`is_original` flag) |
+| Close-out | Punch list, final account | (manual) |
+
+**Auto-transitions:**
+- Issuing a tender on a Definition-stage package automatically advances `package_stage` to **Procurement**.
+- Marking a bidder as Awarded automatically advances `package_stage` from Procurement to **Execution**.
+- No automatic move into Close-out; the user advances manually.
+
+Internal packages share the same four stages but skip the procurement-related child records — no Tender, no RTO. They walk Definition → Procurement (representing internal resource allocation) → Execution → Close-out.
 
 ## 4. Data model
 
@@ -46,7 +61,7 @@ Most transitions are mirrored automatically from Tender status flips; `Awarded` 
 | `awarded_vendor_name` | TEXT NULL | Set on award. |
 | `awarded_amount` | NUMERIC(18,2) NULL | Set on award. |
 | `awarded_date` | DATE NULL | Set to today() on award. |
-| `procurement_stage` | TEXT NOT NULL DEFAULT 'Pre-Tender' | One of the seven stage strings above. |
+| `procurement_stage` | TEXT NOT NULL DEFAULT 'Pre-Tender' | **DEPRECATED 2026-05-05** — superseded by `package_stage`. Column kept for back-compat; no longer read or written. |
 
 ### Tender (Slice C)
 
@@ -121,7 +136,7 @@ When `package_bidder_status` is called with `target_status='Awarded'`, the helpe
 3. Set Tender status to `Awarded`.
 4. Copy `bidder.vendor_name`, `bidder.bid_amount`, `today()` onto Package's `awarded_vendor_name`, `awarded_amount`, `awarded_date`.
 5. Set `Package.is_contracted = True` (freezes the pre-award column on cost nodes).
-6. Set `Package.procurement_stage = 'Awarded'`.
+6. Advance `Package.package_stage = 'Execution'` (per the four-stage lifecycle, awarding ends Procurement and starts Execution).
 
 Re-awarding is supported — the helper just demotes whichever bidder was previously Awarded and re-runs the same side-effects with the new winner.
 
@@ -163,7 +178,7 @@ Each slice was smoke-tested end-to-end before commit. The current canonical test
 1. Issue tender → walk Issued → Closed → Adjudicating.
 2. Add bidders + bid amounts.
 3. Add weighted criteria + score the matrix.
-4. Mark a bidder as Awarded — verify package fields, tender status, procurement_stage all update.
+4. Mark a bidder as Awarded — verify package fields update (vendor / amount / date / is_contracted / package_stage='Execution') and the tender flips to Awarded.
 5. Create RTO (auto-numbered `5009.PKG.101.RTO.001`).
 6. Walk RTO Submitted → Approved.
 7. Link first PO → expect Original chip everywhere.

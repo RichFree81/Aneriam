@@ -47,6 +47,13 @@
     <div class="sc-label">Award Date</div>
     <div class="sc-value">{{ package.awarded_date or '—' }}</div>
   </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Package Stage</div>
+    <div class="sc-value">
+      {% set stage_cls = "stage-" ~ package.package_stage | lower | replace(" ", "-") %}
+      <span class="chip {{ stage_cls }}">{{ package.package_stage }}</span>
+    </div>
+  </div>
   <div class="summary-card fy">
     <div class="sc-label">Original PO</div>
     <div class="sc-value">{{ original_total | zar }}</div>

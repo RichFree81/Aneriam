@@ -210,9 +210,14 @@ class Package(Base):
     awarded_vendor_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     awarded_amount: Mapped[float | None] = mapped_column(Numeric(18, 2, asdecimal=False), nullable=True)
     awarded_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # DEPRECATED 2026-05-05 — superseded by package_stage, which carries the
+    # canonical four-stage lifecycle (Definition / Procurement / Execution /
+    # Close-out) per the Schedule Estimation Standards. The column stays in
+    # the schema for backward compatibility (SQLite ALTER TABLE DROP is
+    # awkward) but is no longer read or written by the app.
     procurement_stage: Mapped[str] = mapped_column(
         String(30), nullable=False, default="Pre-Tender"
-    )  # Pre-Tender / Tender Issued / Bids In / Adjudicating / Awarded / Active / Closed
+    )
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     project_ref: Mapped["Project"] = relationship(back_populates="packages")

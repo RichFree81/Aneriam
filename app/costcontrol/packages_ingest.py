@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from .models import Package, PackageScheduleStage, Workstream
-from .seed import SCHEDULE_STAGES, default_is_external
+from .seed import SCHEDULE_STAGES, default_is_external, normalise_package_stage
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +169,7 @@ def seed_packages(db: Session, register_dir: Path) -> None:
                     project_number=proj_num,
                     description=pkg_data["description"],
                     package_type=pkg_data["package_type"],
-                    package_stage=pkg_data["package_stage"],
+                    package_stage=normalise_package_stage(pkg_data["package_stage"]),
                     scope_summary=pkg_data["scope_summary"],
                     estimation_standard=pkg_data["estimation_standard"],
                     display_order=pkg_data["display_order"],
@@ -188,7 +188,7 @@ def seed_packages(db: Session, register_dir: Path) -> None:
             else:
                 pkg.description        = pkg_data["description"]
                 pkg.package_type       = pkg_data["package_type"]
-                pkg.package_stage      = pkg_data["package_stage"]
+                pkg.package_stage      = normalise_package_stage(pkg_data["package_stage"])
                 pkg.scope_summary      = pkg_data["scope_summary"]
                 pkg.estimation_standard = pkg_data["estimation_standard"]
                 pkg.display_order      = pkg_data["display_order"]

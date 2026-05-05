@@ -126,6 +126,11 @@ def on_startup():
                 " SELECT MIN(id) FROM po_rto_links GROUP BY rto_id"
                 ") AND is_original = 0"
             ),
+            # Standards alignment — normalise legacy package_stage values onto
+            # the canonical four-stage set (Definition / Procurement / Execution
+            # / Close-out). Idempotent: subsequent runs find no matching rows.
+            "UPDATE packages SET package_stage = 'Procurement' WHERE package_stage = 'Planned'",
+            "UPDATE packages SET package_stage = 'Close-out'   WHERE package_stage IN ('Closeout', 'Complete')",
             # Backfill: set is_external for existing packages whose type is
             # external by default. Re-runs are no-ops because the WHERE clause
             # only flips rows that are still at the column default of 0.
@@ -1382,9 +1387,12 @@ def package_tender_issue(
         updated_at=now,
     )
     db.add(tender)
-    # Bump the package's procurement_stage so the chip on the Packages list
-    # reflects the tender having been raised.
-    pkg.procurement_stage = "Tender Issued"
+    # Auto-advance Definition → Procurement on tender issue. The package can
+    # only enter Procurement stage once a tender exists, so issuing one is the
+    # canonical trigger. If the package is already in Procurement (or further),
+    # leave it alone — the user may have advanced manually.
+    if pkg.package_stage == "Definition":
+        pkg.package_stage = "Procurement"
     db.commit()
     return _tender_redirect(project_number, package_number)
 
@@ -1436,20 +1444,10 @@ def package_tender_status(
         )
     tender.status = target_status
     tender.updated_at = datetime.now()
-    # Mirror the tender status onto the package's procurement_stage so the
-    # Packages list shows the right chip without a join.
-    if target_status == tender_helpers.STATUS_ISSUED:
-        pkg.procurement_stage = "Tender Issued"
-    elif target_status == tender_helpers.STATUS_CLOSED:
-        pkg.procurement_stage = "Bids In"
-    elif target_status == tender_helpers.STATUS_ADJUDICATING:
-        pkg.procurement_stage = "Adjudicating"
-    elif target_status == tender_helpers.STATUS_AWARDED:
-        pkg.procurement_stage = "Awarded"
-    elif target_status == tender_helpers.STATUS_CANCELLED:
-        pkg.procurement_stage = "Pre-Tender"
-    elif target_status == tender_helpers.STATUS_DRAFT:
-        pkg.procurement_stage = "Pre-Tender"
+    # Tender sub-states (Issued / Closed / Adjudicating / etc.) live on the
+    # Tender record itself — no longer mirrored onto Package.package_stage.
+    # The package stays in 'Procurement' for the whole tender lifecycle and
+    # only advances to 'Execution' on award (handled in _award_package_to_bidder).
     db.commit()
     return _tender_redirect(project_number, package_number)
 
@@ -1466,7 +1464,8 @@ def package_tender_delete(project_number: str, package_number: str, db: DbDep):
             detail=f"Cannot delete tender in status '{tender.status}' — cancel it first",
         )
     db.delete(tender)
-    pkg.procurement_stage = "Pre-Tender"
+    # No longer auto-revert package_stage — the user controls it manually.
+    # Deleting the tender doesn't undo whatever stage decision was made.
     db.commit()
     return _tender_redirect(project_number, package_number)
 
@@ -1868,7 +1867,8 @@ def _award_package_to_bidder(db: Session, pkg: Package, tender: Tender, bidder: 
     flip the awarded bidder + demote any other Awarded bidder, set Tender
     to Awarded, and copy bidder details onto the Package's awarded_*
     fields. is_contracted=True freezes the pre-award amounts on the cost
-    nodes; procurement_stage='Awarded' surfaces on the Packages list."""
+    nodes; package_stage advances to 'Execution' per the four-stage
+    lifecycle in the Schedule Estimation Standards."""
     # Demote any previously-awarded bidder on this tender (re-award path).
     for b in tender.bidders:
         if b.id != bidder.id and b.status == "Awarded":
@@ -1881,7 +1881,11 @@ def _award_package_to_bidder(db: Session, pkg: Package, tender: Tender, bidder: 
     pkg.awarded_amount = float(bidder.bid_amount or 0)
     pkg.awarded_date = now.date()
     pkg.is_contracted = True
-    pkg.procurement_stage = "Awarded"
+    # Per the Schedule Estimation Standards, awarding a tender ends the
+    # Procurement stage and starts Execution — the package transitions
+    # automatically. The user can manually override on the package detail
+    # if they want to defer the move.
+    pkg.package_stage = "Execution"
     db.commit()
 
 

@@ -63,10 +63,9 @@
       <tr>
         <th style="width:130px;">Package No.</th>
         <th style="width:220px;">Description</th>
-        <th style="width:240px;">Type</th>
+        <th style="width:280px;">Type</th>
         <th style="width:90px;">Class</th>
-        <th style="width:140px;">Procurement</th>
-        <th style="width:100px;">Stage</th>
+        <th style="width:120px;">Stage</th>
         <th class="num" style="width:80px;">Workstreams</th>
       </tr>
     </thead>
@@ -85,30 +84,6 @@
           <span class="chip" style="background:#fdf3e6;color:#8b4513;">External</span>
           {% else %}
           <span class="chip" style="background:#e6f0fb;color:#1a4a70;">Internal</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if pkg.is_external %}
-            {% set ps = pkg.procurement_stage %}
-            {% if ps == 'Pre-Tender' %}
-              <span class="chip" style="background:#f0f4f8;color:#556;font-size:11px;">{{ ps }}</span>
-            {% elif ps == 'Tender Issued' %}
-              <span class="chip" style="background:#fff3cd;color:#856404;font-size:11px;">{{ ps }}</span>
-            {% elif ps == 'Bids In' %}
-              <span class="chip" style="background:#cfe2f3;color:#1a4a70;font-size:11px;">{{ ps }}</span>
-            {% elif ps == 'Adjudicating' %}
-              <span class="chip" style="background:#e8d5e6;color:#4a1a4a;font-size:11px;">{{ ps }}</span>
-            {% elif ps == 'Awarded' %}
-              <span class="chip" style="background:#d1e7dd;color:#0a5233;font-size:11px;">{{ ps }}</span>
-            {% elif ps == 'Active' %}
-              <span class="chip" style="background:#d1e7dd;color:#0a5233;font-size:11px;">{{ ps }}</span>
-            {% elif ps == 'Closed' %}
-              <span class="chip" style="background:#e9ecef;color:#495057;font-size:11px;">{{ ps }}</span>
-            {% else %}
-              <span class="chip" style="font-size:11px;">{{ ps }}</span>
-            {% endif %}
-          {% else %}
-            <span style="color:#aab;font-size:11px;">—</span>
           {% endif %}
         </td>
         <td>

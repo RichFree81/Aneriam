@@ -32,7 +32,29 @@ def default_is_external(package_type: str) -> bool:
     return package_type in EXTERNAL_BY_DEFAULT
 
 
-PACKAGE_STAGES = ("Definition", "Planned", "Execution", "Complete", "On Hold", "Cancelled")
+# Canonical package lifecycle stages — matches the four-stage definition in
+# every Schedule Estimation Standard (Construction, Design, Services, Supply,
+# all V02+). The stages are universal across package types.
+# "On Hold" / "Cancelled" are terminal-modifier states layered on top of the
+# four lifecycle stages.
+PACKAGE_STAGES = ("Definition", "Procurement", "Execution", "Close-out", "On Hold", "Cancelled")
+
+# Legacy stage labels mapped onto the canonical set. Used by the seed
+# migration and by packages_ingest when reading older Package Register
+# markdown that still uses pre-Standards-aligned terminology.
+_LEGACY_STAGE_REMAP = {
+    "Planned":  "Procurement",  # the old generic placeholder used to mean
+                                # "between Definition and Execution"
+    "Closeout": "Close-out",    # spelling-only normalisation
+    "Complete": "Close-out",    # treat fully-finished packages as Close-out
+}
+
+
+def normalise_package_stage(stage: str) -> str:
+    """Map a legacy / unhyphenated stage label onto the canonical Standards
+    value. Unknown stages pass through unchanged (so "On Hold" / "Cancelled"
+    aren't mangled, and any custom stage stays as-is)."""
+    return _LEGACY_STAGE_REMAP.get(stage, stage)
 
 ESTIMATION_STANDARD_BY_TYPE: dict[str, str] = {
     "Design Package":                          "Design Package Schedule Estimation Standard",

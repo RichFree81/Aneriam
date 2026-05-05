@@ -418,12 +418,20 @@
       color: #1a4a70;
       margin-right: 4px;
     }
+    /* Canonical four lifecycle stages from the Schedule Estimation Standards
+       (Definition / Procurement / Execution / Close-out) plus the two
+       terminal-modifier states (On Hold / Cancelled). */
     .chip.stage-definition    { background: #fff3cd; color: #856404; }
-    .chip.stage-planned       { background: #e0eaf4; color: #1a4a70; }
+    .chip.stage-procurement   { background: #cfe2f3; color: #1a4a70; }
     .chip.stage-execution     { background: #d1e7dd; color: #0a5233; }
-    .chip.stage-complete      { background: #d3d3d3; color: #333; }
+    .chip.stage-close-out     { background: #d3d3d3; color: #333; }
     .chip.stage-on-hold       { background: #f8d7da; color: #721c24; }
     .chip.stage-cancelled     { background: #e9ecef; color: #495057; }
+    /* Legacy spellings — kept so old data renders consistently before the
+       startup migration runs (one render only on first launch). */
+    .chip.stage-planned       { background: #cfe2f3; color: #1a4a70; }
+    .chip.stage-complete      { background: #d3d3d3; color: #333; }
+    .chip.stage-closeout      { background: #d3d3d3; color: #333; }
 
     /* ── Cost lifecycle sections (package detail cost tab) ── */
     .cost-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
