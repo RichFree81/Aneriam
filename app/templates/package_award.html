@@ -47,13 +47,31 @@
     <div class="sc-label">Award Date</div>
     <div class="sc-value">{{ package.awarded_date or '—' }}</div>
   </div>
-  <div class="summary-card sc-main">
-    <div class="sc-label">Tender</div>
-    <div class="sc-value" style="font-family:monospace;">{{ tender.tender_number }}</div>
+  <div class="summary-card fy">
+    <div class="sc-label">Original PO</div>
+    <div class="sc-value">{{ original_total | zar }}</div>
+  </div>
+  <div class="summary-card fy">
+    <div class="sc-label">Variations</div>
+    <div class="sc-value">{{ variation_total | zar }}</div>
+  </div>
+  <div class="summary-card fy">
+    <div class="sc-label">Total Committed</div>
+    <div class="sc-value">{{ committed_total | zar }}</div>
   </div>
   <div class="summary-card sc-main">
-    <div class="sc-label">Procurement Stage</div>
-    <div class="sc-value"><span class="chip">{{ package.procurement_stage }}</span></div>
+    <div class="sc-label">Variance vs Award</div>
+    <div class="sc-value">
+      {% if variance is none or committed_total == 0 %}
+        —
+      {% elif variance > 0 %}
+        <span style="color:#a83232;">+{{ variance | zar }}</span>
+      {% elif variance < 0 %}
+        <span style="color:#1a7a3c;">{{ variance | zar }}</span>
+      {% else %}
+        <span style="color:#666;">{{ variance | zar }}</span>
+      {% endif %}
+    </div>
   </div>
 </div>
 

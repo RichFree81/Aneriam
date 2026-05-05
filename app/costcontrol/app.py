@@ -1900,12 +1900,39 @@ def package_award_view(project_number: str, package_number: str, request: Reques
             (b for b in tender.bidders if b.status == "Awarded"),
             None,
         )
+
+    # Slice F — variance roll-up: sum order_amount of every PO linked to
+    # any RTO of this package. Variance = committed − awarded so a positive
+    # number is over-spend (red), negative is under-spend (green).
+    committed_row = db.execute(
+        text("""
+            SELECT
+                COALESCE(SUM(CASE WHEN l.is_original = 1 THEN p.amount ELSE 0 END), 0) AS original_total,
+                COALESCE(SUM(CASE WHEN l.is_original = 0 THEN p.amount ELSE 0 END), 0) AS variation_total,
+                COALESCE(SUM(p.amount), 0)                                              AS committed_total
+            FROM rto r
+            JOIN po_rto_links l ON l.rto_id = r.id
+            JOIN po_lines     p ON p.po_number = l.po_number AND p.voided = 0
+            WHERE r.package_number = :pkg
+        """),
+        {"pkg": package_number},
+    ).fetchone()
+    original_total = float(committed_row.original_total or 0) if committed_row else 0.0
+    variation_total = float(committed_row.variation_total or 0) if committed_row else 0.0
+    committed_total = float(committed_row.committed_total or 0) if committed_row else 0.0
+    awarded_amount = float(pkg.awarded_amount or 0)
+    variance = (committed_total - awarded_amount) if pkg.awarded_amount is not None else None
+
     return templates.TemplateResponse("package_award.html", {
         "request": request,
         "project": project,
         "package": pkg,
         "tender": tender,
         "awarded_bidder": awarded_bidder,
+        "original_total": original_total,
+        "variation_total": variation_total,
+        "committed_total": committed_total,
+        "variance": variance,
     })
 
 
