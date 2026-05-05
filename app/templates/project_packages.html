@@ -64,7 +64,8 @@
       <tr>
         <th style="width:130px;">Package No.</th>
         <th style="width:220px;">Description</th>
-        <th style="width:300px;">Type</th>
+        <th style="width:280px;">Type</th>
+        <th style="width:90px;">Class</th>
         <th style="width:100px;">Stage</th>
         <th class="num" style="width:80px;">Workstreams</th>
       </tr>
@@ -79,6 +80,13 @@
         </td>
         <td>{{ pkg.description }}</td>
         <td style="font-size:12px;">{{ pkg.package_type }}</td>
+        <td>
+          {% if pkg.is_external %}
+          <span class="chip" style="background:#fdf3e6;color:#8b4513;">External</span>
+          {% else %}
+          <span class="chip" style="background:#e6f0fb;color:#1a4a70;">Internal</span>
+          {% endif %}
+        </td>
         <td>
           {% set stage_cls = "stage-" ~ pkg.package_stage | lower | replace(" ", "-") %}
           <span class="chip {{ stage_cls }}">{{ pkg.package_stage }}</span>

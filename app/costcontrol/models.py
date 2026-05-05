@@ -201,6 +201,18 @@ class Package(Base):
     estimation_standard: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # True once contract amounts are locked in — freezes the pre-award column
     is_contracted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Internal packages (in-house design / EPCM time) skip the procurement
+    # workflow entirely — only Cost Buildup applies. External packages run
+    # tender → adjudication → award → RTO → original PO → variations.
+    # Default is set per package_type at seed time (see seed.default_is_external).
+    is_external: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Procurement-side post-award fields. Only meaningful when is_external=True.
+    awarded_vendor_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    awarded_amount: Mapped[float | None] = mapped_column(Numeric(18, 2, asdecimal=False), nullable=True)
+    awarded_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    procurement_stage: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="Pre-Tender"
+    )  # Pre-Tender / Tender Issued / Bids In / Adjudicating / Awarded / Active / Closed
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     project_ref: Mapped["Project"] = relationship(back_populates="packages")

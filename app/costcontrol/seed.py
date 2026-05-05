@@ -17,6 +17,21 @@ PACKAGE_TYPES = (
     "Engineering Construction Package",
 )
 
+# Package types that default to external (procurement workflow applies).
+# Design and Services default to internal (in-house) — user can override
+# when a specific package is outsourced.
+EXTERNAL_BY_DEFAULT: frozenset[str] = frozenset({
+    "Construction Package Labour & Materials",
+    "Engineering Construction Package",
+    "Supply Package",
+})
+
+
+def default_is_external(package_type: str) -> bool:
+    """Return the default is_external value for a given package type."""
+    return package_type in EXTERNAL_BY_DEFAULT
+
+
 PACKAGE_STAGES = ("Definition", "Planned", "Execution", "Complete", "On Hold", "Cancelled")
 
 ESTIMATION_STANDARD_BY_TYPE: dict[str, str] = {

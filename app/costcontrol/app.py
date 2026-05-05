@@ -104,6 +104,23 @@ def on_startup():
             # C-4 — journal_lines and gl_lines tables are created automatically
             # by Base.metadata.create_all (see end of this function), so no
             # explicit CREATE TABLE migration is needed here.
+            # Slice A — internal/external package distinction + post-award fields.
+            "ALTER TABLE packages ADD COLUMN is_external BOOLEAN NOT NULL DEFAULT 0",
+            "ALTER TABLE packages ADD COLUMN awarded_vendor_name TEXT",
+            "ALTER TABLE packages ADD COLUMN awarded_amount NUMERIC(18,2)",
+            "ALTER TABLE packages ADD COLUMN awarded_date DATE",
+            "ALTER TABLE packages ADD COLUMN procurement_stage TEXT NOT NULL DEFAULT 'Pre-Tender'",
+            # Backfill: set is_external for existing packages whose type is
+            # external by default. Re-runs are no-ops because the WHERE clause
+            # only flips rows that are still at the column default of 0.
+            (
+                "UPDATE packages SET is_external = 1 "
+                "WHERE is_external = 0 "
+                "AND package_type IN ("
+                " 'Construction Package Labour & Materials',"
+                " 'Engineering Construction Package',"
+                " 'Supply Package')"
+            ),
         ]:
             try:
                 db.execute(text(migration))
