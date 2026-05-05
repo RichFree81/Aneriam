@@ -23,7 +23,9 @@
       <a href="/project/{{ project.project_number }}/packages">Packages</a>
       <a href="/project/{{ project.project_number }}/rtos">RTOs</a>
       <a href="/project/{{ project.project_number }}/purchase-orders" class="active">Purchase Orders
-        <span class="pkg-count">({{ summary.po_count }})</span>
+        <span class="pkg-count">
+          ({{ po_total_count }}{% if po_unassigned_count %} — {{ po_unassigned_count }} unassigned{% endif %})
+        </span>
       </a>
     </div>
   </div>
@@ -55,6 +57,21 @@
   </div>
 </div>
 
+<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;">
+  <a href="?filter=all"
+     class="btn btn-sm{% if active_filter != 'all' %} btn-ghost{% endif %}">
+    All ({{ po_total_count }})
+  </a>
+  <a href="?filter=unassigned"
+     class="btn btn-sm{% if active_filter != 'unassigned' %} btn-ghost{% endif %}">
+    Unassigned ({{ po_unassigned_count }})
+  </a>
+  <a href="?filter=linked"
+     class="btn btn-sm{% if active_filter != 'linked' %} btn-ghost{% endif %}">
+    Linked ({{ po_linked_count }})
+  </a>
+</div>
+
 <div class="card">
   {% if purchase_orders %}
   <table>
@@ -69,6 +86,7 @@
         <th class="num">Remaining</th>
         <th style="width:120px;">Status</th>
         <th style="width:170px;">RTO</th>
+        <th class="num" style="width:110px;">Variance</th>
       </tr>
     </thead>
     <tbody>
@@ -99,14 +117,36 @@
                     style="padding:2px 8px;font-size:11px;">Link to RTO</button>
           {% endif %}
         </td>
+        <td class="num">
+          {% if po.linked_rto_id %}
+            {% set diff = (po.order_amount or 0) - (po.rto_total or 0) %}
+            {% if diff > 0 %}
+              <span style="color:#a83232;">+{{ diff | zar }}</span>
+            {% elif diff < 0 %}
+              <span style="color:#1a7a3c;">{{ diff | zar }}</span>
+            {% else %}
+              <span style="color:#666;">{{ diff | zar }}</span>
+            {% endif %}
+          {% else %}
+            —
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
   {% else %}
   <div class="empty-state">
+    {% if active_filter == 'unassigned' %}
+    <strong>No unassigned POs</strong>
+    Every PO on this project is linked to an RTO.
+    {% elif active_filter == 'linked' %}
+    <strong>No linked POs yet</strong>
+    Use "Link to RTO" on the All tab to attribute a PO to an RTO.
+    {% else %}
     <strong>No purchase orders for this project</strong>
     Purchase order data is loaded from the NetSuite PMO PO Detailed export at import time.
+    {% endif %}
   </div>
   {% endif %}
 </div>

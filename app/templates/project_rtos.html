@@ -24,7 +24,13 @@
       <a href="/project/{{ project.project_number }}/rtos" class="active">RTOs
         <span class="pkg-count">({{ rtos | length }})</span>
       </a>
-      <a href="/project/{{ project.project_number }}/purchase-orders">Purchase Orders</a>
+      <a href="/project/{{ project.project_number }}/purchase-orders">Purchase Orders
+        {% if po_total_count %}
+        <span class="pkg-count">
+          ({{ po_total_count }}{% if po_unassigned_count %} — {{ po_unassigned_count }} unassigned{% endif %})
+        </span>
+        {% endif %}
+      </a>
     </div>
   </div>
 </div>

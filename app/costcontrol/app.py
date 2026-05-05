@@ -424,6 +424,7 @@ def project_page(
         {"proj": project_number},
     ).fetchall()
 
+    po_total, po_unassigned, _ = _po_counts(db, project_number)
     return templates.TemplateResponse("project.html", {
         "request": request,
         "project": project,
@@ -433,6 +434,8 @@ def project_page(
         "filter_cc": cc_code,
         "filter_date_from": date_from,
         "filter_date_to": date_to,
+        "po_total_count": po_total,
+        "po_unassigned_count": po_unassigned,
         "active_tab": "cost",
     })
 
@@ -769,27 +772,58 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
         "alloc_pct": alloc_pct,
     }
 
+    po_total, po_unassigned, _ = _po_counts(db, project_number)
     return templates.TemplateResponse("project_packages.html", {
         "request": request,
         "project": project,
         "totals": totals,
         "packages": packages,
         "pkg_stats": pkg_stats,
+        "po_total_count": po_total,
+        "po_unassigned_count": po_unassigned,
         "active_tab": "packages",
     })
 
 
+def _po_counts(db: Session, project_number: str) -> tuple[int, int, int]:
+    """Return (all, unassigned, linked) PO counts for the given project.
+    Used both by the PO tab itself (for the filter pills) and by the other
+    project-level pages (for the tab-title badge: 'Purchase Orders (N — M
+    unassigned)')."""
+    row = db.execute(
+        text("""
+            SELECT
+                COUNT(DISTINCT pl.po_number) AS total,
+                COUNT(DISTINCT CASE WHEN l.po_number IS NULL THEN pl.po_number END) AS unassigned
+            FROM po_lines pl
+            LEFT JOIN po_rto_links l ON l.po_number = pl.po_number
+            WHERE pl.project_number = :proj AND pl.voided = 0
+        """),
+        {"proj": project_number},
+    ).fetchone()
+    total = row.total or 0
+    unassigned = row.unassigned or 0
+    return total, unassigned, total - unassigned
+
+
 @app.get("/project/{project_number}/purchase-orders")
-def project_purchase_orders_page(project_number: str, request: Request, db: DbDep):
+def project_purchase_orders_page(
+    project_number: str,
+    request: Request,
+    db: DbDep,
+    filter: str = "all",
+):
     """Project-level Purchase Orders listing.
 
     One row per PO (aggregated from po_lines), filtered to the project and
-    excluding voided lines. The Package column is a placeholder until the RTO
-    workflow is implemented — every PO renders as 'Unassigned' for now.
+    excluding voided lines. The `filter` query param accepts 'all',
+    'unassigned' (no RTO link), or 'linked' (has an RTO link).
     """
     project = db.query(Project).filter_by(project_number=project_number).first()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    if filter not in ("all", "unassigned", "linked"):
+        filter = "all"
 
     totals = _project_totals(db, project_number)
 
@@ -800,8 +834,15 @@ def project_purchase_orders_page(project_number: str, request: Request, db: DbDe
     # "Closed" — useful at a glance. LEFT JOIN po_rto_links surfaces the
     # linked RTO (if any) so the template can render either a clickable RTO
     # number or a "Link to RTO" button.
+    if filter == "unassigned":
+        having_clause = "HAVING l.po_number IS NULL"
+    elif filter == "linked":
+        having_clause = "HAVING l.po_number IS NOT NULL"
+    else:
+        having_clause = ""
+
     rows = db.execute(
-        text("""
+        text(f"""
             SELECT
                 pl.po_number,
                 MIN(pl.date)             AS first_date,
@@ -813,24 +854,29 @@ def project_purchase_orders_page(project_number: str, request: Request, db: DbDe
                 MAX(pl.status)           AS status,
                 COUNT(*)                 AS line_count,
                 r.rto_number             AS linked_rto_number,
-                r.id                     AS linked_rto_id
+                r.id                     AS linked_rto_id,
+                r.total_amount           AS rto_total
             FROM po_lines pl
             LEFT JOIN po_rto_links l ON l.po_number = pl.po_number
             LEFT JOIN rto r           ON r.id       = l.rto_id
             WHERE pl.project_number = :proj AND pl.voided = 0
-            GROUP BY pl.po_number, r.rto_number, r.id
+            GROUP BY pl.po_number, r.rto_number, r.id, r.total_amount, l.po_number
+            {having_clause}
             ORDER BY first_date DESC, pl.po_number
         """),
         {"proj": project_number},
     ).fetchall()
 
-    # Portfolio-style summary: count, total order value, total actual, total remaining.
+    # Counts are computed across the *unfiltered* set so the filter pills
+    # always show the full picture; `summary.po_count` reflects the current
+    # filtered view.
+    total_count, unassigned_count, linked_count = _po_counts(db, project_number)
+
     summary = {
         "po_count":   len(rows),
         "order":      sum(r.order_amount    for r in rows),
         "actual":     sum(r.actual_amount   for r in rows),
         "remaining":  sum(r.remaining_amount for r in rows),
-        "unassigned": sum(1 for r in rows if not r.linked_rto_id),
     }
 
     return templates.TemplateResponse("project_purchase_orders.html", {
@@ -839,6 +885,10 @@ def project_purchase_orders_page(project_number: str, request: Request, db: DbDe
         "totals": totals,
         "purchase_orders": rows,
         "summary": summary,
+        "po_total_count": total_count,
+        "po_unassigned_count": unassigned_count,
+        "po_linked_count": linked_count,
+        "active_filter": filter,
         "active_tab": "purchase_orders",
     })
 
@@ -1037,10 +1087,13 @@ def project_rtos_page(project_number: str, request: Request, db: DbDep):
         {"proj": project_number},
     ).fetchall()
 
+    po_total, po_unassigned, _ = _po_counts(db, project_number)
     return templates.TemplateResponse("project_rtos.html", {
         "request": request,
         "project": project,
         "rtos": rows,
+        "po_total_count": po_total,
+        "po_unassigned_count": po_unassigned,
         "active_tab": "rtos",
     })
 
