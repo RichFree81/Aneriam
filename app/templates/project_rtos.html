@@ -60,8 +60,8 @@
           <a href="/project/{{ project.project_number }}/rtos/{{ r.rto_number }}">{{ r.rto_number }}</a>
         </td>
         <td style="font-size:11px;color:#556;">{{ r.request_date or '—' }}</td>
-        <td>{{ r.vendor_name or '—' }}</td>
-        <td>{{ r.description or '—' }}</td>
+        <td class="truncate" title="{{ r.vendor_name or '' }}">{{ r.vendor_name or '—' }}</td>
+        <td class="truncate-wide" title="{{ r.description or '' }}">{{ r.description or '—' }}</td>
         <td style="font-size:12px;">{{ r.package_number or '—' }}</td>
         <td class="num">{{ r.total_amount | zar }}</td>
         <td><span class="chip">{{ r.status }}</span></td>

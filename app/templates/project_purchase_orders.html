@@ -94,8 +94,8 @@
       <tr>
         <td style="font-family:monospace;font-size:12px;">{{ po.po_number }}</td>
         <td style="font-size:11px;color:#556;">{{ po.first_date or '—' }}</td>
-        <td>{{ po.vendor or '—' }}</td>
-        <td>{{ po.description or '—' }}</td>
+        <td class="truncate" title="{{ po.vendor or '' }}">{{ po.vendor or '—' }}</td>
+        <td class="truncate-wide" title="{{ po.description or '' }}">{{ po.description or '—' }}</td>
         <td class="num">{{ po.order_amount | zar }}</td>
         <td class="num">{{ po.actual_amount | zar }}</td>
         <td class="num">{{ po.remaining_amount | zar }}</td>

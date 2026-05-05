@@ -271,6 +271,17 @@
     /* Numeric cells stay on a single line — never break a currency value
        like "R 325,842,308.00" across two lines. */
     td.num { white-space: nowrap; }
+    /* Truncate text-heavy cells with ellipsis so a single long value (a
+       very long vendor name, or pasted error text) can't blow up the
+       table's column widths. Hovering the cell shows the full content
+       via a `title` attribute on the row. */
+    td.truncate {
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    td.truncate-wide { max-width: 320px; }
     /* Financial column separators */
     th.num { border-left: 1px solid #c8d4e0; }
     td.num { border-left: 1px solid #dde6ee; }
