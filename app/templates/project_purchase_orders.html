@@ -49,6 +49,10 @@
     <div class="sc-label">Remaining</div>
     <div class="sc-value">{{ summary.remaining | zar }}</div>
   </div>
+  <div class="summary-card fy">
+    <div class="sc-label">Unassigned</div>
+    <div class="sc-value">{{ summary.unassigned }}</div>
+  </div>
 </div>
 
 <div class="card">
@@ -64,7 +68,7 @@
         <th class="num">Actual</th>
         <th class="num">Remaining</th>
         <th style="width:120px;">Status</th>
-        <th style="width:120px;">Package</th>
+        <th style="width:170px;">RTO</th>
       </tr>
     </thead>
     <tbody>
@@ -78,7 +82,23 @@
         <td class="num">{{ po.actual_amount | zar }}</td>
         <td class="num">{{ po.remaining_amount | zar }}</td>
         <td><span class="chip">{{ po.status or '—' }}</span></td>
-        <td style="color:#888;font-style:italic;">Unassigned</td>
+        <td>
+          {% if po.linked_rto_number %}
+            <a href="/project/{{ project.project_number }}/rtos/{{ po.linked_rto_number }}"
+               style="font-family:monospace;font-size:12px;">{{ po.linked_rto_number }}</a>
+            <form method="post"
+                  action="/project/{{ project.project_number }}/purchase-orders/{{ po.po_number }}/unlink"
+                  style="display:inline;margin-left:6px;"
+                  onsubmit="return confirm('Unlink {{ po.po_number }} from {{ po.linked_rto_number }}?');">
+              <button type="submit" class="btn btn-sm btn-ghost"
+                      style="padding:1px 6px;font-size:10px;" title="Unlink">×</button>
+            </form>
+          {% else %}
+            <button type="button" class="btn btn-sm btn-ghost"
+                    onclick="openLinkModal('{{ po.po_number }}')"
+                    style="padding:2px 8px;font-size:11px;">Link to RTO</button>
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -90,4 +110,150 @@
   </div>
   {% endif %}
 </div>
+
+{# ── Link-to-RTO modal ─────────────────────────────────────────────── #}
+<div class="filter-overlay" id="linkOverlay" onclick="closeLinkModal()"></div>
+<div class="filter-modal" id="linkModal" style="width:780px;">
+  <div class="fm-header">
+    <span>Link PO to RTO — <span id="linkModalPo" style="font-family:monospace;color:#1a4a70;"></span></span>
+    <button class="fm-close" onclick="closeLinkModal()" aria-label="Close">&times;</button>
+  </div>
+  <div style="padding:14px 20px;border-bottom:1px solid #e8edf3;font-size:12px;color:#445;background:#f7faff;">
+    <div id="linkModalPoDetails" style="display:flex;gap:18px;flex-wrap:wrap;"></div>
+  </div>
+  <div class="fm-body" style="padding:14px 20px;flex-direction:column;gap:14px;">
+    <div>
+      <div class="fm-col-title">Suggested matches</div>
+      <div id="linkSuggestionsList" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+    <div>
+      <div class="fm-col-title" style="display:flex;align-items:center;gap:8px;">
+        Search all RTOs
+        <input type="text" id="linkSearchInput" placeholder="vendor, description, RTO number…"
+               oninput="filterLinkList()"
+               style="flex:1;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;color:#222;">
+      </div>
+      <div id="linkAllList" style="max-height:240px;overflow-y:auto;border:1px solid #dde4ee;border-radius:5px;background:#fafbfc;display:flex;flex-direction:column;"></div>
+    </div>
+  </div>
+  <div class="fm-footer">
+    <button class="btn btn-ghost" onclick="closeLinkModal()">Cancel</button>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PROJECT_NUMBER = "{{ project.project_number }}";
+let currentPo = null;
+
+function openLinkModal(poNumber) {
+  currentPo = poNumber;
+  document.getElementById('linkModalPo').textContent = poNumber;
+  document.getElementById('linkSuggestionsList').innerHTML = '<div style="padding:8px;color:#888;font-style:italic;font-size:12px;">Loading…</div>';
+  document.getElementById('linkAllList').innerHTML = '';
+  document.getElementById('linkSearchInput').value = '';
+  document.getElementById('linkOverlay').classList.add('open');
+  document.getElementById('linkModal').classList.add('open');
+
+  fetch(`/project/${PROJECT_NUMBER}/purchase-orders/${poNumber}/link-suggestions`)
+    .then(r => r.json())
+    .then(renderSuggestions)
+    .catch(e => {
+      document.getElementById('linkSuggestionsList').innerHTML = '<div style="padding:8px;color:#a83232;font-size:12px;">Failed to load suggestions.</div>';
+      console.error(e);
+    });
+}
+
+function closeLinkModal() {
+  document.getElementById('linkOverlay').classList.remove('open');
+  document.getElementById('linkModal').classList.remove('open');
+  currentPo = null;
+}
+
+function fmtZar(n) {
+  return 'R ' + Number(n).toLocaleString('en-ZA', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function renderSuggestions(data) {
+  // Header — PO summary
+  const det = document.getElementById('linkModalPoDetails');
+  det.innerHTML = `
+    <div><strong>Vendor:</strong> ${escape(data.po.vendor || '—')}</div>
+    <div><strong>Amount:</strong> ${fmtZar(data.po.order_amount)}</div>
+    <div><strong>Date:</strong> ${data.po.first_date || '—'}</div>
+    ${data.po.description ? `<div><strong>Description:</strong> ${escape(data.po.description)}</div>` : ''}
+  `;
+
+  // Top 5 suggestions
+  const sl = document.getElementById('linkSuggestionsList');
+  if (!data.top || data.top.length === 0) {
+    sl.innerHTML = '<div style="padding:8px;color:#888;font-style:italic;font-size:12px;">No Approved or Issued-for-PO RTOs available on this project. Create one first.</div>';
+  } else {
+    sl.innerHTML = data.top.map(r => suggestionRow(r, true)).join('');
+  }
+
+  // All RTOs (for search)
+  const al = document.getElementById('linkAllList');
+  window._allRtos = data.all || [];
+  al.innerHTML = window._allRtos.map(r => suggestionRow(r, false)).join('') ||
+    '<div style="padding:10px;color:#888;font-style:italic;font-size:12px;text-align:center;">No linkable RTOs.</div>';
+}
+
+function suggestionRow(r, withScore) {
+  let badge = '';
+  if (withScore && r.score !== null) {
+    let label = '', cls = '';
+    if (r.score >= 60) { label = 'Likely match'; cls = 'background:#d1e7dd;color:#0a5233;'; }
+    else if (r.score < 30) { label = 'Weak — verify'; cls = 'background:#f8d7da;color:#721c24;'; }
+    else { label = `Score ${r.score}`; cls = 'background:#e0eaf4;color:#1a4a70;'; }
+    badge = `<span class="chip" style="${cls}">${label}</span>`;
+  }
+  return `
+    <div class="link-suggestion" data-search="${escape((r.rto_number + ' ' + r.vendor_name + ' ' + r.description).toLowerCase())}"
+         style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid #dde4ee;border-radius:5px;background:#fff;cursor:pointer;"
+         onclick="submitLink(${r.rto_id})">
+      <div style="font-family:monospace;font-size:12px;color:#1a4a70;flex-shrink:0;width:140px;">${escape(r.rto_number)}</div>
+      <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+        <div style="font-size:12px;color:#222;">${escape(r.vendor_name || '—')}</div>
+        <div style="font-size:11px;color:#778;">${escape(r.description || '')}</div>
+      </div>
+      <div style="font-size:12px;font-variant-numeric:tabular-nums;color:#222;flex-shrink:0;">${fmtZar(r.total_amount)}</div>
+      <div style="flex-shrink:0;">${badge}</div>
+      <div style="flex-shrink:0;"><span class="chip" style="font-size:10px;">${escape(r.status)}</span></div>
+    </div>
+  `;
+}
+
+function escape(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function filterLinkList() {
+  const q = document.getElementById('linkSearchInput').value.toLowerCase().trim();
+  const rows = document.querySelectorAll('#linkAllList .link-suggestion');
+  rows.forEach(row => {
+    row.style.display = !q || row.dataset.search.includes(q) ? '' : 'none';
+  });
+}
+
+function submitLink(rtoId) {
+  if (!currentPo) return;
+  const f = document.createElement('form');
+  f.method = 'POST';
+  f.action = `/project/${PROJECT_NUMBER}/purchase-orders/${currentPo}/link`;
+  const input = document.createElement('input');
+  input.type = 'hidden';
+  input.name = 'rto_id';
+  input.value = rtoId;
+  f.appendChild(input);
+  document.body.appendChild(f);
+  f.submit();
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && currentPo) closeLinkModal();
+});
+</script>
 {% endblock %}

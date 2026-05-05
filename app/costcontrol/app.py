@@ -797,23 +797,29 @@ def project_purchase_orders_page(project_number: str, request: Request, db: DbDe
     # picks the populated value (lines of the same PO carry the same metadata
     # in NetSuite). MAX(status) biases toward the alphabetically-latest open
     # status, so a partly-billed PO shows "Pending Receipt" rather than
-    # "Closed" — useful at a glance.
+    # "Closed" — useful at a glance. LEFT JOIN po_rto_links surfaces the
+    # linked RTO (if any) so the template can render either a clickable RTO
+    # number or a "Link to RTO" button.
     rows = db.execute(
         text("""
             SELECT
-                po_number,
-                MIN(date)             AS first_date,
-                MAX(vendor)           AS vendor,
-                MAX(memo_main)        AS description,
-                COALESCE(SUM(amount),         0) AS order_amount,
-                COALESCE(SUM(actual_amount),  0) AS actual_amount,
-                COALESCE(SUM(remaining),      0) AS remaining_amount,
-                MAX(status)           AS status,
-                COUNT(*)              AS line_count
-            FROM po_lines
-            WHERE project_number = :proj AND voided = 0
-            GROUP BY po_number
-            ORDER BY first_date DESC, po_number
+                pl.po_number,
+                MIN(pl.date)             AS first_date,
+                MAX(pl.vendor)           AS vendor,
+                MAX(pl.memo_main)        AS description,
+                COALESCE(SUM(pl.amount),         0) AS order_amount,
+                COALESCE(SUM(pl.actual_amount),  0) AS actual_amount,
+                COALESCE(SUM(pl.remaining),      0) AS remaining_amount,
+                MAX(pl.status)           AS status,
+                COUNT(*)                 AS line_count,
+                r.rto_number             AS linked_rto_number,
+                r.id                     AS linked_rto_id
+            FROM po_lines pl
+            LEFT JOIN po_rto_links l ON l.po_number = pl.po_number
+            LEFT JOIN rto r           ON r.id       = l.rto_id
+            WHERE pl.project_number = :proj AND pl.voided = 0
+            GROUP BY pl.po_number, r.rto_number, r.id
+            ORDER BY first_date DESC, pl.po_number
         """),
         {"proj": project_number},
     ).fetchall()
@@ -824,6 +830,7 @@ def project_purchase_orders_page(project_number: str, request: Request, db: DbDe
         "order":      sum(r.order_amount    for r in rows),
         "actual":     sum(r.actual_amount   for r in rows),
         "remaining":  sum(r.remaining_amount for r in rows),
+        "unassigned": sum(1 for r in rows if not r.linked_rto_id),
     }
 
     return templates.TemplateResponse("project_purchase_orders.html", {
@@ -834,6 +841,131 @@ def project_purchase_orders_page(project_number: str, request: Request, db: DbDe
         "summary": summary,
         "active_tab": "purchase_orders",
     })
+
+
+# ---------------------------------------------------------------------------
+# PO -> RTO link routes
+# ---------------------------------------------------------------------------
+
+def _po_summary(db: Session, project_number: str, po_number: str) -> dict | None:
+    """Return aggregated PO data (vendor, amount, date) used both for the
+    suggestions modal header and the match-scoring algorithm."""
+    row = db.execute(
+        text("""
+            SELECT
+                MIN(date)              AS first_date,
+                MAX(vendor)            AS vendor,
+                MAX(memo_main)         AS description,
+                COALESCE(SUM(amount),  0) AS order_amount
+            FROM po_lines
+            WHERE project_number = :proj AND po_number = :po AND voided = 0
+        """),
+        {"proj": project_number, "po": po_number},
+    ).fetchone()
+    if not row or row.order_amount == 0 and not row.vendor:
+        return None
+    # SQLite returns dates as strings; normalise to date for the matcher.
+    first_date = row.first_date
+    if isinstance(first_date, str):
+        try:
+            from datetime import date as _date
+            first_date = _date.fromisoformat(first_date)
+        except ValueError:
+            first_date = None
+    return {
+        "po_number":    po_number,
+        "vendor":       row.vendor or "",
+        "description":  row.description or "",
+        "order_amount": float(row.order_amount or 0),
+        "first_date":   first_date,
+    }
+
+
+@app.get("/project/{project_number}/purchase-orders/{po_number}/link-suggestions")
+def po_link_suggestions(project_number: str, po_number: str, db: DbDep):
+    """JSON endpoint feeding the link modal — returns top-5 ranked candidates
+    plus the full list of linkable RTOs for client-side search."""
+    if db.query(Project).filter_by(project_number=project_number).first() is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    po = _po_summary(db, project_number, po_number)
+    if po is None:
+        raise HTTPException(status_code=404, detail="PO not found")
+    suggestions = rto_helpers.suggest_matches(db, project_number, po)
+    suggestions["po"] = {
+        "po_number":    po["po_number"],
+        "vendor":       po["vendor"],
+        "description":  po["description"],
+        "order_amount": po["order_amount"],
+        "first_date":   po["first_date"].isoformat() if po["first_date"] else None,
+    }
+    # Include current link state if any
+    existing = db.query(PORtoLink).filter_by(po_number=po_number).first()
+    if existing:
+        existing_rto = db.get(RTO, existing.rto_id)
+        suggestions["currently_linked"] = {
+            "rto_id":     existing.rto_id,
+            "rto_number": existing_rto.rto_number if existing_rto else None,
+        }
+    else:
+        suggestions["currently_linked"] = None
+    return suggestions
+
+
+@app.post("/project/{project_number}/purchase-orders/{po_number}/link")
+def po_link_create(
+    project_number: str,
+    po_number: str,
+    db: DbDep,
+    rto_id: int = Form(...),
+):
+    project = db.query(Project).filter_by(project_number=project_number).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    rto = db.get(RTO, rto_id)
+    if rto is None or rto.project_number != project_number:
+        raise HTTPException(status_code=404, detail="RTO not found")
+    existing = db.query(PORtoLink).filter_by(po_number=po_number).first()
+    if existing:
+        existing_rto = db.get(RTO, existing.rto_id)
+        raise HTTPException(
+            status_code=400,
+            detail=f"PO already linked to {existing_rto.rto_number if existing_rto else existing.rto_id}",
+        )
+    now = datetime.now()
+    db.add(PORtoLink(
+        po_number=po_number,
+        rto_id=rto_id,
+        source="manual",
+        linked_at=now,
+        linked_by="",
+    ))
+    # Auto-flip Approved -> Issued for PO when first PO links.
+    if rto.status == rto_helpers.STATUS_APPROVED:
+        rto.status = rto_helpers.STATUS_ISSUED
+        rto.updated_at = now
+    db.commit()
+    return RedirectResponse(f"/project/{project_number}/purchase-orders", status_code=303)
+
+
+@app.post("/project/{project_number}/purchase-orders/{po_number}/unlink")
+def po_link_remove(project_number: str, po_number: str, db: DbDep):
+    project = db.query(Project).filter_by(project_number=project_number).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    link = db.query(PORtoLink).filter_by(po_number=po_number).first()
+    if link is None:
+        raise HTTPException(status_code=404, detail="No link to remove")
+    rto = db.get(RTO, link.rto_id)
+    # Count BEFORE delete so we know how many will remain on the RTO.
+    siblings = db.query(PORtoLink).filter_by(rto_id=link.rto_id).count() - 1
+    db.delete(link)
+    # Auto-flip back to Approved if the unlinked PO was the only one and the
+    # RTO was sitting at "Issued for PO" purely on its account.
+    if rto and rto.status == rto_helpers.STATUS_ISSUED and siblings == 0:
+        rto.status = rto_helpers.STATUS_APPROVED
+        rto.updated_at = datetime.now()
+    db.commit()
+    return RedirectResponse(f"/project/{project_number}/purchase-orders", status_code=303)
 
 
 # ---------------------------------------------------------------------------
