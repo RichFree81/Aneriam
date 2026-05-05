@@ -79,16 +79,17 @@ def _load_active_projects() -> list[tuple[str, str]]:
     return projects
 
 
-def _load_budgets() -> dict[str, tuple[float | None, float | None]]:
+def _load_budgets() -> dict[str, tuple[float | None, float | None, float | None]]:
     """Read app/inputs/project_budgets.csv and return
-    {project_number: (current_budget, planned_fy2027)}.
+    {project_number: (current_budget, planned_fy2027, approved_capex)}.
 
-    Optional file — if missing, projects load with no budget figures (UI shows
-    blanks). Logs a one-line warning when missing.
+    `approved_capex` is an optional column — if absent or blank, the field is
+    None and the UI renders blank. Optional file overall — if missing,
+    projects load with no budget figures.
     """
     if not PROJECT_BUDGETS_FILE.exists():
         return {}
-    budgets: dict[str, tuple[float | None, float | None]] = {}
+    budgets: dict[str, tuple[float | None, float | None, float | None]] = {}
     with PROJECT_BUDGETS_FILE.open("r", encoding="utf-8", newline="") as fh:
         reader = csv.DictReader(fh)
         for row in reader:
@@ -97,9 +98,11 @@ def _load_budgets() -> dict[str, tuple[float | None, float | None]]:
                 continue
             cb = (row.get("current_budget") or "").strip()
             pf = (row.get("planned_fy2027") or "").strip()
+            ac = (row.get("approved_capex") or "").strip()
             budgets[num] = (
                 float(cb) if cb else None,
                 float(pf) if pf else None,
+                float(ac) if ac else None,
             )
     return budgets
 
@@ -127,16 +130,18 @@ def seed_projects(db: Session) -> None:
     active_numbers = {num for num, _ in active_list}
 
     for number, name in active_list:
-        cb, pf = budgets.get(number, (None, None))
+        cb, pf, ac = budgets.get(number, (None, None, None))
         proj = db.query(Project).filter_by(project_number=number).first()
         if proj is None:
             db.add(Project(project_number=number, project_name=name,
                            current_budget=cb, planned_fy2027=pf,
+                           approved_capex=ac,
                            is_active=True))
         else:
             proj.project_name = name
             proj.current_budget = cb
             proj.planned_fy2027 = pf
+            proj.approved_capex = ac
             proj.is_active = True
 
     for proj in db.query(Project).all():

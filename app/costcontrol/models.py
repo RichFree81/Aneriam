@@ -351,7 +351,10 @@ class CostNodeAuditLog(Base):
         Integer, ForeignKey("package_cost_nodes.id", ondelete="CASCADE"), nullable=False
     )
     action: Mapped[str] = mapped_column(String(20), nullable=False)  # 'Created' | 'Updated'
-    changed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now())
+    # No default — `_write_audit_log` always supplies a local-time value via
+    # `datetime.now()`. A `func.now()` default would be UTC and would conflict
+    # with the explicit local writes if any future code path forgot to pass it.
+    changed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     snapshot: Mapped[str] = mapped_column(Text, nullable=False)  # JSON
 
 

@@ -245,7 +245,7 @@ def _parse_task_hierarchy(content: bytes) -> list[dict]:
         if not full_name or not proj_num:
             continue
 
-        parts   = full_name.split(" : ", 2)
+        parts   = full_name.split(" : ")
         level1  = parts[0]
         level2  = parts[1] if len(parts) >= 2 else None
         level3  = parts[2] if len(parts) >= 3 else None
@@ -423,11 +423,11 @@ def _parse_vb_detail_actuals(content: bytes) -> dict[tuple[str, str, str], float
         po   = row[col["PO Number"]].strip()      if "PO Number"      in col else ""
         proj = row[col["Project Number"]].strip() if "Project Number" in col else ""
         # `PO Memo` carries the originating PO line's per-line memo — matches
-        # PurchaseOrderLine.memo. Falls back to the bill's own `Memo` for rows
-        # that aren't linked to a PO (rare; mostly journal-derived bill rows).
+        # PurchaseOrderLine.memo. The bill's own `Memo` is a different field
+        # (free-text bill memo) and must NOT be substituted: bills with blank
+        # `PO Memo` aggregate under the empty-memo bucket alongside PO lines
+        # whose own memo is empty.
         po_memo = row[col["PO Memo"]].strip() if "PO Memo" in col else ""
-        if not po_memo and "Memo" in col:
-            po_memo = row[col["Memo"]].strip()
         if not po:
             continue
         try:

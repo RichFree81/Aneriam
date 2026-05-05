@@ -79,7 +79,7 @@ def on_startup():
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                 "cost_node_id INTEGER NOT NULL REFERENCES package_cost_nodes(id) ON DELETE CASCADE, "
                 "action TEXT NOT NULL, "
-                "changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                "changed_at DATETIME NOT NULL, "
                 "snapshot TEXT NOT NULL)"
             ),
             # C-1 — PMO 18-column additions on transactions (added 2026-05-04)
@@ -303,23 +303,23 @@ def main_page(
                 p.project_name,
                 p.current_budget,
                 p.approved_capex,
-                COALESCE(SUM(CASE WHEN t.{_NOT_CAP_SQL} THEN t.actual_cost    ELSE 0 END), 0) AS actual,
-                COALESCE(SUM(CASE WHEN t.{_NOT_CAP_SQL} THEN t.committed_cost ELSE 0 END), 0) AS committed,
-                COALESCE(SUM(CASE WHEN t.{_NOT_CAP_SQL}
+                COALESCE(SUM(CASE WHEN {_NOT_CAP_SQL} THEN t.actual_cost    ELSE 0 END), 0) AS actual,
+                COALESCE(SUM(CASE WHEN {_NOT_CAP_SQL} THEN t.committed_cost ELSE 0 END), 0) AS committed,
+                COALESCE(SUM(CASE WHEN {_NOT_CAP_SQL}
                                   THEN t.actual_cost + t.committed_cost
                                   ELSE 0 END), 0) AS project_cost,
-                COALESCE(ABS(SUM(CASE WHEN t.{_IS_CAP_SQL}
+                COALESCE(ABS(SUM(CASE WHEN {_IS_CAP_SQL}
                                       THEN t.actual_cost + t.committed_cost
                                       ELSE 0 END)), 0) AS capitalised,
-                COALESCE(SUM(CASE WHEN t.{_NOT_CAP_SQL}
+                COALESCE(SUM(CASE WHEN {_NOT_CAP_SQL}
                                   THEN t.actual_cost + t.committed_cost
                                   ELSE 0 END), 0)
-                - COALESCE(ABS(SUM(CASE WHEN t.{_IS_CAP_SQL}
+                - COALESCE(ABS(SUM(CASE WHEN {_IS_CAP_SQL}
                                       THEN t.actual_cost + t.committed_cost
                                       ELSE 0 END)), 0) AS net_wip,
                 p.planned_fy2027,
                 0 AS forecast_fy2027,
-                COALESCE(SUM(CASE WHEN t.fiscal_year = '2027' AND t.{_NOT_CAP_SQL}
+                COALESCE(SUM(CASE WHEN t.fiscal_year = '2027' AND {_NOT_CAP_SQL}
                                THEN t.actual_cost ELSE 0 END), 0) AS actual_fy2027
             FROM projects p
             LEFT JOIN transactions t ON t.project_number = p.project_number
@@ -555,13 +555,17 @@ def po_detail(project_number: str, po_number: str, db: DbDep):
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Header: vendor name and description from any transaction linked to this PO
+    # Header: vendor name and description from any transaction linked to this PO.
+    # ORDER BY prefers rows where BOTH fields are populated, then by id for
+    # determinism — without this, SQLite's row order can flip between requests
+    # and render a row missing either field.
     header = db.execute(text("""
         SELECT vendor_name, po_description
         FROM transactions
         WHERE project_number = :proj
           AND (document_number = :po OR po_number = :po)
           AND (vendor_name != '' OR po_description != '')
+        ORDER BY (vendor_name != '' AND po_description != '') DESC, id
         LIMIT 1
     """), {"proj": project_number, "po": po_number}).fetchone()
 
@@ -640,9 +644,12 @@ def po_detail(project_number: str, po_number: str, db: DbDep):
 
     # C-16 — operational rule 1: closed POs have no live commitment, even
     # when their `Remaining` value is non-zero (that's an agreed shortfall).
-    # PO status is shared across all lines of the same PO; pick from any.
+    # Voided lines carry their own status strings ("Voided", "Cancelled", etc.)
+    # which would defeat the closed-PO check, so exclude them here too.
     status_row = db.execute(text("""
-        SELECT status FROM po_lines WHERE po_number = :po LIMIT 1
+        SELECT status FROM po_lines
+        WHERE po_number = :po AND voided = 0
+        ORDER BY id LIMIT 1
     """), {"po": po_number}).fetchone()
     po_status = status_row.status if status_row else ""
     is_closed = po_status.lower() in ("closed", "fully billed")
@@ -873,6 +880,23 @@ def _next_sibling_order(pkg, parent_id: int | None) -> int:
     return max((n.display_order for n in siblings), default=-1) + 1
 
 
+def _resolve_parent_id(db: Session, pkg, parent_id_str: str) -> int | None:
+    """Parse a form-supplied parent_id and verify it belongs to *pkg*.
+
+    Raises HTTP 400 if the parent exists but lives in a different package —
+    the FK on `parent_id` only enforces row existence, so without this guard a
+    hand-crafted POST could mis-parent a node into another package and trigger
+    silent cross-package cascade-delete via ON DELETE CASCADE.
+    """
+    if not parent_id_str.strip():
+        return None
+    parent_int = int(parent_id_str)
+    parent = db.get(PackageCostNode, parent_int)
+    if parent is None or parent.package_id != pkg.id:
+        raise HTTPException(status_code=400, detail="Parent must belong to the same package")
+    return parent_int
+
+
 @app.post("/project/{project_number}/packages/{package_number}/cost/add-section")
 def cost_add_section(
     project_number: str,
@@ -883,7 +907,7 @@ def cost_add_section(
     parent_id: str = Form(""),
 ):
     pkg = _get_package(db, project_number, package_number)
-    parent_int = int(parent_id) if parent_id.strip() else None
+    parent_int = _resolve_parent_id(db, pkg, parent_id)
     node = PackageCostNode(
         package_id=pkg.id,
         parent_id=parent_int,
@@ -932,10 +956,15 @@ def _write_audit_log(db: Session, node: PackageCostNode, action: str) -> None:
 
 
 def _process_col(unit_str: str, qty_str: str, rate_str: str, amount_str: str):
-    """Return (unit, qty, rate, computed_amount) for one cost column."""
+    """Return (unit, qty, rate, computed_amount) for one cost column.
+
+    Blank Sum/P.Sum amounts return None (not 0.0) so the template can render a
+    `—` placeholder consistently across all three columns. Rollups already
+    coalesce None to 0.0 via `getattr(n, col) or 0.0`.
+    """
     unit = unit_str.strip() or "Sum"
     if unit in ("Sum", "P.Sum"):
-        return unit, None, None, _parse_float(amount_str) or 0.0
+        return unit, None, None, _parse_float(amount_str)
     qty = _parse_float(qty_str)
     rate = _parse_float(rate_str)
     return unit, qty, rate, (qty or 0.0) * (rate or 0.0)
@@ -964,7 +993,7 @@ def cost_add_item(
     contract_amount: str = Form(""),
 ):
     pkg = _get_package(db, project_number, package_number)
-    parent_int = int(parent_id) if parent_id.strip() else None
+    parent_int = _resolve_parent_id(db, pkg, parent_id)
     bl_u, bl_q, bl_r, bl_a = _process_col(baseline_unit, baseline_qty, baseline_rate, baseline_amount)
     pa_u, pa_q, pa_r, pa_a = _process_col(pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount)
     ct_u, ct_q, ct_r, ct_a = _process_col(contract_unit, contract_qty, contract_rate, contract_amount)
@@ -1042,6 +1071,7 @@ def cost_set_contract(
         raise HTTPException(status_code=404, detail="Cost node not found")
     node.contract_amount = _parse_float(contract_amount)
     db.commit()
+    _write_audit_log(db, node, "Updated")
     return _cost_redirect(project_number, package_number)
 
 
@@ -1096,8 +1126,9 @@ def do_import(
             status_code=303,
         )
     except Exception as exc:
+        from urllib.parse import quote_plus
         return RedirectResponse(
-            f"/import?error={str(exc).replace(' ', '+')}",
+            f"/import?error={quote_plus(str(exc))}",
             status_code=303,
         )
 
@@ -1175,13 +1206,6 @@ def export_csv(db: DbDep):
         """)
     ).fetchall()
 
-    unalloc = db.execute(
-        text("""
-            SELECT SUM(actual_cost), SUM(committed_cost), SUM(total_cost)
-            FROM transactions WHERE derived_cc_name = 'Unallocated'
-        """)
-    ).fetchone()
-
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["Project Number", "Project Name", "Actual Cost", "Committed Cost", "Total Cost"])
@@ -1192,14 +1216,6 @@ def export_csv(db: DbDep):
             f"{row.actual:.2f}",
             f"{row.committed:.2f}",
             f"{row.total:.2f}",
-        ])
-    if unalloc and unalloc[2]:
-        writer.writerow([
-            "UNALLOCATED",
-            "Unallocated",
-            f"{(unalloc[0] or 0):.2f}",
-            f"{(unalloc[1] or 0):.2f}",
-            f"{(unalloc[2] or 0):.2f}",
         ])
 
     buf.seek(0)
