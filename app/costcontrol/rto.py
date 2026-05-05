@@ -44,24 +44,29 @@ def can_delete(status: str) -> bool:
     return status in (STATUS_DRAFT, STATUS_SUBMITTED, STATUS_CANCELLED)
 
 
-_RTO_NUM_RE = re.compile(r"^\d+\.RTO\.(\d{3})$")
+_RTO_SUFFIX_RE = re.compile(r"\.RTO\.(\d+)$")
 
 
-def next_rto_number(db: Session, project_number: str) -> str:
-    """Generate the next RTO number for a project: {proj}.RTO.NNN where NNN
-    is the highest existing 3-digit suffix + 1, zero-padded. Defaults to 001
-    when no RTOs exist yet for the project."""
+def next_rto_number(db: Session, package_number: str) -> str:
+    """Generate the next RTO number for a *package*: {package}.RTO.NNN where
+    NNN is the highest existing trailing-digit suffix + 1, zero-padded.
+
+    The new (post-Slice-B) numbering scheme keys RTOs to packages, so each
+    external package owns its own RTO sequence. v1 expects exactly one RTO
+    per package, but the NNN suffix leaves room for re-tenders / replacement
+    RTOs without a schema change.
+    """
     rows = db.execute(
-        select(RTO.rto_number).where(RTO.project_number == project_number)
+        select(RTO.rto_number).where(RTO.package_number == package_number)
     ).all()
     max_n = 0
     for (rto_number,) in rows:
-        m = _RTO_NUM_RE.match(rto_number)
+        m = _RTO_SUFFIX_RE.search(rto_number)
         if m:
             n = int(m.group(1))
             if n > max_n:
                 max_n = n
-    return f"{project_number}.RTO.{max_n + 1:03d}"
+    return f"{package_number}.RTO.{max_n + 1:03d}"
 
 
 # ---------------------------------------------------------------------------

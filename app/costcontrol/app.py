@@ -872,12 +872,13 @@ def project_purchase_orders_page(
                 COUNT(*)                 AS line_count,
                 r.rto_number             AS linked_rto_number,
                 r.id                     AS linked_rto_id,
-                r.total_amount           AS rto_total
+                r.total_amount           AS rto_total,
+                r.package_number         AS linked_rto_package
             FROM po_lines pl
             LEFT JOIN po_rto_links l ON l.po_number = pl.po_number
             LEFT JOIN rto r           ON r.id       = l.rto_id
             WHERE pl.project_number = :proj AND pl.voided = 0
-            GROUP BY pl.po_number, r.rto_number, r.id, r.total_amount, l.po_number
+            GROUP BY pl.po_number, r.rto_number, r.id, r.total_amount, r.package_number, l.po_number
             {having_clause}
             ORDER BY first_date DESC, pl.po_number
         """),
@@ -1046,17 +1047,26 @@ def _get_project_or_404(db: Session, project_number: str) -> Project:
     return project
 
 
-def _get_rto_or_404(db: Session, project_number: str, rto_number: str) -> RTO:
-    rto = db.query(RTO).filter_by(rto_number=rto_number, project_number=project_number).first()
-    if rto is None:
-        raise HTTPException(status_code=404, detail="RTO not found")
-    return rto
+def _rto_for_package_redirect(project_number: str, package_number: str):
+    return RedirectResponse(
+        f"/project/{project_number}/packages/{package_number}/rto",
+        status_code=303,
+    )
 
 
-def _rto_redirect(project_number: str, rto_number: str | None = None):
-    if rto_number:
-        return RedirectResponse(f"/project/{project_number}/rtos/{rto_number}", status_code=303)
-    return RedirectResponse(f"/project/{project_number}/rtos", status_code=303)
+def _get_rto_for_package(db: Session, package_number: str) -> RTO | None:
+    """Return the most recent RTO for a package, or None.
+
+    Slice B's design is one-RTO-per-package, but the data model leaves room
+    for replacements (.RTO.002, .003 etc. on the same package), so always
+    pick the most recent by id.
+    """
+    return (
+        db.query(RTO)
+        .filter_by(package_number=package_number)
+        .order_by(RTO.id.desc())
+        .first()
+    )
 
 
 def _rto_linked_pos(db: Session, rto_id: int) -> list[dict]:
@@ -1083,63 +1093,71 @@ def _rto_linked_pos(db: Session, rto_id: int) -> list[dict]:
 
 
 @app.get("/project/{project_number}/rtos")
-def project_rtos_page(project_number: str, request: Request, db: DbDep):
+def project_rtos_legacy_redirect(project_number: str):
+    """The project-level RTOs tab is gone (Slice B). Bookmarks land on the
+    Packages list, where each external package now exposes its own RTO."""
+    return RedirectResponse(f"/project/{project_number}/packages", status_code=301)
+
+
+@app.get("/project/{project_number}/packages/{package_number}/rto")
+def package_rto_view(project_number: str, package_number: str, request: Request, db: DbDep):
+    """Procurement landing for a package: shows the RTO if one exists, or a
+    'Create RTO' empty-state otherwise. Available for any package; the
+    package_detail tab gates visibility on `is_external`."""
     project = _get_project_or_404(db, project_number)
+    pkg = _get_package(db, project_number, package_number)
+    rto = _get_rto_for_package(db, package_number)
 
-    # RTOs with their linked-PO total (NULL when none) for variance display.
-    rows = db.execute(
-        text("""
-            SELECT
-                r.rto_number, r.vendor_name, r.description, r.total_amount,
-                r.status, r.request_date, r.package_number,
-                l.po_number AS linked_po,
-                (SELECT COALESCE(SUM(p.amount), 0)
-                 FROM po_lines p
-                 WHERE p.po_number = l.po_number AND p.voided = 0) AS linked_po_total
-            FROM rto r
-            LEFT JOIN po_rto_links l ON l.rto_id = r.id
-            WHERE r.project_number = :proj
-            ORDER BY r.rto_number DESC
-        """),
-        {"proj": project_number},
-    ).fetchall()
+    if rto is None:
+        return templates.TemplateResponse("rto_detail.html", {
+            "request": request,
+            "project": project,
+            "package": pkg,
+            "rto": None,
+            "linked_pos": [],
+            "linked_po_total": 0.0,
+            "variance": None,
+            "valid_targets": [],
+            "can_delete": False,
+        })
 
-    po_total, po_unassigned, _ = _po_counts(db, project_number)
-    return templates.TemplateResponse("project_rtos.html", {
+    linked_pos = _rto_linked_pos(db, rto.id)
+    linked_po_total = sum(p["order_amount"] for p in linked_pos)
+    variance = linked_po_total - float(rto.total_amount or 0) if linked_pos else None
+    valid_targets = sorted(rto_helpers.ALLOWED_TRANSITIONS.get(rto.status, set()))
+    return templates.TemplateResponse("rto_detail.html", {
         "request": request,
         "project": project,
-        "rtos": rows,
-        "po_total_count": po_total,
-        "po_unassigned_count": po_unassigned,
-        "active_tab": "rtos",
+        "package": pkg,
+        "rto": rto,
+        "linked_pos": linked_pos,
+        "linked_po_total": linked_po_total,
+        "variance": variance,
+        "valid_targets": valid_targets,
+        "can_delete": rto_helpers.can_delete(rto.status),
     })
 
 
-@app.get("/project/{project_number}/rtos/new")
-def rto_new_form(project_number: str, request: Request, db: DbDep):
+@app.get("/project/{project_number}/packages/{package_number}/rto/new")
+def package_rto_new_form(project_number: str, package_number: str, request: Request, db: DbDep):
     project = _get_project_or_404(db, project_number)
-    packages = (
-        db.query(Package)
-        .filter_by(project_number=project_number)
-        .order_by(Package.display_order)
-        .all()
-    )
-    next_number = rto_helpers.next_rto_number(db, project_number)
+    pkg = _get_package(db, project_number, package_number)
+    next_number = rto_helpers.next_rto_number(db, package_number)
     return templates.TemplateResponse("rto_form.html", {
         "request": request,
         "project": project,
-        "packages": packages,
+        "package": pkg,
         "rto": None,
         "next_number": next_number,
         "mode": "create",
     })
 
 
-@app.post("/project/{project_number}/rtos/new")
-def rto_create(
+@app.post("/project/{project_number}/packages/{package_number}/rto/new")
+def package_rto_create(
     project_number: str,
+    package_number: str,
     db: DbDep,
-    package_number: str = Form(""),
     vendor_name: str = Form(""),
     description: str = Form(""),
     total_amount: str = Form("0"),
@@ -1148,7 +1166,8 @@ def rto_create(
     notes: str = Form(""),
 ):
     _get_project_or_404(db, project_number)
-    rto_number = rto_helpers.next_rto_number(db, project_number)
+    _get_package(db, project_number, package_number)
+    rto_number = rto_helpers.next_rto_number(db, package_number)
     now = datetime.now()
     try:
         amount = float(total_amount) if total_amount else 0.0
@@ -1161,7 +1180,7 @@ def rto_create(
     rto = RTO(
         rto_number=rto_number,
         project_number=project_number,
-        package_number=package_number.strip() or None,
+        package_number=package_number,
         vendor_name=vendor_name.strip(),
         description=description.strip(),
         total_amount=amount,
@@ -1174,62 +1193,31 @@ def rto_create(
     )
     db.add(rto)
     db.commit()
-    return _rto_redirect(project_number, rto_number)
+    return _rto_for_package_redirect(project_number, package_number)
 
 
-@app.get("/project/{project_number}/rtos/{rto_number}")
-def rto_detail(project_number: str, rto_number: str, request: Request, db: DbDep):
+@app.get("/project/{project_number}/packages/{package_number}/rto/edit-form")
+def package_rto_edit_form(project_number: str, package_number: str, request: Request, db: DbDep):
     project = _get_project_or_404(db, project_number)
-    rto = _get_rto_or_404(db, project_number, rto_number)
-    packages = (
-        db.query(Package)
-        .filter_by(project_number=project_number)
-        .order_by(Package.display_order)
-        .all()
-    )
-    linked_pos = _rto_linked_pos(db, rto.id)
-    linked_po_total = sum(p["order_amount"] for p in linked_pos)
-    variance = linked_po_total - float(rto.total_amount or 0) if linked_pos else None
-    valid_targets = sorted(rto_helpers.ALLOWED_TRANSITIONS.get(rto.status, set()))
-    return templates.TemplateResponse("rto_detail.html", {
-        "request": request,
-        "project": project,
-        "rto": rto,
-        "packages": packages,
-        "linked_pos": linked_pos,
-        "linked_po_total": linked_po_total,
-        "variance": variance,
-        "valid_targets": valid_targets,
-        "can_delete": rto_helpers.can_delete(rto.status),
-    })
-
-
-@app.get("/project/{project_number}/rtos/{rto_number}/edit-form")
-def rto_edit_form(project_number: str, rto_number: str, request: Request, db: DbDep):
-    project = _get_project_or_404(db, project_number)
-    rto = _get_rto_or_404(db, project_number, rto_number)
-    packages = (
-        db.query(Package)
-        .filter_by(project_number=project_number)
-        .order_by(Package.display_order)
-        .all()
-    )
+    pkg = _get_package(db, project_number, package_number)
+    rto = _get_rto_for_package(db, package_number)
+    if rto is None:
+        raise HTTPException(status_code=404, detail="No RTO for this package")
     return templates.TemplateResponse("rto_form.html", {
         "request": request,
         "project": project,
-        "packages": packages,
+        "package": pkg,
         "rto": rto,
         "next_number": rto.rto_number,
         "mode": "edit",
     })
 
 
-@app.post("/project/{project_number}/rtos/{rto_number}/edit")
-def rto_edit(
+@app.post("/project/{project_number}/packages/{package_number}/rto/edit")
+def package_rto_edit(
     project_number: str,
-    rto_number: str,
+    package_number: str,
     db: DbDep,
-    package_number: str = Form(""),
     vendor_name: str = Form(""),
     description: str = Form(""),
     total_amount: str = Form("0"),
@@ -1237,7 +1225,9 @@ def rto_edit(
     originator: str = Form(""),
     notes: str = Form(""),
 ):
-    rto = _get_rto_or_404(db, project_number, rto_number)
+    rto = _get_rto_for_package(db, package_number)
+    if rto is None or rto.project_number != project_number:
+        raise HTTPException(status_code=404, detail="No RTO for this package")
     try:
         amount = float(total_amount) if total_amount else 0.0
     except ValueError:
@@ -1246,7 +1236,6 @@ def rto_edit(
         req_date = datetime.strptime(request_date, "%Y-%m-%d").date() if request_date else rto.request_date
     except ValueError:
         req_date = rto.request_date
-    rto.package_number = package_number.strip() or None
     rto.vendor_name = vendor_name.strip()
     rto.description = description.strip()
     rto.total_amount = amount
@@ -1255,17 +1244,19 @@ def rto_edit(
     rto.notes = notes.strip()
     rto.updated_at = datetime.now()
     db.commit()
-    return _rto_redirect(project_number, rto_number)
+    return _rto_for_package_redirect(project_number, package_number)
 
 
-@app.post("/project/{project_number}/rtos/{rto_number}/status")
-def rto_status_change(
+@app.post("/project/{project_number}/packages/{package_number}/rto/status")
+def package_rto_status_change(
     project_number: str,
-    rto_number: str,
+    package_number: str,
     db: DbDep,
     target_status: str = Form(...),
 ):
-    rto = _get_rto_or_404(db, project_number, rto_number)
+    rto = _get_rto_for_package(db, package_number)
+    if rto is None or rto.project_number != project_number:
+        raise HTTPException(status_code=404, detail="No RTO for this package")
     if not rto_helpers.can_transition(rto.status, target_status):
         raise HTTPException(
             status_code=400,
@@ -1274,12 +1265,14 @@ def rto_status_change(
     rto.status = target_status
     rto.updated_at = datetime.now()
     db.commit()
-    return _rto_redirect(project_number, rto_number)
+    return _rto_for_package_redirect(project_number, package_number)
 
 
-@app.post("/project/{project_number}/rtos/{rto_number}/delete")
-def rto_delete(project_number: str, rto_number: str, db: DbDep):
-    rto = _get_rto_or_404(db, project_number, rto_number)
+@app.post("/project/{project_number}/packages/{package_number}/rto/delete")
+def package_rto_delete(project_number: str, package_number: str, db: DbDep):
+    rto = _get_rto_for_package(db, package_number)
+    if rto is None or rto.project_number != project_number:
+        raise HTTPException(status_code=404, detail="No RTO for this package")
     if not rto_helpers.can_delete(rto.status):
         raise HTTPException(
             status_code=400,
@@ -1287,7 +1280,7 @@ def rto_delete(project_number: str, rto_number: str, db: DbDep):
         )
     db.delete(rto)
     db.commit()
-    return _rto_redirect(project_number)
+    return _rto_for_package_redirect(project_number, package_number)
 
 
 def _get_package(db: Session, project_number: str, package_number: str) -> Package:

@@ -401,7 +401,10 @@ class RTO(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     rto_number: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
     project_number: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
-    package_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Slice B — every RTO belongs to exactly one package. Required at the
+    # model layer; SQLite column itself stays nullable for back-compat with
+    # existing schemas (no rows had NULL in practice).
+    package_number: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     vendor_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     total_amount: Mapped[float] = mapped_column(Numeric(18, 2, asdecimal=False), nullable=False, default=0)

@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
-{% block title %}{{ rto.rto_number }} — Cost Control{% endblock %}
+{% set pkg_base = "/project/" ~ project.project_number ~ "/packages/" ~ package.package_number %}
+{% block title %}{% if rto %}{{ rto.rto_number }}{% else %}{{ package.package_number }} — Procurement{% endif %} — Cost Control{% endblock %}
 
 {% block actions_items %}
-<a href="/project/{{ project.project_number }}/rtos/{{ rto.rto_number }}/edit-form">
+{% if rto %}
+<a href="{{ pkg_base }}/rto/edit-form">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10z"/></svg>
   Edit RTO
 </a>
@@ -12,6 +14,7 @@
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
   Delete RTO
 </a>
+{% endif %}
 {% endif %}
 {% endblock %}
 
@@ -23,20 +26,32 @@
       <span>&rsaquo;</span>
       <a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a>
       <span>&rsaquo;</span>
-      <a href="/project/{{ project.project_number }}/rtos">RTOs</a>
+      <a href="/project/{{ project.project_number }}/packages">Packages</a>
     </div>
-    <div class="subheader-title">
-      {{ rto.rto_number }}
-      <span class="chip">{{ rto.status }}</span>
+    <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
+    <div class="tab-bar">
+      <a href="{{ pkg_base }}/cost">Cost Buildup</a>
+      {% if package.is_external %}
+      <a href="{{ pkg_base }}/rto" class="active">Procurement</a>
+      {% endif %}
     </div>
-    <div class="subheader-subtitle">{{ rto.description }}</div>
   </div>
 </div>
 {% endblock %}
 
 {% block content %}
 
+{% if rto %}
+
 <div class="summary-cards">
+  <div class="summary-card sc-main">
+    <div class="sc-label">RTO No.</div>
+    <div class="sc-value" style="font-family:monospace;">{{ rto.rto_number }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Status</div>
+    <div class="sc-value"><span class="chip">{{ rto.status }}</span></div>
+  </div>
   <div class="summary-card sc-main">
     <div class="sc-label">RTO Total (excl. VAT)</div>
     <div class="sc-value">{{ rto.total_amount | zar }}</div>
@@ -74,7 +89,6 @@
         <tbody>
           <tr><td style="width:160px;color:#667;font-weight:600;font-size:12px;">Vendor</td><td>{{ rto.vendor_name or '—' }}</td></tr>
           <tr><td style="color:#667;font-weight:600;font-size:12px;">Description</td><td>{{ rto.description or '—' }}</td></tr>
-          <tr><td style="color:#667;font-weight:600;font-size:12px;">Package</td><td>{{ rto.package_number or '—' }}</td></tr>
           <tr><td style="color:#667;font-weight:600;font-size:12px;">Request date</td><td>{{ rto.request_date or '—' }}</td></tr>
           <tr><td style="color:#667;font-weight:600;font-size:12px;">Originator</td><td>{{ rto.originator or '—' }}</td></tr>
           <tr><td style="color:#667;font-weight:600;font-size:12px;">Notes</td><td style="white-space:pre-wrap;">{{ rto.notes or '—' }}</td></tr>
@@ -114,7 +128,7 @@
       {% else %}
       <div class="empty-state" style="padding:20px 12px;">
         <strong>No POs linked yet</strong>
-        Once a PO is raised in NetSuite for this RTO, link it from the Purchase Orders tab.
+        Once a PO is raised in NetSuite for this RTO, link it from the project's Purchase Orders tab.
       </div>
       {% endif %}
     </div>
@@ -132,7 +146,7 @@
     </div>
     <div style="display:flex;flex-direction:column;gap:6px;">
       {% for target in valid_targets %}
-      <form method="post" action="/project/{{ project.project_number }}/rtos/{{ rto.rto_number }}/status" style="margin:0;">
+      <form method="post" action="{{ pkg_base }}/rto/status" style="margin:0;">
         <input type="hidden" name="target_status" value="{{ target }}">
         <button type="submit" class="btn btn-sm{% if target == 'Cancelled' %} btn-ghost{% endif %}" style="width:100%;text-align:left;">
           {{ target }}
@@ -150,13 +164,32 @@
 </div>
 
 {# Hidden delete form, triggered by Actions menu link #}
-<form id="deleteForm" method="post"
-      action="/project/{{ project.project_number }}/rtos/{{ rto.rto_number }}/delete"
-      style="display:none;"></form>
+<form id="deleteForm" method="post" action="{{ pkg_base }}/rto/delete" style="display:none;"></form>
+
+{% else %}
+
+{# ── No RTO yet — empty-state CTA ──────────────────────────────────── #}
+<div class="card">
+  <div class="empty-state">
+    {% if package.is_external %}
+    <strong>No RTO raised for this package yet</strong>
+    Create one once the package is awarded — this captures the request to issue the purchase order.
+    <div style="margin-top:18px;">
+      <a class="btn" href="{{ pkg_base }}/rto/new">+ Create RTO</a>
+    </div>
+    {% else %}
+    <strong>This package is internal</strong>
+    Internal packages (in-house design / EPCM time) don't go through the procurement workflow — no RTO or PO is raised.
+    {% endif %}
+  </div>
+</div>
+
+{% endif %}
 
 {% endblock %}
 
 {% block scripts %}
+{% if rto %}
 <script>
 function confirmDelete(e) {
   e.preventDefault();
@@ -165,4 +198,5 @@ function confirmDelete(e) {
   }
 }
 </script>
+{% endif %}
 {% endblock %}

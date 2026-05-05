@@ -21,7 +21,6 @@
     <div class="tab-bar">
       <a href="/project/{{ project.project_number }}">Cost Work Sheet</a>
       <a href="/project/{{ project.project_number }}/packages">Packages</a>
-      <a href="/project/{{ project.project_number }}/rtos">RTOs</a>
       <a href="/project/{{ project.project_number }}/purchase-orders" class="active">Purchase Orders</a>
     </div>
   </div>
@@ -98,7 +97,7 @@
         <td><span class="chip">{{ po.status or '—' }}</span></td>
         <td>
           {% if po.linked_rto_number %}
-            <a href="/project/{{ project.project_number }}/rtos/{{ po.linked_rto_number }}"
+            <a href="/project/{{ project.project_number }}/packages/{{ po.linked_rto_package }}/rto"
                style="font-family:monospace;font-size:12px;">{{ po.linked_rto_number }}</a>
             <form method="post"
                   action="/project/{{ project.project_number }}/purchase-orders/{{ po.po_number }}/unlink"
