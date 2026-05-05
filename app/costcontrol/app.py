@@ -115,6 +115,17 @@ def on_startup():
             "ALTER TABLE packages ADD COLUMN awarded_amount NUMERIC(18,2)",
             "ALTER TABLE packages ADD COLUMN awarded_date DATE",
             "ALTER TABLE packages ADD COLUMN procurement_stage TEXT NOT NULL DEFAULT 'Pre-Tender'",
+            # Slice E — Original vs Variation flag on PO ↔ RTO links.
+            "ALTER TABLE po_rto_links ADD COLUMN is_original BOOLEAN NOT NULL DEFAULT 0",
+            # One-time backfill: for each rto_id, the chronologically-earliest
+            # link (lowest id) is the original. Re-runs are no-ops because the
+            # WHERE clause only flips rows still at the column default.
+            (
+                "UPDATE po_rto_links SET is_original = 1 "
+                "WHERE id IN ("
+                " SELECT MIN(id) FROM po_rto_links GROUP BY rto_id"
+                ") AND is_original = 0"
+            ),
             # Backfill: set is_external for existing packages whose type is
             # external by default. Re-runs are no-ops because the WHERE clause
             # only flips rows that are still at the column default of 0.
@@ -878,12 +889,13 @@ def project_purchase_orders_page(
                 r.rto_number             AS linked_rto_number,
                 r.id                     AS linked_rto_id,
                 r.total_amount           AS rto_total,
-                r.package_number         AS linked_rto_package
+                r.package_number         AS linked_rto_package,
+                l.is_original            AS linked_is_original
             FROM po_lines pl
             LEFT JOIN po_rto_links l ON l.po_number = pl.po_number
             LEFT JOIN rto r           ON r.id       = l.rto_id
             WHERE pl.project_number = :proj AND pl.voided = 0
-            GROUP BY pl.po_number, r.rto_number, r.id, r.total_amount, r.package_number, l.po_number
+            GROUP BY pl.po_number, r.rto_number, r.id, r.total_amount, r.package_number, l.po_number, l.is_original
             {having_clause}
             ORDER BY first_date DESC, pl.po_number
         """),
@@ -1004,6 +1016,9 @@ def po_link_create(
             status_code=400,
             detail=f"PO already linked to {existing_rto.rto_number if existing_rto else existing.rto_id}",
         )
+    # Slice E: first PO to link to this RTO is the original; later ones are
+    # variations.
+    is_first = db.query(PORtoLink).filter_by(rto_id=rto_id).count() == 0
     now = datetime.now()
     db.add(PORtoLink(
         po_number=po_number,
@@ -1011,6 +1026,7 @@ def po_link_create(
         source="manual",
         linked_at=now,
         linked_by="",
+        is_original=is_first,
     ))
     # Auto-flip Approved -> Issued for PO when first PO links.
     if rto.status == rto_helpers.STATUS_APPROVED:
@@ -1076,11 +1092,13 @@ def _get_rto_for_package(db: Session, package_number: str) -> RTO | None:
 
 def _rto_linked_pos(db: Session, rto_id: int) -> list[dict]:
     """Return per-PO summary rows for POs currently linked to this RTO.
-    Empty list if none linked yet."""
+    Empty list if none linked yet. is_original flag distinguishes the
+    original contract PO from variations (Slice E)."""
     rows = db.execute(
         text("""
             SELECT
                 l.po_number,
+                l.is_original,
                 MIN(p.date)              AS first_date,
                 MAX(p.vendor)            AS vendor,
                 COALESCE(SUM(p.amount),         0) AS order_amount,
@@ -1089,8 +1107,8 @@ def _rto_linked_pos(db: Session, rto_id: int) -> list[dict]:
             FROM po_rto_links l
             LEFT JOIN po_lines p ON p.po_number = l.po_number AND p.voided = 0
             WHERE l.rto_id = :rto_id
-            GROUP BY l.po_number
-            ORDER BY first_date DESC
+            GROUP BY l.po_number, l.is_original
+            ORDER BY l.is_original DESC, first_date
         """),
         {"rto_id": rto_id},
     ).fetchall()
@@ -1826,10 +1844,9 @@ def package_bidder_status(
     db: DbDep,
     target_status: str = Form(...),
 ):
-    """Flip a bidder's status to one of the adjudication-stage values.
-    Slice D allows Submitted <-> Shortlisted <-> Disqualified moves; the
-    Awarded transition (and consequent Tender → Awarded auto-flip) is
-    Slice E's territory and intentionally not handled here yet."""
+    """Flip a bidder's status. Setting it to 'Awarded' triggers the package
+    award flow (see _award_package_to_bidder); other transitions just update
+    the bidder row."""
     pkg = _get_package(db, project_number, package_number)
     tender = _get_tender_for_package(db, pkg.id)
     bidder = db.get(Bidder, bidder_id)
@@ -1837,10 +1854,59 @@ def package_bidder_status(
         raise HTTPException(status_code=404, detail="Bidder not found")
     if target_status not in tender_helpers.BIDDER_STATUSES:
         raise HTTPException(status_code=400, detail=f"Unknown bidder status: {target_status}")
-    bidder.status = target_status
-    tender.updated_at = datetime.now()
-    db.commit()
+    if target_status == "Awarded":
+        _award_package_to_bidder(db, pkg, tender, bidder)
+    else:
+        bidder.status = target_status
+        tender.updated_at = datetime.now()
+        db.commit()
     return _adjudication_redirect(project_number, package_number)
+
+
+def _award_package_to_bidder(db: Session, pkg: Package, tender: Tender, bidder: Bidder) -> None:
+    """Apply the side-effects of awarding a package to a specific bidder:
+    flip the awarded bidder + demote any other Awarded bidder, set Tender
+    to Awarded, and copy bidder details onto the Package's awarded_*
+    fields. is_contracted=True freezes the pre-award amounts on the cost
+    nodes; procurement_stage='Awarded' surfaces on the Packages list."""
+    # Demote any previously-awarded bidder on this tender (re-award path).
+    for b in tender.bidders:
+        if b.id != bidder.id and b.status == "Awarded":
+            b.status = "Shortlisted"
+    bidder.status = "Awarded"
+    tender.status = tender_helpers.STATUS_AWARDED
+    now = datetime.now()
+    tender.updated_at = now
+    pkg.awarded_vendor_name = bidder.vendor_name
+    pkg.awarded_amount = float(bidder.bid_amount or 0)
+    pkg.awarded_date = now.date()
+    pkg.is_contracted = True
+    pkg.procurement_stage = "Awarded"
+    db.commit()
+
+
+@app.get("/project/{project_number}/packages/{package_number}/award")
+def package_award_view(project_number: str, package_number: str, request: Request, db: DbDep):
+    """Read-only summary of the award outcome. Lives between Adjudication
+    and Orders in the Procurement sub-nav so users have a clear stop on
+    the workflow timeline. If no award is in place yet the page shows a
+    'no award yet' state with a pointer back to Adjudication."""
+    project = _get_project_or_404(db, project_number)
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    awarded_bidder = None
+    if tender is not None:
+        awarded_bidder = next(
+            (b for b in tender.bidders if b.status == "Awarded"),
+            None,
+        )
+    return templates.TemplateResponse("package_award.html", {
+        "request": request,
+        "project": project,
+        "package": pkg,
+        "tender": tender,
+        "awarded_bidder": awarded_bidder,
+    })
 
 
 def _get_package(db: Session, project_number: str, package_number: str) -> Package:

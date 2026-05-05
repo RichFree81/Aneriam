@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% set pkg_base = "/project/" ~ project.project_number ~ "/packages/" ~ package.package_number %}
+{% block title %}{{ package.package_number }} — Award — Cost Control{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb">
+      <a href="/">Portfolio</a>
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a>
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}/packages">Packages</a>
+    </div>
+    <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
+    <div class="tab-bar">
+      <a href="{{ pkg_base }}/cost">Cost Buildup</a>
+      <a href="{{ pkg_base }}/tender" class="active">Procurement</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+{# ── Procurement sub-nav ─────────────────────────────────────────── #}
+<div class="tab-bar" style="margin-bottom:14px;">
+  <a href="{{ pkg_base }}/tender">Tender</a>
+  <a href="{{ pkg_base }}/adjudication">Adjudication</a>
+  <a href="{{ pkg_base }}/award" class="active">Award</a>
+  <a href="{{ pkg_base }}/rto">Orders</a>
+</div>
+
+{% if awarded_bidder %}
+
+<div class="summary-cards">
+  <div class="summary-card sc-main">
+    <div class="sc-label">Awarded Vendor</div>
+    <div class="sc-value">{{ package.awarded_vendor_name or '—' }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Awarded Amount</div>
+    <div class="sc-value">{{ (package.awarded_amount or 0) | zar }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Award Date</div>
+    <div class="sc-value">{{ package.awarded_date or '—' }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Tender</div>
+    <div class="sc-value" style="font-family:monospace;">{{ tender.tender_number }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Procurement Stage</div>
+    <div class="sc-value"><span class="chip">{{ package.procurement_stage }}</span></div>
+  </div>
+</div>
+
+<div class="card" style="max-width:780px;">
+  <h2>Award details</h2>
+  <table style="width:100%;">
+    <tbody>
+      <tr><td style="width:200px;color:#667;font-weight:600;font-size:12px;">Awarded bidder</td><td>{{ awarded_bidder.vendor_name }}</td></tr>
+      <tr><td style="color:#667;font-weight:600;font-size:12px;">Bid amount</td><td>{% if awarded_bidder.bid_amount is not none %}{{ awarded_bidder.bid_amount | zar }}{% else %}—{% endif %}</td></tr>
+      <tr><td style="color:#667;font-weight:600;font-size:12px;">Bid received</td><td>{{ awarded_bidder.bid_received_date or '—' }}</td></tr>
+      <tr><td style="color:#667;font-weight:600;font-size:12px;">Bidder notes</td><td style="white-space:pre-wrap;">{{ awarded_bidder.notes or '—' }}</td></tr>
+      <tr><td style="color:#667;font-weight:600;font-size:12px;">Adjudication notes</td><td style="white-space:pre-wrap;">{{ tender.adjudication_notes or '—' }}</td></tr>
+      <tr><td style="color:#667;font-weight:600;font-size:12px;">is_contracted</td><td>{% if package.is_contracted %}Yes — pre-award amounts frozen{% else %}No{% endif %}</td></tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top:18px;padding-top:14px;border-top:1px solid #edf0f4;font-size:12px;color:#667;">
+    To re-award (e.g. recovering from a wrong choice), go back to Adjudication and mark a different bidder as Awarded — this page will update.
+  </div>
+</div>
+
+<div class="card" style="max-width:780px;">
+  <h2>Next step: Orders</h2>
+  <p style="font-size:13px;color:#445;">
+    The package is awarded. Move to the <strong>Orders</strong> sub-tab to raise the Request To Order (RTO) for {{ package.awarded_vendor_name or 'the awarded vendor' }} at {{ (package.awarded_amount or 0) | zar }}, then link the NetSuite PO when Procurement raises it.
+  </p>
+  <div style="margin-top:14px;">
+    <a class="btn" href="{{ pkg_base }}/rto">Go to Orders</a>
+  </div>
+</div>
+
+{% else %}
+
+<div class="card">
+  <div class="empty-state">
+    <strong>No award yet</strong>
+    {% if tender %}
+    The tender {{ tender.tender_number }} is currently in <strong>{{ tender.status }}</strong>. Once you've finished scoring and choose a winner, mark that bidder as <strong>Awarded</strong> on the Adjudication tab — the package's awarded fields and tender status update automatically.
+    {% else %}
+    No tender exists for this package yet. Issue one from the Tender sub-tab to start the procurement workflow.
+    {% endif %}
+    <div style="margin-top:18px;display:flex;gap:8px;justify-content:center;">
+      {% if tender %}
+      <a class="btn" href="{{ pkg_base }}/adjudication">Go to Adjudication</a>
+      {% else %}
+      <a class="btn" href="{{ pkg_base }}/tender">Go to Tender</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endif %}
+
+{% endblock %}

@@ -99,6 +99,11 @@
           {% if po.linked_rto_number %}
             <a href="/project/{{ project.project_number }}/packages/{{ po.linked_rto_package }}/rto"
                style="font-family:monospace;font-size:12px;">{{ po.linked_rto_number }}</a>
+            {% if po.linked_is_original %}
+            <span class="chip" style="background:#d1e7dd;color:#0a5233;font-size:10px;margin-left:4px;">Original</span>
+            {% else %}
+            <span class="chip" style="background:#fff3cd;color:#856404;font-size:10px;margin-left:4px;">Variation</span>
+            {% endif %}
             <form method="post"
                   action="/project/{{ project.project_number }}/purchase-orders/{{ po.po_number }}/unlink"
                   style="display:inline;margin-left:6px;"

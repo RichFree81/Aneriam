@@ -28,6 +28,7 @@
 <div class="tab-bar" style="margin-bottom:14px;">
   <a href="{{ pkg_base }}/tender">Tender</a>
   <a href="{{ pkg_base }}/adjudication" class="active">Adjudication</a>
+  <a href="{{ pkg_base }}/award">Award</a>
   <a href="{{ pkg_base }}/rto">Orders</a>
 </div>
 
@@ -112,13 +113,21 @@
               <td>
                 <form method="post" action="{{ pkg_base }}/adjudication/bidders/{{ b.id }}/status"
                       style="display:flex;gap:2px;align-items:center;">
-                  <select name="target_status" onchange="this.form.submit()"
+                  <select name="target_status" onchange="if(this.value=='Awarded'){return confirm('Award this package to ' + {{ b.vendor_name | tojson }} + '? This locks the contract amount and flips the tender to Awarded.') && this.form.submit();} this.form.submit();"
                           style="padding:2px 4px;border:1px solid #ccc;border-radius:3px;font-size:11px;">
                     {% for s in ('Pending','Submitted','Withdrawn','Disqualified','Shortlisted','Awarded') %}
                     <option value="{{ s }}" {% if b.status == s %}selected{% endif %}>{{ s }}</option>
                     {% endfor %}
                   </select>
                 </form>
+                {% if b.status != 'Awarded' and b.status not in ('Withdrawn', 'Disqualified') %}
+                <form method="post" action="{{ pkg_base }}/adjudication/bidders/{{ b.id }}/status"
+                      style="margin-top:4px;"
+                      onsubmit="return confirm('Award this package to {{ b.vendor_name }}? This locks the contract.');">
+                  <input type="hidden" name="target_status" value="Awarded">
+                  <button type="submit" class="btn btn-sm" style="width:100%;padding:2px 6px;font-size:10px;background:#1a7a3c;">Award</button>
+                </form>
+                {% endif %}
               </td>
             </tr>
             {% endfor %}

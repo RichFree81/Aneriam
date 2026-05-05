@@ -541,3 +541,7 @@ class PORtoLink(Base):
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
     linked_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     linked_by: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Slice E — first PO linked to an RTO is the "original" contract; later
+    # links are variations. Auto-flagged at link-time based on chronology
+    # (no other links yet → original); manually overridable.
+    is_original: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
