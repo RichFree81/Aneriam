@@ -22,11 +22,7 @@
       <a href="/project/{{ project.project_number }}">Cost Work Sheet</a>
       <a href="/project/{{ project.project_number }}/packages">Packages</a>
       <a href="/project/{{ project.project_number }}/rtos">RTOs</a>
-      <a href="/project/{{ project.project_number }}/purchase-orders" class="active">Purchase Orders
-        <span class="pkg-count">
-          ({{ po_total_count }}{% if po_unassigned_count %} — {{ po_unassigned_count }} unassigned{% endif %})
-        </span>
-      </a>
+      <a href="/project/{{ project.project_number }}/purchase-orders" class="active">Purchase Orders</a>
     </div>
   </div>
 </div>

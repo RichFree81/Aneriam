@@ -24,17 +24,9 @@
     <div class="subheader-title">{{ project.project_number }}: {{ proj_name }}</div>
     <div class="tab-bar">
       <a href="/project/{{ project.project_number }}">Cost Work Sheet</a>
-      <a href="/project/{{ project.project_number }}/packages" class="active">Packages
-        <span class="pkg-count">({{ packages | length }})</span>
-      </a>
+      <a href="/project/{{ project.project_number }}/packages" class="active">Packages</a>
       <a href="/project/{{ project.project_number }}/rtos">RTOs</a>
-      <a href="/project/{{ project.project_number }}/purchase-orders">Purchase Orders
-        {% if po_total_count %}
-        <span class="pkg-count">
-          ({{ po_total_count }}{% if po_unassigned_count %} — {{ po_unassigned_count }} unassigned{% endif %})
-        </span>
-        {% endif %}
-      </a>
+      <a href="/project/{{ project.project_number }}/purchase-orders">Purchase Orders</a>
     </div>
   </div>
 </div>
