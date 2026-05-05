@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% block title %}{{ project.project_number }} — {% if mode == 'create' %}New RTO{% else %}{{ rto.rto_number }} (edit){% endif %} — Cost Control{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb">
+      <a href="/">Portfolio</a>
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a>
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}/rtos">RTOs</a>
+      {% if mode == 'edit' %}
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}/rtos/{{ rto.rto_number }}">{{ rto.rto_number }}</a>
+      {% endif %}
+    </div>
+    <div class="subheader-title">
+      {% if mode == 'create' %}New RTO — {{ next_number }}{% else %}Edit {{ rto.rto_number }}{% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:780px;">
+  <form method="post"
+        action="{% if mode == 'create' %}/project/{{ project.project_number }}/rtos/new{% else %}/project/{{ project.project_number }}/rtos/{{ rto.rto_number }}/edit{% endif %}"
+        style="display:flex;flex-direction:column;gap:14px;">
+
+    {% if mode == 'create' %}
+    <div style="background:#f0f5fb;border-left:3px solid #1a6eb0;padding:10px 14px;font-size:12px;color:#1a4a70;">
+      RTO number <strong>{{ next_number }}</strong> will be assigned on save.
+    </div>
+    {% endif %}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;">
+        Vendor name
+        <input type="text" name="vendor_name" value="{{ rto.vendor_name if rto else '' }}" required
+               style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;">
+        Request date
+        <input type="date" name="request_date"
+               value="{{ rto.request_date if rto and rto.request_date else '' }}" required
+               style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;grid-column:1/-1;">
+        Description
+        <input type="text" name="description" value="{{ rto.description if rto else '' }}" required
+               style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;">
+        Package (optional)
+        <select name="package_number"
+                style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+          <option value="">— No package —</option>
+          {% for pkg in packages %}
+          <option value="{{ pkg.package_number }}"
+                  {% if rto and rto.package_number == pkg.package_number %}selected{% endif %}>
+            {{ pkg.package_number }} — {{ pkg.description }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;">
+        Total amount (excl. VAT)
+        <input type="number" step="0.01" name="total_amount"
+               value="{{ rto.total_amount if rto else '' }}" required
+               style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;grid-column:1/-1;">
+        Originator
+        <input type="text" name="originator" value="{{ rto.originator if rto else '' }}"
+               placeholder="(your name)"
+               style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;grid-column:1/-1;">
+        Notes
+        <textarea name="notes" rows="3"
+                  style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;font-family:inherit;resize:vertical;">{{ rto.notes if rto else '' }}</textarea>
+      </label>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;border-top:1px solid #edf0f4;padding-top:14px;">
+      <a class="btn btn-ghost"
+         href="{% if mode == 'create' %}/project/{{ project.project_number }}/rtos{% else %}/project/{{ project.project_number }}/rtos/{{ rto.rto_number }}{% endif %}">Cancel</a>
+      <button type="submit" class="btn">
+        {% if mode == 'create' %}Create RTO{% else %}Save changes{% endif %}
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% block title %}{{ project.project_number }} — RTOs — Cost Control{% endblock %}
+
+{% block actions_items %}
+<a href="/project/{{ project.project_number }}/rtos/new">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
+  New RTO
+</a>
+{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb">
+      <a href="/">Portfolio</a>
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a>
+    </div>
+    <div class="subheader-title">{{ project.project_number }}: {{ proj_name }}</div>
+    <div class="tab-bar">
+      <a href="/project/{{ project.project_number }}">Cost Work Sheet</a>
+      <a href="/project/{{ project.project_number }}/packages">Packages</a>
+      <a href="/project/{{ project.project_number }}/rtos" class="active">RTOs
+        <span class="pkg-count">({{ rtos | length }})</span>
+      </a>
+      <a href="/project/{{ project.project_number }}/purchase-orders">Purchase Orders</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  {% if rtos %}
+  <table>
+    <thead>
+      <tr>
+        <th style="width:140px;">RTO No.</th>
+        <th style="width:100px;">Date</th>
+        <th>Vendor</th>
+        <th>Description</th>
+        <th style="width:130px;">Package</th>
+        <th class="num">Total</th>
+        <th style="width:130px;">Status</th>
+        <th style="width:100px;">Linked PO</th>
+        <th class="num" style="width:120px;">Variance</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rtos %}
+      <tr>
+        <td style="font-family:monospace;font-size:12px;">
+          <a href="/project/{{ project.project_number }}/rtos/{{ r.rto_number }}">{{ r.rto_number }}</a>
+        </td>
+        <td style="font-size:11px;color:#556;">{{ r.request_date or '—' }}</td>
+        <td>{{ r.vendor_name or '—' }}</td>
+        <td>{{ r.description or '—' }}</td>
+        <td style="font-size:12px;">{{ r.package_number or '—' }}</td>
+        <td class="num">{{ r.total_amount | zar }}</td>
+        <td><span class="chip">{{ r.status }}</span></td>
+        <td style="font-family:monospace;font-size:12px;">{{ r.linked_po or '—' }}</td>
+        <td class="num">
+          {% if r.linked_po %}
+            {% set diff = (r.linked_po_total or 0) - (r.total_amount or 0) %}
+            {% if diff > 0 %}
+              <span style="color:#a83232;">+{{ diff | zar }}</span>
+            {% elif diff < 0 %}
+              <span style="color:#1a7a3c;">{{ diff | zar }}</span>
+            {% else %}
+              <span style="color:#666;">{{ diff | zar }}</span>
+            {% endif %}
+          {% else %}
+            —
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <strong>No RTOs raised yet for this project</strong>
+    Create one via the Actions menu (New RTO) when you're ready to request a purchase order.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
