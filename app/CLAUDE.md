@@ -4,11 +4,20 @@ Read `/CLAUDE.md` at the repo root first. This file covers the Cost Control MVP 
 
 ## What this app is
 
-A tactical Windows desktop tool used inside RST for project cost reconciliation. It ingests NetSuite PMO exports (`.xls` SpreadsheetML files), classifies transactions against control accounts, and renders a portfolio + per-project view of actual / committed / capitalised cost.
+A tactical Windows desktop tool used inside RST for project cost reconciliation and procurement. It ingests NetSuite PMO exports (`.xls` SpreadsheetML files), classifies transactions against control accounts, renders a portfolio + per-project view of actual / committed / capitalised cost, and runs the procurement workflow (scope → tender → adjudication → award → RTO → original PO + variations) for each external work package.
 
 **Audience:** single user (the cost controller) on their own PC. Not multi-tenant. No auth. No network. Runs as a portable `cost_control.exe` that the user double-clicks.
 
 **Independence:** this app **does not share code, types, schemas, migrations, or auth with the Aneriam platform** in `/frontend` and `/backend`. Don't import from there. Don't export to there. The two are separate by design.
+
+## Two kinds of package
+
+Every Package has an `is_external` boolean (defaulted at seed time from `package_type` — Construction L&M, Engineering Construction, and Supply default external; Design and Services default internal):
+
+- **Internal package** — done in-house (RST EPCM time, in-house design). Has a Cost Buildup tab. **No procurement workflow** — no Tender, no RTO, no Award. Procurement-stage column on the Packages list shows `—`.
+- **External package** — outsourced to a third-party vendor. Goes through the full lifecycle: **Tender → Adjudication → Award → RTO → Original PO → Variations**. The package's procurement-stage chip surfaces where it currently sits.
+
+The Procurement tab on a package is hidden entirely for internal packages. UI gating uses `package.is_external` everywhere.
 
 ## Stack
 
@@ -33,16 +42,35 @@ app/
 ├── inputs/
 │   ├── active_projects.txt    # Seed: project_number — project_name, one per line
 │   └── project_budgets.csv    # Seed: current_budget, planned_fy2027, approved_capex
-├── templates/                 # Jinja2 — main, project, package_detail, import, etc.
+├── templates/                 # Jinja2 — main, project, package_detail,
+│                              #   package_tender, package_adjudication,
+│                              #   package_award, rto_form, rto_detail,
+│                              #   project_packages, project_purchase_orders,
+│                              #   import, etc.
 └── costcontrol/
     ├── app.py                 # All routes + startup migrations + SQL queries
     ├── ingest.py              # NetSuite .xls parsers + run_import()
     ├── models.py              # SQLModel tables
-    ├── seed.py                # seed_projects, seed_control_accounts
+    ├── seed.py                # seed_projects, seed_control_accounts,
+    │                          #   default_is_external() helper
     ├── packages_ingest.py     # Package register seeding
+    ├── rto.py                 # RTO status workflow + match scoring
+    ├── tender.py              # Tender status workflow + weighted scoring
     ├── database.py            # SessionLocal, engine, get_db
     └── config.py              # Paths + capitalisation keywords
 ```
+
+## Procurement workflow (external packages only)
+
+Every external package walks through five sub-tabs under its **Procurement** tab. Routes are nested: `/project/{N}/packages/{M}/{tender|adjudication|award|rto}`.
+
+1. **Tender** — issue a tender, register bidders, attach document refs (URLs / network paths). Tender status: `Draft → Issued → Closed → Adjudicating → Awarded → Cancelled`.
+2. **Adjudication** — define weighted criteria (e.g. Price 40, Schedule 25, Technical 25, BBBEE 10), score each bidder against each criterion (0–100), see weighted totals computed by `tender.weighted_score()`.
+3. **Award** — marking a bidder as Awarded triggers `_award_package_to_bidder` in app.py: copies vendor + amount + date onto the Package, sets `is_contracted=True`, advances `procurement_stage='Awarded'`, flips Tender to Awarded, demotes any previously-awarded bidder to Shortlisted (re-award path).
+4. **Orders (RTO)** — one RTO per external package, numbered `{package}.RTO.NNN`. Walks `Draft → Submitted → Approved → Issued for PO → Cancelled`. NetSuite POs link to it via `po_rto_links`. **First link = Original** (auto-flagged); **subsequent links = Variations**.
+5. **Variance** — Award page rolls up `original_total + variation_total = committed_total`, then `variance = committed_total − awarded_amount` (positive red, negative green).
+
+Internal packages skip all of this — only the Cost Buildup tab applies.
 
 ## The golden rules
 
