@@ -16,9 +16,14 @@ from sqlalchemy.orm import Session
 from .config import BUNDLE_DIR, CAPITALISATION_ACCOUNT_KEYWORDS, REGISTER_DIR
 from .database import Base, SessionLocal, engine, get_db
 from .ingest import run_import
-from .models import ControlAccount, CostNodeAuditLog, ImportBatch, Package, PackageCostNode, PORtoLink, Project, ProjectTask, RTO, Transaction
+from .models import (
+    BidDocument, Bidder, ControlAccount, CostNodeAuditLog, ImportBatch,
+    Package, PackageCostNode, PORtoLink, Project, ProjectTask, RTO,
+    Tender, Transaction,
+)
 from .packages_ingest import seed_packages
 from . import rto as rto_helpers
+from . import tender as tender_helpers
 from .seed import seed_control_accounts, seed_projects
 
 
@@ -1281,6 +1286,304 @@ def package_rto_delete(project_number: str, package_number: str, db: DbDep):
     db.delete(rto)
     db.commit()
     return _rto_for_package_redirect(project_number, package_number)
+
+
+# ---------------------------------------------------------------------------
+# Tender routes — Slice C
+# ---------------------------------------------------------------------------
+
+def _tender_redirect(project_number: str, package_number: str):
+    return RedirectResponse(
+        f"/project/{project_number}/packages/{package_number}/tender",
+        status_code=303,
+    )
+
+
+def _get_tender_for_package(db: Session, package_id: int) -> Tender | None:
+    """Most recent tender for this package, or None."""
+    return (
+        db.query(Tender)
+        .filter_by(package_id=package_id)
+        .order_by(Tender.id.desc())
+        .first()
+    )
+
+
+@app.get("/project/{project_number}/packages/{package_number}/tender")
+def package_tender_view(project_number: str, package_number: str, request: Request, db: DbDep):
+    """Tender sub-tab content. Shows the tender + bidders + documents, or a
+    'Issue Tender' CTA if none exists yet."""
+    project = _get_project_or_404(db, project_number)
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    valid_targets = (
+        sorted(tender_helpers.ALLOWED_TRANSITIONS.get(tender.status, set()))
+        if tender else []
+    )
+    return templates.TemplateResponse("package_tender.html", {
+        "request": request,
+        "project": project,
+        "package": pkg,
+        "tender": tender,
+        "valid_targets": valid_targets,
+        "can_delete": tender_helpers.can_delete(tender.status) if tender else False,
+        "next_tender_number": tender_helpers.next_tender_number(db, package_number, pkg.id) if tender is None else None,
+    })
+
+
+@app.post("/project/{project_number}/packages/{package_number}/tender/issue")
+def package_tender_issue(
+    project_number: str,
+    package_number: str,
+    db: DbDep,
+    description: str = Form(""),
+    issued_date: str = Form(""),
+    closing_date: str = Form(""),
+):
+    project = _get_project_or_404(db, project_number)
+    pkg = _get_package(db, project_number, package_number)
+    if _get_tender_for_package(db, pkg.id) is not None:
+        raise HTTPException(status_code=400, detail="A tender already exists for this package")
+    now = datetime.now()
+    try:
+        d_issued = datetime.strptime(issued_date, "%Y-%m-%d").date() if issued_date else now.date()
+    except ValueError:
+        d_issued = now.date()
+    try:
+        d_closing = datetime.strptime(closing_date, "%Y-%m-%d").date() if closing_date else None
+    except ValueError:
+        d_closing = None
+    tender = Tender(
+        tender_number=tender_helpers.next_tender_number(db, package_number, pkg.id),
+        package_id=pkg.id,
+        description=description.strip(),
+        issued_date=d_issued,
+        closing_date=d_closing,
+        status=tender_helpers.STATUS_DRAFT,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(tender)
+    # Bump the package's procurement_stage so the chip on the Packages list
+    # reflects the tender having been raised.
+    pkg.procurement_stage = "Tender Issued"
+    db.commit()
+    return _tender_redirect(project_number, package_number)
+
+
+@app.post("/project/{project_number}/packages/{package_number}/tender/edit")
+def package_tender_edit(
+    project_number: str,
+    package_number: str,
+    db: DbDep,
+    description: str = Form(""),
+    issued_date: str = Form(""),
+    closing_date: str = Form(""),
+    adjudication_notes: str = Form(""),
+):
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    if tender is None:
+        raise HTTPException(status_code=404, detail="No tender for this package")
+    try:
+        tender.issued_date = datetime.strptime(issued_date, "%Y-%m-%d").date() if issued_date else tender.issued_date
+    except ValueError:
+        pass
+    try:
+        tender.closing_date = datetime.strptime(closing_date, "%Y-%m-%d").date() if closing_date else None
+    except ValueError:
+        tender.closing_date = None
+    tender.description = description.strip()
+    tender.adjudication_notes = adjudication_notes.strip()
+    tender.updated_at = datetime.now()
+    db.commit()
+    return _tender_redirect(project_number, package_number)
+
+
+@app.post("/project/{project_number}/packages/{package_number}/tender/status")
+def package_tender_status(
+    project_number: str,
+    package_number: str,
+    db: DbDep,
+    target_status: str = Form(...),
+):
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    if tender is None:
+        raise HTTPException(status_code=404, detail="No tender for this package")
+    if not tender_helpers.can_transition(tender.status, target_status):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot transition tender from {tender.status} to {target_status}",
+        )
+    tender.status = target_status
+    tender.updated_at = datetime.now()
+    # Mirror the tender status onto the package's procurement_stage so the
+    # Packages list shows the right chip without a join.
+    if target_status == tender_helpers.STATUS_ISSUED:
+        pkg.procurement_stage = "Tender Issued"
+    elif target_status == tender_helpers.STATUS_CLOSED:
+        pkg.procurement_stage = "Bids In"
+    elif target_status == tender_helpers.STATUS_ADJUDICATING:
+        pkg.procurement_stage = "Adjudicating"
+    elif target_status == tender_helpers.STATUS_AWARDED:
+        pkg.procurement_stage = "Awarded"
+    elif target_status == tender_helpers.STATUS_CANCELLED:
+        pkg.procurement_stage = "Pre-Tender"
+    elif target_status == tender_helpers.STATUS_DRAFT:
+        pkg.procurement_stage = "Pre-Tender"
+    db.commit()
+    return _tender_redirect(project_number, package_number)
+
+
+@app.post("/project/{project_number}/packages/{package_number}/tender/delete")
+def package_tender_delete(project_number: str, package_number: str, db: DbDep):
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    if tender is None:
+        raise HTTPException(status_code=404, detail="No tender for this package")
+    if not tender_helpers.can_delete(tender.status):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete tender in status '{tender.status}' — cancel it first",
+        )
+    db.delete(tender)
+    pkg.procurement_stage = "Pre-Tender"
+    db.commit()
+    return _tender_redirect(project_number, package_number)
+
+
+# ── Bidder CRUD ──────────────────────────────────────────────────────
+
+@app.post("/project/{project_number}/packages/{package_number}/tender/bidders/add")
+def package_bidder_add(
+    project_number: str,
+    package_number: str,
+    db: DbDep,
+    vendor_name: str = Form(...),
+    bid_amount: str = Form(""),
+    bid_received_date: str = Form(""),
+    status: str = Form("Pending"),
+    notes: str = Form(""),
+):
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    if tender is None:
+        raise HTTPException(status_code=404, detail="No tender for this package")
+    try:
+        amount = float(bid_amount) if bid_amount.strip() else None
+    except ValueError:
+        amount = None
+    try:
+        d_received = datetime.strptime(bid_received_date, "%Y-%m-%d").date() if bid_received_date.strip() else None
+    except ValueError:
+        d_received = None
+    next_order = (
+        db.query(Bidder)
+        .filter_by(tender_id=tender.id)
+        .count()
+    )
+    db.add(Bidder(
+        tender_id=tender.id,
+        vendor_name=vendor_name.strip(),
+        bid_amount=amount,
+        bid_received_date=d_received,
+        status=status if status in tender_helpers.BIDDER_STATUSES else "Pending",
+        notes=notes.strip(),
+        display_order=next_order,
+    ))
+    tender.updated_at = datetime.now()
+    db.commit()
+    return _tender_redirect(project_number, package_number)
+
+
+@app.post("/project/{project_number}/packages/{package_number}/tender/bidders/{bidder_id}/edit")
+def package_bidder_edit(
+    project_number: str,
+    package_number: str,
+    bidder_id: int,
+    db: DbDep,
+    vendor_name: str = Form(...),
+    bid_amount: str = Form(""),
+    bid_received_date: str = Form(""),
+    status: str = Form("Pending"),
+    notes: str = Form(""),
+):
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    bidder = db.get(Bidder, bidder_id)
+    if tender is None or bidder is None or bidder.tender_id != tender.id:
+        raise HTTPException(status_code=404, detail="Bidder not found")
+    try:
+        bidder.bid_amount = float(bid_amount) if bid_amount.strip() else None
+    except ValueError:
+        pass
+    try:
+        bidder.bid_received_date = datetime.strptime(bid_received_date, "%Y-%m-%d").date() if bid_received_date.strip() else None
+    except ValueError:
+        bidder.bid_received_date = None
+    bidder.vendor_name = vendor_name.strip()
+    bidder.status = status if status in tender_helpers.BIDDER_STATUSES else bidder.status
+    bidder.notes = notes.strip()
+    tender.updated_at = datetime.now()
+    db.commit()
+    return _tender_redirect(project_number, package_number)
+
+
+@app.post("/project/{project_number}/packages/{package_number}/tender/bidders/{bidder_id}/delete")
+def package_bidder_delete(project_number: str, package_number: str, bidder_id: int, db: DbDep):
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    bidder = db.get(Bidder, bidder_id)
+    if tender is None or bidder is None or bidder.tender_id != tender.id:
+        raise HTTPException(status_code=404, detail="Bidder not found")
+    db.delete(bidder)
+    tender.updated_at = datetime.now()
+    db.commit()
+    return _tender_redirect(project_number, package_number)
+
+
+# ── Bid document CRUD ────────────────────────────────────────────────
+
+@app.post("/project/{project_number}/packages/{package_number}/tender/bidders/{bidder_id}/documents/add")
+def package_bid_document_add(
+    project_number: str,
+    package_number: str,
+    bidder_id: int,
+    db: DbDep,
+    document_name: str = Form(...),
+    document_ref: str = Form(...),
+):
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    bidder = db.get(Bidder, bidder_id)
+    if tender is None or bidder is None or bidder.tender_id != tender.id:
+        raise HTTPException(status_code=404, detail="Bidder not found")
+    db.add(BidDocument(
+        bidder_id=bidder.id,
+        document_name=document_name.strip(),
+        document_ref=document_ref.strip(),
+        uploaded_at=datetime.now(),
+    ))
+    tender.updated_at = datetime.now()
+    db.commit()
+    return _tender_redirect(project_number, package_number)
+
+
+@app.post("/project/{project_number}/packages/{package_number}/tender/documents/{doc_id}/delete")
+def package_bid_document_delete(project_number: str, package_number: str, doc_id: int, db: DbDep):
+    pkg = _get_package(db, project_number, package_number)
+    tender = _get_tender_for_package(db, pkg.id)
+    doc = db.get(BidDocument, doc_id)
+    if tender is None or doc is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    bidder = db.get(Bidder, doc.bidder_id)
+    if bidder is None or bidder.tender_id != tender.id:
+        raise HTTPException(status_code=404, detail="Document not found")
+    db.delete(doc)
+    tender.updated_at = datetime.now()
+    db.commit()
+    return _tender_redirect(project_number, package_number)
 
 
 def _get_package(db: Session, project_number: str, package_number: str) -> Package:

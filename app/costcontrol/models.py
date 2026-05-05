@@ -417,6 +417,77 @@ class RTO(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
+class Tender(Base):
+    """A tender event raised against an external package. Holds the request,
+    bidders, bid documents, and (in later slices) evaluation criteria/scores
+    + award outcome. v1 has one Tender per package, but the .TND.NNN suffix
+    leaves room for re-tenders.
+    """
+
+    __tablename__ = "tender"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tender_number: Mapped[str] = mapped_column(String(60), nullable=False, unique=True, index=True)
+    package_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("packages.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    issued_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    closing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="Draft")
+    # Draft / Issued / Closed / Adjudicating / Awarded / Cancelled
+    adjudication_notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    package_ref: Mapped["Package"] = relationship()
+    bidders: Mapped[list["Bidder"]] = relationship(
+        back_populates="tender_ref", cascade="all, delete-orphan", order_by="Bidder.display_order"
+    )
+
+
+class Bidder(Base):
+    """A bidder on a Tender. Tracks vendor name, bid amount, status, and
+    holds attached document references (links to network paths/URLs)."""
+
+    __tablename__ = "bidder"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tender_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tender.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    vendor_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    bid_amount: Mapped[float | None] = mapped_column(Numeric(18, 2, asdecimal=False), nullable=True)
+    bid_received_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="Pending")
+    # Pending / Submitted / Withdrawn / Disqualified / Shortlisted / Awarded
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    tender_ref: Mapped["Tender"] = relationship(back_populates="bidders")
+    documents: Mapped[list["BidDocument"]] = relationship(
+        back_populates="bidder_ref", cascade="all, delete-orphan", order_by="BidDocument.id"
+    )
+
+
+class BidDocument(Base):
+    """Reference to a bid-related document. v1 stores a name + link/URL/path
+    only — no binary uploads. The user pastes a network-drive link or
+    filename so the team can find the document outside the app."""
+
+    __tablename__ = "bid_document"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bidder_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("bidder.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    document_ref: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    bidder_ref: Mapped["Bidder"] = relationship(back_populates="documents")
+
+
 class PORtoLink(Base):
     """Link between a NetSuite PO and an RTO. One PO can be linked to at most
     one RTO (UNIQUE on po_number). Source distinguishes manual user link from

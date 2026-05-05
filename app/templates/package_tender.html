@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% set pkg_base = "/project/" ~ project.project_number ~ "/packages/" ~ package.package_number %}
+{% block title %}{{ package.package_number }} — Tender — Cost Control{% endblock %}
+
+{% block actions_items %}
+{% if tender and can_delete %}
+<a href="#" onclick="confirmDeleteTender(event)">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+  Delete Tender
+</a>
+{% endif %}
+{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb">
+      <a href="/">Portfolio</a>
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a>
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}/packages">Packages</a>
+    </div>
+    <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
+    <div class="tab-bar">
+      <a href="{{ pkg_base }}/cost">Cost Buildup</a>
+      <a href="{{ pkg_base }}/tender" class="active">Procurement</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+{# ── Procurement sub-nav ─────────────────────────────────────────── #}
+<div class="tab-bar" style="margin-bottom:14px;">
+  <a href="{{ pkg_base }}/tender" class="active">Tender</a>
+  <a href="{{ pkg_base }}/rto">Orders</a>
+</div>
+
+{% if tender %}
+
+<div class="summary-cards">
+  <div class="summary-card sc-main">
+    <div class="sc-label">Tender No.</div>
+    <div class="sc-value" style="font-family:monospace;">{{ tender.tender_number }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Status</div>
+    <div class="sc-value"><span class="chip">{{ tender.status }}</span></div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Issued</div>
+    <div class="sc-value">{{ tender.issued_date or '—' }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Closing</div>
+    <div class="sc-value">{{ tender.closing_date or '—' }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Bidders</div>
+    <div class="sc-value">{{ tender.bidders | length }}</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start;">
+
+  <div>
+    {# ── Tender header / edit form ──────────────────────────────── #}
+    <div class="card">
+      <h2>Tender details</h2>
+      <form method="post" action="{{ pkg_base }}/tender/edit"
+            style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;grid-column:1/-1;">
+          Description
+          <input type="text" name="description" value="{{ tender.description }}"
+                 style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;">
+          Issued date
+          <input type="date" name="issued_date" value="{{ tender.issued_date if tender.issued_date else '' }}"
+                 style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;">
+          Closing date
+          <input type="date" name="closing_date" value="{{ tender.closing_date if tender.closing_date else '' }}"
+                 style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;grid-column:1/-1;">
+          Adjudication notes
+          <textarea name="adjudication_notes" rows="2"
+                    style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;font-family:inherit;resize:vertical;">{{ tender.adjudication_notes }}</textarea>
+        </label>
+        <div style="grid-column:1/-1;display:flex;justify-content:flex-end;">
+          <button type="submit" class="btn btn-sm">Save</button>
+        </div>
+      </form>
+    </div>
+
+    {# ── Bidders list ────────────────────────────────────────────── #}
+    <div class="card">
+      <h2>Bidders</h2>
+      {% if tender.bidders %}
+      <table>
+        <thead>
+          <tr>
+            <th>Vendor</th>
+            <th class="num" style="width:140px;">Bid amount</th>
+            <th style="width:110px;">Received</th>
+            <th style="width:120px;">Status</th>
+            <th style="width:90px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in tender.bidders %}
+          <tr>
+            <td>
+              <div style="font-weight:600;">{{ b.vendor_name }}</div>
+              {% if b.notes %}<div style="font-size:11px;color:#778;">{{ b.notes }}</div>{% endif %}
+              {% if b.documents %}
+              <div style="margin-top:6px;display:flex;flex-direction:column;gap:2px;">
+                {% for d in b.documents %}
+                <div style="font-size:11px;color:#556;">
+                  <a href="{{ d.document_ref }}" target="_blank" rel="noopener">{{ d.document_name or d.document_ref }}</a>
+                  <form method="post" action="{{ pkg_base }}/tender/documents/{{ d.id }}/delete"
+                        style="display:inline;margin-left:4px;"
+                        onsubmit="return confirm('Remove document?');">
+                    <button type="submit" class="btn btn-sm btn-ghost" style="padding:0 4px;font-size:10px;">×</button>
+                  </form>
+                </div>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </td>
+            <td class="num">{% if b.bid_amount is not none %}{{ b.bid_amount | zar }}{% else %}—{% endif %}</td>
+            <td style="font-size:11px;color:#556;">{{ b.bid_received_date or '—' }}</td>
+            <td><span class="chip">{{ b.status }}</span></td>
+            <td>
+              <button type="button" class="btn btn-sm btn-ghost"
+                      style="padding:2px 6px;font-size:11px;"
+                      onclick="openBidderEdit({{ b.id }})">Edit</button>
+              <form method="post" action="{{ pkg_base }}/tender/bidders/{{ b.id }}/delete"
+                    style="display:inline;"
+                    onsubmit="return confirm('Delete bidder {{ b.vendor_name }}?');">
+                <button type="submit" class="btn btn-sm btn-ghost" style="padding:2px 6px;font-size:11px;">×</button>
+              </form>
+            </td>
+          </tr>
+
+          {# ── Hidden edit row ─────────────────────────────────── #}
+          <tr id="bidder-edit-{{ b.id }}" style="display:none;background:#fafbfc;">
+            <td colspan="5">
+              <form method="post" action="{{ pkg_base }}/tender/bidders/{{ b.id }}/edit"
+                    style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;padding:10px 0;">
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:#556;grid-column:1/3;">
+                  Vendor
+                  <input type="text" name="vendor_name" value="{{ b.vendor_name }}" required
+                         style="padding:4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;">
+                </label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:#556;">
+                  Bid amount
+                  <input type="number" step="0.01" name="bid_amount" value="{{ b.bid_amount if b.bid_amount is not none else '' }}"
+                         style="padding:4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;">
+                </label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:#556;">
+                  Received
+                  <input type="date" name="bid_received_date" value="{{ b.bid_received_date if b.bid_received_date else '' }}"
+                         style="padding:4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;">
+                </label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:#556;grid-column:1/3;">
+                  Status
+                  <select name="status"
+                          style="padding:4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;">
+                    {% for s in ('Pending','Submitted','Withdrawn','Disqualified','Shortlisted','Awarded') %}
+                    <option value="{{ s }}" {% if b.status == s %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:#556;grid-column:3/5;">
+                  Notes
+                  <input type="text" name="notes" value="{{ b.notes }}"
+                         style="padding:4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;">
+                </label>
+                <div style="grid-column:1/-1;display:flex;justify-content:space-between;gap:8px;">
+                  <details style="font-size:11px;">
+                    <summary style="cursor:pointer;color:#1a4a70;">+ Add document</summary>
+                    <div style="margin-top:6px;display:flex;gap:4px;align-items:end;">
+                      <input type="text" form="doc-form-{{ b.id }}" name="document_name" placeholder="Document name" required
+                             style="flex:1;padding:4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;">
+                      <input type="text" form="doc-form-{{ b.id }}" name="document_ref" placeholder="Network path or URL" required
+                             style="flex:2;padding:4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;">
+                      <button type="submit" form="doc-form-{{ b.id }}" class="btn btn-sm" style="padding:3px 10px;font-size:11px;">Add</button>
+                    </div>
+                  </details>
+                  <div style="display:flex;gap:6px;">
+                    <button type="button" class="btn btn-sm btn-ghost" onclick="closeBidderEdit({{ b.id }})">Cancel</button>
+                    <button type="submit" class="btn btn-sm">Save</button>
+                  </div>
+                </div>
+              </form>
+              {# Separate form for adding documents to this bidder #}
+              <form id="doc-form-{{ b.id }}" method="post"
+                    action="{{ pkg_base }}/tender/bidders/{{ b.id }}/documents/add"></form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state" style="padding:20px 12px;">
+        <strong>No bidders registered yet</strong>
+        Add bidders below as they're invited or as bids come in.
+      </div>
+      {% endif %}
+
+      {# ── Add bidder form ─────────────────────────────────────── #}
+      <details style="margin-top:16px;">
+        <summary style="cursor:pointer;font-size:13px;color:#1a4a70;font-weight:600;">+ Add bidder</summary>
+        <form method="post" action="{{ pkg_base }}/tender/bidders/add"
+              style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;padding:10px 0;margin-top:8px;border-top:1px solid #edf0f4;">
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;grid-column:1/3;">
+            Vendor name
+            <input type="text" name="vendor_name" required
+                   style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;">
+            Bid amount (excl. VAT)
+            <input type="number" step="0.01" name="bid_amount"
+                   style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;">
+            Bid received
+            <input type="date" name="bid_received_date"
+                   style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;grid-column:1/3;">
+            Status
+            <select name="status"
+                    style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+              {% for s in ('Pending','Submitted','Withdrawn','Disqualified') %}
+              <option value="{{ s }}" {% if s == 'Pending' %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;grid-column:3/5;">
+            Notes
+            <input type="text" name="notes"
+                   style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+          </label>
+          <div style="grid-column:1/-1;display:flex;justify-content:flex-end;">
+            <button type="submit" class="btn btn-sm">Add bidder</button>
+          </div>
+        </form>
+      </details>
+    </div>
+  </div>
+
+  {# ── Status side-panel ─────────────────────────────────────── #}
+  <div class="card">
+    <h2>Status</h2>
+    <div style="margin-bottom:12px;font-size:12px;color:#667;">
+      Current: <strong style="color:#1a2e4a;">{{ tender.status }}</strong>
+    </div>
+    {% if valid_targets %}
+    <div style="font-size:11px;color:#778;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">
+      Move to:
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      {% for target in valid_targets %}
+      <form method="post" action="{{ pkg_base }}/tender/status" style="margin:0;">
+        <input type="hidden" name="target_status" value="{{ target }}">
+        <button type="submit" class="btn btn-sm{% if target == 'Cancelled' %} btn-ghost{% endif %}" style="width:100%;text-align:left;">
+          {{ target }}
+        </button>
+      </form>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="font-size:12px;color:#888;font-style:italic;">
+      No further transitions available.
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{# Hidden delete form #}
+<form id="deleteTenderForm" method="post" action="{{ pkg_base }}/tender/delete" style="display:none;"></form>
+
+{% else %}
+
+{# ── No tender yet — issue CTA ─────────────────────────────────── #}
+<div class="card" style="max-width:680px;">
+  <h2>Issue a tender for this package</h2>
+  <p style="font-size:12px;color:#667;margin-bottom:16px;">
+    Tender number <strong>{{ next_tender_number }}</strong> will be assigned on save.
+    The tender starts in Draft status — flip it to Issued once the tender pack is out.
+  </p>
+  <form method="post" action="{{ pkg_base }}/tender/issue"
+        style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;grid-column:1/-1;">
+      Description
+      <input type="text" name="description" placeholder="Short tender summary" required
+             style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+    </label>
+    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;">
+      Issued date
+      <input type="date" name="issued_date" required
+             style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+    </label>
+    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;">
+      Closing date
+      <input type="date" name="closing_date"
+             style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+    </label>
+    <div style="grid-column:1/-1;display:flex;justify-content:flex-end;border-top:1px solid #edf0f4;padding-top:12px;">
+      <button type="submit" class="btn">Issue Tender</button>
+    </div>
+  </form>
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openBidderEdit(id) {
+  const row = document.getElementById('bidder-edit-' + id);
+  if (row) row.style.display = '';
+}
+function closeBidderEdit(id) {
+  const row = document.getElementById('bidder-edit-' + id);
+  if (row) row.style.display = 'none';
+}
+function confirmDeleteTender(e) {
+  e.preventDefault();
+  if (confirm('Delete this tender? This will remove all bidders and documents.')) {
+    document.getElementById('deleteTenderForm').submit();
+  }
+}
+</script>
+{% endblock %}

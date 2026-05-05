@@ -32,7 +32,7 @@
     <div class="tab-bar">
       <a href="{{ pkg_base }}/cost">Cost Buildup</a>
       {% if package.is_external %}
-      <a href="{{ pkg_base }}/rto" class="active">Procurement</a>
+      <a href="{{ pkg_base }}/tender" class="active">Procurement</a>
       {% endif %}
     </div>
   </div>
@@ -40,6 +40,14 @@
 {% endblock %}
 
 {% block content %}
+
+{# ── Procurement sub-nav ─────────────────────────────────────────── #}
+{% if package.is_external %}
+<div class="tab-bar" style="margin-bottom:14px;">
+  <a href="{{ pkg_base }}/tender">Tender</a>
+  <a href="{{ pkg_base }}/rto" class="active">Orders</a>
+</div>
+{% endif %}
 
 {% if rto %}
 
