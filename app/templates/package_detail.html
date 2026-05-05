@@ -56,6 +56,10 @@
       <a href="/project/{{ project.project_number }}/packages">Packages</a>
     </div>
     <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
+    <div class="tab-bar">
+      <a href="{{ pkg_base }}/cost"
+         class="{% if active_pkg_tab == 'cost' %}active{% endif %}">Cost Buildup</a>
+    </div>
   </div>
 </div>
 {% endblock %}

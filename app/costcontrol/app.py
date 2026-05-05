@@ -778,6 +778,63 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
     })
 
 
+@app.get("/project/{project_number}/purchase-orders")
+def project_purchase_orders_page(project_number: str, request: Request, db: DbDep):
+    """Project-level Purchase Orders listing.
+
+    One row per PO (aggregated from po_lines), filtered to the project and
+    excluding voided lines. The Package column is a placeholder until the RTO
+    workflow is implemented — every PO renders as 'Unassigned' for now.
+    """
+    project = db.query(Project).filter_by(project_number=project_number).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    totals = _project_totals(db, project_number)
+
+    # Aggregate po_lines into one row per po_number. MAX(vendor)/MAX(memo_main)
+    # picks the populated value (lines of the same PO carry the same metadata
+    # in NetSuite). MAX(status) biases toward the alphabetically-latest open
+    # status, so a partly-billed PO shows "Pending Receipt" rather than
+    # "Closed" — useful at a glance.
+    rows = db.execute(
+        text("""
+            SELECT
+                po_number,
+                MIN(date)             AS first_date,
+                MAX(vendor)           AS vendor,
+                MAX(memo_main)        AS description,
+                COALESCE(SUM(amount),         0) AS order_amount,
+                COALESCE(SUM(actual_amount),  0) AS actual_amount,
+                COALESCE(SUM(remaining),      0) AS remaining_amount,
+                MAX(status)           AS status,
+                COUNT(*)              AS line_count
+            FROM po_lines
+            WHERE project_number = :proj AND voided = 0
+            GROUP BY po_number
+            ORDER BY first_date DESC, po_number
+        """),
+        {"proj": project_number},
+    ).fetchall()
+
+    # Portfolio-style summary: count, total order value, total actual, total remaining.
+    summary = {
+        "po_count":   len(rows),
+        "order":      sum(r.order_amount    for r in rows),
+        "actual":     sum(r.actual_amount   for r in rows),
+        "remaining":  sum(r.remaining_amount for r in rows),
+    }
+
+    return templates.TemplateResponse("project_purchase_orders.html", {
+        "request": request,
+        "project": project,
+        "totals": totals,
+        "purchase_orders": rows,
+        "summary": summary,
+        "active_tab": "purchase_orders",
+    })
+
+
 def _get_package(db: Session, project_number: str, package_number: str) -> Package:
     pkg = db.query(Package).filter_by(package_number=package_number, project_number=project_number).first()
     if pkg is None:

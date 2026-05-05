@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% block title %}{{ project.project_number }} — Purchase Orders — Cost Control{% endblock %}
+
+{% block actions_items %}
+<a href="/import">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/></svg>
+  Import Data
+</a>
+{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb">
+      <a href="/">Portfolio</a>
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a>
+    </div>
+    <div class="subheader-title">{{ project.project_number }}: {{ proj_name }}</div>
+    <div class="tab-bar">
+      <a href="/project/{{ project.project_number }}">Cost Work Sheet</a>
+      <a href="/project/{{ project.project_number }}/packages">Packages</a>
+      <a href="/project/{{ project.project_number }}/purchase-orders" class="active">Purchase Orders
+        <span class="pkg-count">({{ summary.po_count }})</span>
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<div class="summary-cards">
+  <div class="summary-card sc-main">
+    <div class="sc-label">Total Orders</div>
+    <div class="sc-value">{{ summary.po_count }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Order Value</div>
+    <div class="sc-value">{{ summary.order | zar }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Actual Billed</div>
+    <div class="sc-value">{{ summary.actual | zar }}</div>
+  </div>
+  <div class="summary-card sc-main">
+    <div class="sc-label">Remaining</div>
+    <div class="sc-value">{{ summary.remaining | zar }}</div>
+  </div>
+</div>
+
+<div class="card">
+  {% if purchase_orders %}
+  <table>
+    <thead>
+      <tr>
+        <th style="width:120px;">PO No.</th>
+        <th style="width:90px;">Date</th>
+        <th>Vendor</th>
+        <th>Description</th>
+        <th class="num">Order</th>
+        <th class="num">Actual</th>
+        <th class="num">Remaining</th>
+        <th style="width:120px;">Status</th>
+        <th style="width:120px;">Package</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for po in purchase_orders %}
+      <tr>
+        <td style="font-family:monospace;font-size:12px;">{{ po.po_number }}</td>
+        <td style="font-size:11px;color:#556;">{{ po.first_date or '—' }}</td>
+        <td>{{ po.vendor or '—' }}</td>
+        <td>{{ po.description or '—' }}</td>
+        <td class="num">{{ po.order_amount | zar }}</td>
+        <td class="num">{{ po.actual_amount | zar }}</td>
+        <td class="num">{{ po.remaining_amount | zar }}</td>
+        <td><span class="chip">{{ po.status or '—' }}</span></td>
+        <td style="color:#888;font-style:italic;">Unassigned</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <strong>No purchase orders for this project</strong>
+    Purchase order data is loaded from the NetSuite PMO PO Detailed export at import time.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
