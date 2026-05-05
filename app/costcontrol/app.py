@@ -853,7 +853,10 @@ def package_deliverables(project_number: str, package_number: str, request: Requ
 
 @app.get("/project/{project_number}/packages/{package_number}")
 def package_detail(project_number: str, package_number: str, request: Request, db: DbDep):
-    return _package_detail_response(request, db, project_number, package_number, "scope")
+    # Default tab is Cost — Scope/Schedule/Deliverables are hidden from the UI
+    # for the cost-control-focused MVP. Their routes still exist but are
+    # unreachable without typing the URL by hand.
+    return _package_detail_response(request, db, project_number, package_number, "cost")
 
 
 # ---------------------------------------------------------------------------

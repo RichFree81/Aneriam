@@ -8,7 +8,7 @@
     *, *::before, *::after { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 14px;
+      font-size: 13px;
       color: #111;
       background: #f5f5f5;
       margin: 0;
@@ -243,8 +243,20 @@
       margin-bottom: 16px;
       overflow-x: auto;
     }
-    h2 { font-size: 15px; margin: 0 0 16px; color: #1a2e4a; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+    h2 { font-size: 13px; margin: 0 0 16px; color: #1a2e4a; }
+    /* Tables: auto layout so columns size to content; tabular-nums keeps
+       digits aligned across rows. Width:100% with min-width:100% means the
+       table fills the container when content is narrow but allows it to
+       widen past 100% when content forces it — at which point the parent
+       .card's overflow-x: auto produces a horizontal scrollbar. */
+    table {
+      width: 100%;
+      min-width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      table-layout: auto;
+      font-variant-numeric: tabular-nums;
+    }
     th {
       text-align: left;
       padding: 6px 8px;
@@ -256,6 +268,9 @@
       vertical-align: bottom;
     }
     th.num, td.num { text-align: right; }
+    /* Numeric cells stay on a single line — never break a currency value
+       like "R 325,842,308.00" across two lines. */
+    td.num { white-space: nowrap; }
     /* Financial column separators */
     th.num { border-left: 1px solid #c8d4e0; }
     td.num { border-left: 1px solid #dde6ee; }
@@ -292,7 +307,7 @@
       border: 1px solid #ccc;
     }
     .btn-ghost:hover { background: #f0f0f0; }
-    .meta { font-size: 12px; color: #666; margin-bottom: 14px; }
+    .meta { font-size: 11px; color: #666; margin-bottom: 14px; }
     .badge {
       display: inline-block;
       padding: 2px 8px;
@@ -319,12 +334,33 @@
     .hier-toggle.collapsed { transform: rotate(0deg); }
 
     /* ── Summary cards (project page) ───────────────────── */
-    .summary-cards { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-    .summary-card { flex: 1; min-width: 120px; background: #fff; border: 1px solid #dde6ee; border-radius: 6px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+    /* Single row that scrolls horizontally when too narrow — never wraps to
+       a second row. flex-shrink:0 prevents cards from being squashed below
+       their natural width; overflow-x:auto on the wrapper produces a
+       horizontal scrollbar when the row exceeds container width. */
+    .summary-cards {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: thin;
+    }
+    .summary-card {
+      flex: 1 0 140px;
+      background: #fff;
+      border: 1px solid #dde6ee;
+      border-radius: 6px;
+      padding: 12px 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.07);
+    }
     .summary-card.sc-main { border-color: #e0c87a; border-left: 3px solid #c8840a; }
     .summary-card.fy      { background: #fff; border-color: #c8d8e8; border-left: 3px solid #8aaac8; }
     .sc-label { font-size: 10px; color: #667; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; white-space: nowrap; }
-    .sc-value { font-size: 14px; font-weight: 700; color: #1a2e4a; }
+    /* nowrap on the value too — currency strings like "R 325,842,308.00"
+       must not break inside a card. */
+    .sc-value { font-size: 13px; font-weight: 700; color: #1a2e4a; white-space: nowrap; }
 
     /* ── Project filter modal fields ─────────────────────── */
     .fm-fields { display: flex; flex-direction: column; gap: 14px; padding: 16px 20px; }
@@ -414,7 +450,7 @@
     .subheader-crumb a:hover { text-decoration: underline; }
     .subheader-crumb span { color: #bbc; margin: 0 4px; }
     .subheader-title {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
       color: #1a2e4a;
       display: flex;
@@ -424,7 +460,7 @@
       margin-bottom: 2px;
     }
     .subheader-subtitle {
-      font-size: 12px;
+      font-size: 11px;
       color: #556;
       margin-bottom: 8px;
     }

@@ -56,16 +56,6 @@
       <a href="/project/{{ project.project_number }}/packages">Packages</a>
     </div>
     <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
-    <div class="tab-bar">
-      <a href="{{ pkg_base }}/scope"
-         class="{% if active_pkg_tab == 'scope' %}active{% endif %}">Scope</a>
-      <a href="{{ pkg_base }}/schedule"
-         class="{% if active_pkg_tab == 'schedule' %}active{% endif %}">Schedule</a>
-      <a href="{{ pkg_base }}/cost"
-         class="{% if active_pkg_tab == 'cost' %}active{% endif %}">Cost</a>
-      <a href="{{ pkg_base }}/deliverables"
-         class="{% if active_pkg_tab == 'deliverables' %}active{% endif %}">Deliverables</a>
-    </div>
   </div>
 </div>
 {% endblock %}
