@@ -16,7 +16,7 @@ from costcontrol.cbs import (
 )
 from costcontrol.database import Base
 from costcontrol.models import (
-    BudgetReserveSubAccount,
+    BudgetReserveBalance,
     CostItemCode,
     Deliverable,
     DeliverablePlantArea,
@@ -37,8 +37,8 @@ def db():
     seed_control_accounts(session)
     seed_cost_control_master_data(session)
     session.add(Project(project_number="5006", project_name="5006 Furnace 3", is_active=True))
-    unallocated = session.get(BudgetReserveSubAccount, "101.01")
-    unallocated.balance = 1_000_000
+    session.add(BudgetReserveBalance(project_number="5006", reserve_code="101.01", balance=1_000_000))
+    session.add(BudgetReserveBalance(project_number="5006", reserve_code="101.02", balance=0))
     session.commit()
     try:
         yield session
@@ -143,6 +143,7 @@ def test_award_moves_reserve_and_commits_deliverable(db):
     assert pkg.is_contracted is True
     assert pkg.awarded_amount == 1000
     assert deliverable.state == "Committed"
-    assert db.get(BudgetReserveSubAccount, "101.02").balance == 0
-    assert db.get(BudgetReserveSubAccount, "101.01").balance == 999_000
-    assert funding_identity(db) == 1_000_000
+    balances = {row.reserve_code: row.balance for row in db.query(BudgetReserveBalance).all()}
+    assert balances["101.02"] == 0
+    assert balances["101.01"] == 999_000
+    assert funding_identity(db, "5006") == 1_000_000

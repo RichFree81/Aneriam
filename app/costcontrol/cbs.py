@@ -8,6 +8,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from .models import (
+    BudgetReserveBalance,
     BudgetReserveSubAccount,
     CostControlAuditLog,
     CostItemCode,
@@ -15,6 +16,7 @@ from .models import (
     IndirectL2Account,
     Package,
     PackageCostItem,
+    Project,
     ProjectScopeItem,
     PurchaseOrderLine,
     WorkType,
@@ -105,18 +107,31 @@ def write_audit(
     ))
 
 
-def reserve_accounts(db: Session) -> tuple[BudgetReserveSubAccount, BudgetReserveSubAccount]:
-    unallocated = db.get(BudgetReserveSubAccount, "101.01")
-    provisional = db.get(BudgetReserveSubAccount, "101.02")
-    if unallocated is None or provisional is None:
+def reserve_accounts(db: Session, project_number: str) -> tuple[BudgetReserveBalance, BudgetReserveBalance]:
+    if db.get(BudgetReserveSubAccount, "101.01") is None or db.get(BudgetReserveSubAccount, "101.02") is None:
         raise ValueError("Budget reserve subaccounts 101.01 and 101.02 must be seeded")
+    rows = {
+        row.reserve_code: row
+        for row in db.query(BudgetReserveBalance).filter_by(project_number=project_number).all()
+    }
+    for code in ("101.01", "101.02"):
+        if code not in rows:
+            opening = 0.0
+            if code == "101.01":
+                project = db.query(Project).filter_by(project_number=project_number).first()
+                opening = float((project.current_budget or project.approved_capex or 0) if project else 0)
+            rows[code] = BudgetReserveBalance(project_number=project_number, reserve_code=code, balance=opening)
+            db.add(rows[code])
+            db.flush()
+    unallocated = rows["101.01"]
+    provisional = rows["101.02"]
     return unallocated, provisional
 
 
 def plan_package(db: Session, pkg: Package, planned_value: float) -> None:
     previous = float(pkg.planned_value or 0)
     delta = planned_value - previous
-    unallocated, provisional = reserve_accounts(db)
+    unallocated, provisional = reserve_accounts(db, pkg.project_number)
     if delta > 0 and float(unallocated.balance or 0) < delta:
         raise ValueError("Planned value exceeds 101.01 Unallocated balance")
     unallocated.balance = float(unallocated.balance or 0) - delta
@@ -168,7 +183,7 @@ def award_package(db: Session, pkg: Package) -> None:
     if errors:
         raise ValueError("Cannot award - missing fields:\n" + "\n".join(errors))
 
-    unallocated, provisional = reserve_accounts(db)
+    unallocated, provisional = reserve_accounts(db, pkg.project_number)
     planned = float(pkg.planned_value or 0)
     awarded = sum(float(item.value or 0) for item in active_package_line_items(pkg))
     provisional.balance = float(provisional.balance or 0) - planned
@@ -249,11 +264,13 @@ def create_cost_item_line(
     return line
 
 
-def funding_identity(db: Session) -> float:
-    unallocated, provisional = reserve_accounts(db)
+def funding_identity(db: Session, project_number: str) -> float:
+    unallocated, provisional = reserve_accounts(db, project_number)
     awarded_total = (
         db.query(func.coalesce(func.sum(PackageCostItem.value), 0))
-        .filter_by(status="Awarded", superseded=False)
+        .join(Package, Package.id == PackageCostItem.package_id)
+        .filter(Package.project_number == project_number)
+        .filter(PackageCostItem.status == "Awarded", PackageCostItem.superseded.is_(False))
         .scalar()
         or 0
     )
@@ -295,7 +312,23 @@ def po_package_suggestions(db: Session, project_number: str) -> list[dict]:
 
 
 def cbs_rows(db: Session, project_number: str) -> list[dict]:
-    reserve = db.query(BudgetReserveSubAccount).order_by(BudgetReserveSubAccount.code).all()
+    reserve_accounts(db, project_number)
+    reserve_rows = (
+        db.query(BudgetReserveBalance, BudgetReserveSubAccount)
+        .join(BudgetReserveSubAccount, BudgetReserveSubAccount.code == BudgetReserveBalance.reserve_code)
+        .filter(BudgetReserveBalance.project_number == project_number)
+        .order_by(BudgetReserveBalance.reserve_code)
+        .all()
+    )
+    reserve = [
+        {
+            "code": subaccount.code,
+            "name": subaccount.name,
+            "role": subaccount.role,
+            "balance": balance.balance,
+        }
+        for balance, subaccount in reserve_rows
+    ]
     indirect_l2 = db.query(IndirectL2Account).order_by(IndirectL2Account.code).all()
     deliverables = db.query(Deliverable).filter_by(project_number=project_number).order_by(Deliverable.cbs_l2_code).all()
     codes = db.query(CostItemCode).filter_by(project_number=project_number).order_by(CostItemCode.code).all()

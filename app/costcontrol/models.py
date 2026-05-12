@@ -72,7 +72,18 @@ class BudgetReserveSubAccount(Base):
     code: Mapped[str] = mapped_column(String(6), primary_key=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class BudgetReserveBalance(Base):
+    __tablename__ = "budget_reserve_balances"
+    __table_args__ = (UniqueConstraint("project_number", "reserve_code"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_number: Mapped[str] = mapped_column(String(20), ForeignKey("projects.project_number"), nullable=False, index=True)
+    reserve_code: Mapped[str] = mapped_column(String(6), ForeignKey("budget_reserve_subaccounts.code"), nullable=False)
     balance: Mapped[float] = mapped_column(Numeric(18, 2, asdecimal=False), nullable=False, default=0)
+
+    reserve_ref: Mapped["BudgetReserveSubAccount"] = relationship()
 
 
 class ProjectScopeItem(Base):

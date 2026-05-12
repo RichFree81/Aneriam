@@ -248,7 +248,7 @@ def seed_cost_control_master_data(db: Session) -> None:
     for code, name, role in BUDGET_RESERVE_SUBACCOUNTS:
         row = db.get(BudgetReserveSubAccount, code)
         if row is None:
-            db.add(BudgetReserveSubAccount(code=code, name=name, role=role, balance=0))
+            db.add(BudgetReserveSubAccount(code=code, name=name, role=role))
         else:
             row.name = name
             row.role = role
