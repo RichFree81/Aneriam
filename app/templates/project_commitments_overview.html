@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% import "_project_nav.html" as nav %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% block title %}{{ project.project_number }} - Commitments - Cost Control{% endblock %}
+
+{% block actions_items %}
+<a href="/import">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/></svg>
+  Import Data
+</a>
+{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb">
+      <a href="/">Portfolio</a>
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a>
+    </div>
+    <div class="subheader-title">{{ project.project_number }}: {{ proj_name }}</div>
+    {{ nav.project_tabs(project, 'commitments') }}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+{{ nav.commitments_tabs(project, 'overview') }}
+
+{% set committed_total = summary.po_order_amount %}
+{% set open_rto_value = summary.rto_amount - summary.po_order_amount %}
+{% set po_link_rate = (summary.po_linked / summary.po_total * 100) if summary.po_total else 0 %}
+{% set billing_rate = (summary.po_actual_amount / summary.po_order_amount * 100) if summary.po_order_amount else 0 %}
+
+<style>
+  .commit-dashboard {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.85fr);
+    gap: 14px;
+    align-items: start;
+  }
+  .commit-panel {
+    background: #fff;
+    border: 1px solid #dde6ee;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.07);
+  }
+  .commit-panel-head {
+    padding: 12px 14px;
+    border-bottom: 1px solid #e6edf5;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .commit-panel-title {
+    margin: 0;
+    font-size: 13px;
+    color: #1a2e4a;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .commit-panel-note {
+    font-size: 11px;
+    color: #778;
+  }
+  .commit-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(130px, 1fr));
+    gap: 1px;
+    background: #e6edf5;
+  }
+  .commit-kpi {
+    background: #fff;
+    padding: 14px;
+    min-height: 78px;
+  }
+  .commit-kpi-label {
+    font-size: 10px;
+    color: #667;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.45px;
+    margin-bottom: 8px;
+  }
+  .commit-kpi-value {
+    font-size: 16px;
+    font-weight: 800;
+    color: #1a2e4a;
+    white-space: nowrap;
+  }
+  .commit-kpi-sub {
+    margin-top: 5px;
+    font-size: 11px;
+    color: #667;
+  }
+  .commit-flow {
+    padding: 14px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .commit-tile {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #dde6ee;
+    border-radius: 6px;
+    padding: 12px;
+    background: #fbfcfe;
+    min-height: 118px;
+  }
+  .commit-tile:hover {
+    border-color: #9db9d5;
+    background: #f4f8fc;
+  }
+  .commit-tile.disabled {
+    pointer-events: none;
+    opacity: 0.75;
+  }
+  .commit-tile-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1a2e4a;
+    margin-bottom: 8px;
+  }
+  .commit-tile-value {
+    font-size: 15px;
+    font-weight: 800;
+    color: #24384f;
+    white-space: nowrap;
+  }
+  .commit-tile-meta {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #667;
+    line-height: 1.35;
+  }
+  .commit-alert-list {
+    padding: 10px 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .commit-alert {
+    border: 1px solid #dde6ee;
+    border-left: 3px solid #8aaac8;
+    border-radius: 5px;
+    padding: 10px 11px;
+    background: #fbfcfe;
+    font-size: 12px;
+  }
+  .commit-alert strong {
+    display: block;
+    color: #1a2e4a;
+    margin-bottom: 3px;
+  }
+  .commit-alert.warn {
+    border-left-color: #c8840a;
+    background: #fffaf0;
+  }
+  .commit-alert.ok {
+    border-left-color: #2f8f5b;
+    background: #f4fbf7;
+  }
+  @media (max-width: 1180px) {
+    .commit-dashboard { grid-template-columns: 1fr; }
+    .commit-kpi-grid, .commit-flow { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+  }
+</style>
+
+<div class="commit-dashboard">
+  <div style="display:flex;flex-direction:column;gap:14px;">
+    <section class="commit-panel">
+      <div class="commit-panel-head">
+        <h2 class="commit-panel-title">Commitment Position</h2>
+        <span class="commit-panel-note">Project-level RTO and purchase order control</span>
+      </div>
+      <div class="commit-kpi-grid">
+        <div class="commit-kpi">
+          <div class="commit-kpi-label">Ordered Commitment</div>
+          <div class="commit-kpi-value">{{ committed_total | zar }}</div>
+          <div class="commit-kpi-sub">{{ summary.po_total }} purchase orders</div>
+        </div>
+        <div class="commit-kpi">
+          <div class="commit-kpi-label">Actual Billed</div>
+          <div class="commit-kpi-value">{{ summary.po_actual_amount | zar }}</div>
+          <div class="commit-kpi-sub">{{ "%.1f"|format(billing_rate) }}% of ordered value</div>
+        </div>
+        <div class="commit-kpi">
+          <div class="commit-kpi-label">Remaining Commitment</div>
+          <div class="commit-kpi-value">{{ summary.po_remaining_amount | zar }}</div>
+          <div class="commit-kpi-sub">NetSuite remaining amount</div>
+        </div>
+        <div class="commit-kpi">
+          <div class="commit-kpi-label">PO Link Health</div>
+          <div class="commit-kpi-value">{{ "%.0f"|format(po_link_rate) }}%</div>
+          <div class="commit-kpi-sub">{{ summary.po_unassigned }} unassigned POs</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="commit-panel">
+      <div class="commit-panel-head">
+        <h2 class="commit-panel-title">Workflow Dashboard</h2>
+        <span class="commit-panel-note">Open each register for transaction-level detail</span>
+      </div>
+      <div class="commit-flow">
+        <a class="commit-tile" href="/project/{{ project.project_number }}/commitments/request-to-order">
+          <div class="commit-tile-title">Request to Order</div>
+          <div class="commit-tile-value">{{ summary.rto_amount | zar }}</div>
+          <div class="commit-tile-meta">{{ summary.rto_count }} RTOs · {{ summary.rto_approved_count }} approved · {{ summary.rto_issued_count }} issued for PO</div>
+        </a>
+        <a class="commit-tile" href="/project/{{ project.project_number }}/commitments/purchase-orders">
+          <div class="commit-tile-title">Purchase Orders</div>
+          <div class="commit-tile-value">{{ summary.po_order_amount | zar }}</div>
+          <div class="commit-tile-meta">{{ summary.po_linked }} linked · {{ summary.po_unassigned }} unassigned · {{ summary.po_total }} total</div>
+        </a>
+        <a class="commit-tile" href="/project/{{ project.project_number }}/commitments/variation-requests">
+          <div class="commit-tile-title">Variation Requests</div>
+          <div class="commit-tile-value">Not configured</div>
+          <div class="commit-tile-meta">Request-stage workflow placeholder before order variations are logged.</div>
+        </a>
+        <a class="commit-tile" href="/project/{{ project.project_number }}/commitments/cashflow">
+          <div class="commit-tile-title">Cashflow</div>
+          <div class="commit-tile-value">Not configured</div>
+          <div class="commit-tile-meta">Future phasing view for commitments, POs, and forecast assumptions.</div>
+        </a>
+      </div>
+    </section>
+  </div>
+
+  <aside class="commit-panel">
+    <div class="commit-panel-head">
+      <h2 class="commit-panel-title">Controls</h2>
+      <span class="commit-panel-note">Exceptions and next actions</span>
+    </div>
+    <div class="commit-alert-list">
+      {% if summary.po_unassigned %}
+      <a class="commit-alert warn" href="/project/{{ project.project_number }}/commitments/purchase-orders?filter=unassigned">
+        <strong>{{ summary.po_unassigned }} unassigned purchase orders</strong>
+        Link imported NetSuite POs to the correct RTO for package attribution.
+      </a>
+      {% else %}
+      <div class="commit-alert ok">
+        <strong>Purchase order attribution complete</strong>
+        All imported POs are linked to an RTO.
+      </div>
+      {% endif %}
+
+      {% if summary.rto_approved_count %}
+      <a class="commit-alert warn" href="/project/{{ project.project_number }}/commitments/request-to-order">
+        <strong>{{ summary.rto_approved_count }} approved RTOs</strong>
+        Confirm whether these have been converted to purchase orders.
+      </a>
+      {% else %}
+      <div class="commit-alert ok">
+        <strong>No approved RTO backlog</strong>
+        There are no approved RTOs waiting for PO conversion.
+      </div>
+      {% endif %}
+
+      <div class="commit-alert">
+        <strong>Variation Requests</strong>
+        Define the request register before approved order variations are recorded.
+      </div>
+      <div class="commit-alert">
+        <strong>Cashflow</strong>
+        Build the phasing model after commitment and variation request structure is stable.
+      </div>
+    </div>
+  </aside>
+</div>
+{% endblock %}

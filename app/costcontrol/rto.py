@@ -1,14 +1,13 @@
 """RTO helpers — number generation, status rules, suggested-match scoring.
 
-Kept separate from app.py so the routes file stays focused on HTTP
+Kept separate from the routes so the HTTP layer stays focused on request
 plumbing while business rules sit somewhere small and testable.
 """
 from __future__ import annotations
 
 import re
-from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from .models import RTO
@@ -67,6 +66,39 @@ def next_rto_number(db: Session, package_number: str) -> str:
             if n > max_n:
                 max_n = n
     return f"{package_number}.RTO.{max_n + 1:03d}"
+
+
+def get_for_package(db: Session, package_number: str) -> RTO | None:
+    """Return the most recent RTO for a package, or None."""
+    return (
+        db.query(RTO)
+        .filter_by(package_number=package_number)
+        .order_by(RTO.id.desc())
+        .first()
+    )
+
+
+def linked_pos(db: Session, rto_id: int) -> list[dict]:
+    """Return per-PO summary rows for POs currently linked to an RTO."""
+    rows = db.execute(
+        text("""
+            SELECT
+                l.po_number,
+                l.is_original,
+                MIN(p.date)              AS first_date,
+                MAX(p.vendor)            AS vendor,
+                COALESCE(SUM(p.amount),         0) AS order_amount,
+                COALESCE(SUM(p.actual_amount),  0) AS actual_amount,
+                COALESCE(SUM(p.remaining),      0) AS remaining_amount
+            FROM po_rto_links l
+            LEFT JOIN po_lines p ON p.po_number = l.po_number AND p.voided = 0
+            WHERE l.rto_id = :rto_id
+            GROUP BY l.po_number, l.is_original
+            ORDER BY l.is_original DESC, first_date
+        """),
+        {"rto_id": rto_id},
+    ).fetchall()
+    return [dict(row._mapping) for row in rows]
 
 
 # ---------------------------------------------------------------------------

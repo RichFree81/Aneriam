@@ -122,7 +122,7 @@ def _apply_rules(
 
     C-13 (2026-05-04) — R3 (CapEx exclusion zeroing on codes 901/902) has
     been removed. Capitalisation is now detected by PMO Account name and
-    surfaced as a separate metric in app.py rather than by zeroing
+    surfaced as a separate metric in the PO detail route rather than by zeroing
     actual/committed at row level. `actual_cost` and `committed_cost` always
     equal the raw values from PMO.
     """
@@ -258,7 +258,6 @@ def _parse_task_hierarchy(content: bytes) -> list[dict]:
 
         # C-9 — new columns
         project_status = row[col["Status"]].strip() if "Status" in col else ""
-        parent_task_raw = row[col["Parent Task"]].strip() if "Parent Task" in col else ""
         date_created_raw = row[col["Date Created"]].strip() if "Date Created" in col else ""
         last_modified_raw = row[col["Last Modified"]].strip() if "Last Modified" in col else ""
 

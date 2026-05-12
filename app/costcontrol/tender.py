@@ -10,7 +10,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import Package, Tender
+from .models import Tender
 
 
 # Status workflow for a Tender. Slice C only exercises Draft / Issued /
@@ -76,6 +76,16 @@ def next_tender_number(db: Session, package_number: str, package_id: int) -> str
             if n > max_n:
                 max_n = n
     return f"{package_number}.TND.{max_n + 1:03d}"
+
+
+def get_for_package(db: Session, package_id: int) -> Tender | None:
+    """Return the most recent tender for a package, or None."""
+    return (
+        db.query(Tender)
+        .filter_by(package_id=package_id)
+        .order_by(Tender.id.desc())
+        .first()
+    )
 
 
 def weighted_score(scores_by_criterion: dict[int, float], weights_by_criterion: dict[int, float]) -> float | None:

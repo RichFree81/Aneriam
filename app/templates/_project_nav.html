@@ -1,0 +1,25 @@
+{% macro project_tabs(project, active) -%}
+<div class="tab-bar">
+  <a href="/project/{{ project.project_number }}"
+     class="{% if active == 'cost' %}active{% endif %}">Cost Breakdown</a>
+  <a href="/project/{{ project.project_number }}/packages"
+     class="{% if active == 'packages' %}active{% endif %}">Packages</a>
+  <a href="/project/{{ project.project_number }}/commitments"
+     class="{% if active == 'commitments' %}active{% endif %}">Commitments</a>
+</div>
+{%- endmacro %}
+
+{% macro commitments_tabs(project, active) -%}
+<div class="tab-bar" style="margin-bottom:14px;">
+  <a href="/project/{{ project.project_number }}/commitments"
+     class="{% if active == 'overview' %}active{% endif %}">Overview</a>
+  <a href="/project/{{ project.project_number }}/commitments/request-to-order"
+     class="{% if active == 'rto' %}active{% endif %}">Request to Order</a>
+  <a href="/project/{{ project.project_number }}/commitments/purchase-orders"
+     class="{% if active == 'purchase_orders' %}active{% endif %}">Purchase Orders</a>
+  <a href="/project/{{ project.project_number }}/commitments/variation-requests"
+     class="{% if active == 'variation_requests' %}active{% endif %}">Variation Requests</a>
+  <a href="/project/{{ project.project_number }}/commitments/cashflow"
+     class="{% if active == 'cashflow' %}active{% endif %}">Cashflow</a>
+</div>
+{%- endmacro %}

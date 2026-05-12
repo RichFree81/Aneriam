@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_project_nav.html" as nav %}
 {% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
 {% block title %}{{ project.project_number }} — Packages — Cost Control{% endblock %}
 
@@ -22,11 +23,7 @@
       <a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a>
     </div>
     <div class="subheader-title">{{ project.project_number }}: {{ proj_name }}</div>
-    <div class="tab-bar">
-      <a href="/project/{{ project.project_number }}">Cost Work Sheet</a>
-      <a href="/project/{{ project.project_number }}/packages" class="active">Packages</a>
-      <a href="/project/{{ project.project_number }}/purchase-orders">Purchase Orders</a>
-    </div>
+    {{ nav.project_tabs(project, 'packages') }}
   </div>
 </div>
 {% endblock %}

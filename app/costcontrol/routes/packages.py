@@ -1,0 +1,316 @@
+"""Package detail and cost buildup routes."""
+from __future__ import annotations
+
+import json
+from datetime import datetime
+
+from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi.responses import RedirectResponse
+from sqlalchemy.orm import Session
+
+from ..cost_nodes import flatten_cost_nodes, parse_float, process_cost_column
+from ..dependencies import DbDep
+from ..lookups import get_package_or_404, get_project_or_404
+from ..models import ControlAccount, CostNodeAuditLog, PackageCostNode
+from ..reports import project_totals
+from ..templates import templates
+
+
+router = APIRouter()
+
+
+def _package_detail_response(request: Request, db: Session, project_number: str, package_number: str, active_pkg_tab: str):
+    project = get_project_or_404(db, project_number)
+    pkg = get_package_or_404(db, project_number, package_number)
+    totals = project_totals(db, project_number)
+
+    root_nodes = [n for n in pkg.cost_nodes if n.parent_id is None]
+    cost_rows = flatten_cost_nodes(root_nodes)
+
+    all_sections = sorted(
+        [n for n in pkg.cost_nodes if not n.is_item],
+        key=lambda n: n.display_order,
+    )
+    control_accounts = db.query(ControlAccount).order_by(ControlAccount.code).all()
+
+    item_ids = [n.id for n in pkg.cost_nodes if n.is_item]
+    audit_data: dict[int, list] = {}
+    if item_ids:
+        from sqlalchemy import select as sa_select
+        audit_rows = db.execute(
+            sa_select(CostNodeAuditLog)
+            .where(CostNodeAuditLog.cost_node_id.in_(item_ids))
+            .order_by(CostNodeAuditLog.changed_at)
+        ).scalars().all()
+        for row in audit_rows:
+            audit_data.setdefault(row.cost_node_id, []).append({
+                "action": row.action,
+                "changed_at": row.changed_at.strftime("%d %b %Y %H:%M"),
+                "snapshot": json.loads(row.snapshot),
+            })
+
+    return templates.TemplateResponse("package_detail.html", {
+        "request": request,
+        "project": project,
+        "totals": totals,
+        "package": pkg,
+        "cost_rows": cost_rows,
+        "all_sections": all_sections,
+        "control_accounts": control_accounts,
+        "audit_data": audit_data,
+        "active_tab": "packages",
+        "active_pkg_tab": active_pkg_tab,
+    })
+
+
+@router.get("/project/{project_number}/packages/{package_number}/scope")
+def package_scope(project_number: str, package_number: str, request: Request, db: DbDep):
+    return _package_detail_response(request, db, project_number, package_number, "scope")
+
+
+@router.get("/project/{project_number}/packages/{package_number}/schedule")
+def package_schedule(project_number: str, package_number: str, request: Request, db: DbDep):
+    return _package_detail_response(request, db, project_number, package_number, "schedule")
+
+
+@router.get("/project/{project_number}/packages/{package_number}/cost")
+def package_cost(project_number: str, package_number: str, request: Request, db: DbDep):
+    return _package_detail_response(request, db, project_number, package_number, "cost")
+
+
+@router.get("/project/{project_number}/packages/{package_number}/deliverables")
+def package_deliverables(project_number: str, package_number: str, request: Request, db: DbDep):
+    return _package_detail_response(request, db, project_number, package_number, "deliverables")
+
+
+@router.get("/project/{project_number}/packages/{package_number}")
+def package_detail(project_number: str, package_number: str, request: Request, db: DbDep):
+    # Default tab is Cost — Scope/Schedule/Deliverables are hidden from the UI
+    # for the cost-control-focused MVP. Their routes still exist but are
+    # unreachable without typing the URL by hand.
+    return _package_detail_response(request, db, project_number, package_number, "cost")
+
+
+# ---------------------------------------------------------------------------
+# Cost node CRUD routes
+# ---------------------------------------------------------------------------
+
+def _cost_redirect(project_number: str, package_number: str):
+    return RedirectResponse(
+        f"/project/{project_number}/packages/{package_number}/cost",
+        status_code=303,
+    )
+
+
+def _next_sibling_order(pkg, parent_id: int | None) -> int:
+    siblings = [n for n in pkg.cost_nodes if n.parent_id == parent_id]
+    return max((n.display_order for n in siblings), default=-1) + 1
+
+
+def _resolve_parent_id(db: Session, pkg, parent_id_str: str) -> int | None:
+    """Parse a form-supplied parent_id and verify it belongs to *pkg*.
+
+    Raises HTTP 400 if the parent exists but lives in a different package —
+    the FK on `parent_id` only enforces row existence, so without this guard a
+    hand-crafted POST could mis-parent a node into another package and trigger
+    silent cross-package cascade-delete via ON DELETE CASCADE.
+    """
+    if not parent_id_str.strip():
+        return None
+    parent_int = int(parent_id_str)
+    parent = db.get(PackageCostNode, parent_int)
+    if parent is None or parent.package_id != pkg.id:
+        raise HTTPException(status_code=400, detail="Parent must belong to the same package")
+    return parent_int
+
+
+@router.post("/project/{project_number}/packages/{package_number}/cost/add-section")
+def cost_add_section(
+    project_number: str,
+    package_number: str,
+    db: DbDep,
+    code: str = Form(""),
+    description: str = Form(...),
+    parent_id: str = Form(""),
+):
+    pkg = get_package_or_404(db, project_number, package_number)
+    parent_int = _resolve_parent_id(db, pkg, parent_id)
+    node = PackageCostNode(
+        package_id=pkg.id,
+        parent_id=parent_int,
+        code=code.strip(),
+        description=description.strip(),
+        is_item=False,
+        display_order=_next_sibling_order(pkg, parent_int),
+    )
+    db.add(node)
+    db.commit()
+    return _cost_redirect(project_number, package_number)
+
+
+@router.post("/project/{project_number}/packages/{package_number}/cost/update-section/{node_id}")
+def cost_update_section(
+    project_number: str,
+    package_number: str,
+    node_id: int,
+    db: DbDep,
+    code: str = Form(""),
+    description: str = Form(...),
+):
+    pkg = get_package_or_404(db, project_number, package_number)
+    node = db.get(PackageCostNode, node_id)
+    if node is None or node.package_id != pkg.id:
+        raise HTTPException(status_code=404, detail="Cost node not found")
+    node.code = code.strip()
+    node.description = description.strip()
+    db.commit()
+    return _cost_redirect(project_number, package_number)
+
+
+def _write_audit_log(db: Session, node: PackageCostNode, action: str) -> None:
+    log = CostNodeAuditLog(
+        cost_node_id=node.id,
+        action=action,
+        changed_at=datetime.now(),
+        snapshot=json.dumps({
+            "bl_unit": node.unit, "bl_qty": node.qty, "bl_rate": node.rate, "bl_amount": node.baseline_amount,
+            "pa_unit": node.pre_award_unit, "pa_qty": node.pre_award_qty, "pa_rate": node.pre_award_rate, "pa_amount": node.pre_award_amount,
+            "ct_unit": node.contract_unit, "ct_qty": node.contract_qty, "ct_rate": node.contract_rate, "ct_amount": node.contract_amount,
+        }),
+    )
+    db.add(log)
+    db.commit()
+
+
+@router.post("/project/{project_number}/packages/{package_number}/cost/add-item")
+def cost_add_item(
+    project_number: str,
+    package_number: str,
+    db: DbDep,
+    code: str = Form(""),
+    description: str = Form(...),
+    parent_id: str = Form(""),
+    cc_code: str = Form(""),
+    baseline_unit: str = Form("Sum"),
+    baseline_qty: str = Form(""),
+    baseline_rate: str = Form(""),
+    baseline_amount: str = Form(""),
+    pre_award_unit: str = Form("Sum"),
+    pre_award_qty: str = Form(""),
+    pre_award_rate: str = Form(""),
+    pre_award_amount: str = Form(""),
+    contract_unit: str = Form("Sum"),
+    contract_qty: str = Form(""),
+    contract_rate: str = Form(""),
+    contract_amount: str = Form(""),
+):
+    pkg = get_package_or_404(db, project_number, package_number)
+    parent_int = _resolve_parent_id(db, pkg, parent_id)
+    bl_u, bl_q, bl_r, bl_a = process_cost_column(baseline_unit, baseline_qty, baseline_rate, baseline_amount)
+    pa_u, pa_q, pa_r, pa_a = process_cost_column(pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount)
+    ct_u, ct_q, ct_r, ct_a = process_cost_column(contract_unit, contract_qty, contract_rate, contract_amount)
+    node = PackageCostNode(
+        package_id=pkg.id,
+        parent_id=parent_int,
+        code=code.strip(),
+        description=description.strip(),
+        is_item=True,
+        cc_code=cc_code.strip() or None,
+        unit=bl_u, qty=bl_q, rate=bl_r, baseline_amount=bl_a,
+        pre_award_unit=pa_u, pre_award_qty=pa_q, pre_award_rate=pa_r, pre_award_amount=pa_a,
+        contract_unit=ct_u, contract_qty=ct_q, contract_rate=ct_r, contract_amount=ct_a or None,
+        display_order=_next_sibling_order(pkg, parent_int),
+    )
+    db.add(node)
+    db.commit()
+    db.refresh(node)
+    _write_audit_log(db, node, "Created")
+    return _cost_redirect(project_number, package_number)
+
+
+@router.post("/project/{project_number}/packages/{package_number}/cost/update-item/{node_id}")
+def cost_update_item(
+    project_number: str,
+    package_number: str,
+    node_id: int,
+    db: DbDep,
+    code: str = Form(""),
+    description: str = Form(...),
+    cc_code: str = Form(""),
+    baseline_unit: str = Form("Sum"),
+    baseline_qty: str = Form(""),
+    baseline_rate: str = Form(""),
+    baseline_amount: str = Form(""),
+    pre_award_unit: str = Form("Sum"),
+    pre_award_qty: str = Form(""),
+    pre_award_rate: str = Form(""),
+    pre_award_amount: str = Form(""),
+    contract_unit: str = Form("Sum"),
+    contract_qty: str = Form(""),
+    contract_rate: str = Form(""),
+    contract_amount: str = Form(""),
+):
+    pkg = get_package_or_404(db, project_number, package_number)
+    node = db.get(PackageCostNode, node_id)
+    if node is None or node.package_id != pkg.id:
+        raise HTTPException(status_code=404, detail="Cost node not found")
+    bl_u, bl_q, bl_r, bl_a = process_cost_column(baseline_unit, baseline_qty, baseline_rate, baseline_amount)
+    pa_u, pa_q, pa_r, pa_a = process_cost_column(pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount)
+    ct_u, ct_q, ct_r, ct_a = process_cost_column(contract_unit, contract_qty, contract_rate, contract_amount)
+    node.code = code.strip()
+    node.description = description.strip()
+    node.cc_code = cc_code.strip() or None
+    node.unit = bl_u
+    node.qty = bl_q
+    node.rate = bl_r
+    node.baseline_amount = bl_a
+    node.pre_award_unit = pa_u
+    node.pre_award_qty = pa_q
+    node.pre_award_rate = pa_r
+    node.pre_award_amount = pa_a
+    node.contract_unit = ct_u
+    node.contract_qty = ct_q
+    node.contract_rate = ct_r
+    node.contract_amount = ct_a or None
+    db.commit()
+    _write_audit_log(db, node, "Updated")
+    return _cost_redirect(project_number, package_number)
+
+
+@router.post("/project/{project_number}/packages/{package_number}/cost/set-contract/{node_id}")
+def cost_set_contract(
+    project_number: str,
+    package_number: str,
+    node_id: int,
+    db: DbDep,
+    contract_amount: str = Form(""),
+):
+    pkg = get_package_or_404(db, project_number, package_number)
+    node = db.get(PackageCostNode, node_id)
+    if node is None or node.package_id != pkg.id:
+        raise HTTPException(status_code=404, detail="Cost node not found")
+    node.contract_amount = parse_float(contract_amount)
+    db.commit()
+    _write_audit_log(db, node, "Updated")
+    return _cost_redirect(project_number, package_number)
+
+
+@router.post("/project/{project_number}/packages/{package_number}/cost/award")
+def cost_award(project_number: str, package_number: str, db: DbDep):
+    pkg = get_package_or_404(db, project_number, package_number)
+    pkg.is_contracted = True
+    db.commit()
+    return _cost_redirect(project_number, package_number)
+
+
+@router.post("/project/{project_number}/packages/{package_number}/cost/delete-node/{node_id}")
+def cost_delete_node(project_number: str, package_number: str, node_id: int, db: DbDep):
+    pkg = get_package_or_404(db, project_number, package_number)
+    node = db.get(PackageCostNode, node_id)
+    if node is None or node.package_id != pkg.id:
+        raise HTTPException(status_code=404, detail="Cost node not found")
+    db.delete(node)
+    db.commit()
+    return _cost_redirect(project_number, package_number)
+
+

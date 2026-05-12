@@ -26,7 +26,7 @@ The Procurement tab on a package is hidden entirely for internal packages. UI ga
 - **Web framework:** FastAPI (server-rendered, no SPA).
 - **Templates:** Jinja2 — `app/templates/*.html`.
 - **DB:** SQLite (`app/cost_control.db`) accessed via SQLModel / SQLAlchemy 2.x.
-- **Schema migrations:** **none.** Schema is created via `Base.metadata.create_all()` at startup, plus a hand-rolled `ALTER TABLE` list in `app/costcontrol/app.py`. There is no Alembic. Adding a column means appending a `CREATE TABLE`/`ALTER TABLE` string to that list.
+- **Schema migrations:** **none.** Schema is created via `Base.metadata.create_all()` at startup, plus a hand-rolled `ALTER TABLE` list in `app/costcontrol/startup.py`. There is no Alembic. Adding a column means appending a `CREATE TABLE`/`ALTER TABLE` string to that list.
 - **Packaging:** PyInstaller spec at `app/cost_control.spec` produces `cost_control.exe`. Build via `rebuild_exe.bat`.
 - **Entry point:** `app/run.py` — picks a free port from 8090, starts uvicorn, opens the browser.
 
@@ -50,7 +50,11 @@ app/
 │                              #   project_packages, project_purchase_orders,
 │                              #   import, etc.
 └── costcontrol/
-    ├── app.py                 # All routes + startup migrations + SQL queries
+    ├── app.py                 # FastAPI app factory, router registration, startup hook
+    ├── startup.py             # create_all, startup ALTER statements, seed orchestration
+    ├── routes/                # FastAPI route modules by workflow area
+    ├── reports.py             # shared financial roll-up queries
+    ├── capitalisation.py      # capitalisation SQL fragments
     ├── ingest.py              # NetSuite .xls parsers + run_import()
     ├── models.py              # SQLModel tables
     ├── seed.py                # seed_projects, seed_control_accounts,
@@ -68,7 +72,7 @@ Every external package walks through five sub-tabs under its **Procurement** tab
 
 1. **Tender** — issue a tender, register bidders, attach document refs (URLs / network paths). Tender status: `Draft → Issued → Closed → Adjudicating → Awarded → Cancelled`.
 2. **Adjudication** — define weighted criteria (e.g. Price 40, Schedule 25, Technical 25, BBBEE 10), score each bidder against each criterion (0–100), see weighted totals computed by `tender.weighted_score()`.
-3. **Award** — marking a bidder as Awarded triggers `_award_package_to_bidder` in app.py: copies vendor + amount + date onto the Package, sets `is_contracted=True`, advances `package_stage` from `Procurement` to `Execution` (per the Schedule Estimation Standards' four-stage lifecycle), flips Tender to Awarded, demotes any previously-awarded bidder to Shortlisted (re-award path).
+3. **Award** — marking a bidder as Awarded triggers `_award_package_to_bidder` in `routes/procurement.py`: copies vendor + amount + date onto the Package, sets `is_contracted=True`, advances `package_stage` from `Procurement` to `Execution` (per the Schedule Estimation Standards' four-stage lifecycle), flips Tender to Awarded, demotes any previously-awarded bidder to Shortlisted (re-award path).
 4. **Orders (RTO)** — one RTO per external package, numbered `{package}.RTO.NNN`. Walks `Draft → Submitted → Approved → Issued for PO → Cancelled`. NetSuite POs link to it via `po_rto_links`. **First link = Original** (auto-flagged); **subsequent links = Variations**.
 5. **Variance** — Award page rolls up `original_total + variation_total = committed_total`, then `variance = committed_total − awarded_amount` (positive red, negative green).
 
@@ -78,12 +82,12 @@ Internal packages skip all of this — only the Cost Buildup tab applies.
 
 1. **NetSuite exports are SpreadsheetML, not BIFF.** They have `.xls` extensions but are XML. `ingest._parse_rows` already handles this — don't try to use `xlrd` / `openpyxl`.
 2. **Transactions table is the source of truth for money.** All portfolio / project / drilldown SQL groups directly off `transactions`. Don't introduce a separate aggregate table.
-3. **Capitalisation detection lives in one place.** `_build_capitalisation_clauses()` in `app.py` produces `_IS_CAP_SQL` / `_NOT_CAP_SQL`. Use them — don't inline `LIKE '%Capitalised%'` checks. They are unprefixed boolean fragments — interpolate as `CASE WHEN {_NOT_CAP_SQL} THEN ... END`, **not** `t.{_NOT_CAP_SQL}`.
+3. **Capitalisation detection lives in one place.** `costcontrol/capitalisation.py` produces `IS_CAP_SQL` / `NOT_CAP_SQL`. Use them — don't inline `LIKE '%Capitalised%'` checks. They are unprefixed boolean fragments — interpolate as `CASE WHEN {NOT_CAP_SQL} THEN ... END`, **not** `t.{NOT_CAP_SQL}`.
 4. **Tenant isolation does not apply here.** This is a single-user app — no `company_id`, no `get_valid_portfolio`. Don't copy patterns from `backend/app/api/deps.py`.
 5. **Audit log writes are explicit.** `_write_audit_log(db, node, action)` is called by every cost-node mutation route. If you add a new write path, call it; don't rely on column defaults.
 6. **Ingest is idempotent at the batch level, not the row level.** Each `run_import` creates a fresh `ImportBatch` and replaces all transactions. Re-running an import is safe but discards prior batches' rows.
 7. **Don't hand-edit `cost_control.db`.** It's regenerated from inputs + the most recent NetSuite import. To change seed projects or budgets, edit `inputs/active_projects.txt` / `inputs/project_budgets.csv` and restart.
-8. **Schema changes need both a model edit and a startup-migration string.** Adding a column to `models.py` alone won't update existing DBs — append the corresponding `ALTER TABLE` to the list in `app.py` (search for `cost_node_audit_log` for an example).
+8. **Schema changes need both a model edit and a startup-migration string.** Adding a column to `models.py` alone won't update existing DBs — append the corresponding `ALTER TABLE` to the list in `startup.py` (search for `cost_node_audit_log` for an example).
 
 ## Key behaviours and codes
 
@@ -111,7 +115,7 @@ Notable ones:
 ## How to start a session in `app/`
 
 1. Read this file.
-2. If the task involves SQL: read `app/costcontrol/app.py` for query patterns.
+2. If the task involves SQL: read the relevant route module under `app/costcontrol/routes/`, plus `reports.py` or `exports.py` when the query is shared.
 3. If the task involves NetSuite parsing: read `app/costcontrol/ingest.py` (especially `_parse_rows`, the per-source parsers, and `run_import`).
-4. If the task involves cost-build-up UI: read `app/templates/package_detail.html` and the `cost_*` routes in `app.py`.
+4. If the task involves cost-build-up UI: read `app/templates/package_detail.html` and the cost routes in `app/costcontrol/routes/packages.py`.
 5. Don't introduce React, Tailwind, or any frontend framework. This app is intentionally simple HTML + a small amount of vanilla JS in templates.

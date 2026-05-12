@@ -1,5 +1,7 @@
 {% extends "base.html" %}
+{% import "_project_nav.html" as nav %}
 {% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% set commitments_base = "/project/" ~ project.project_number ~ "/commitments" %}
 {% block title %}{{ project.project_number }} — Purchase Orders — Cost Control{% endblock %}
 
 {% block actions_items %}
@@ -18,16 +20,14 @@
       <a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a>
     </div>
     <div class="subheader-title">{{ project.project_number }}: {{ proj_name }}</div>
-    <div class="tab-bar">
-      <a href="/project/{{ project.project_number }}">Cost Work Sheet</a>
-      <a href="/project/{{ project.project_number }}/packages">Packages</a>
-      <a href="/project/{{ project.project_number }}/purchase-orders" class="active">Purchase Orders</a>
-    </div>
+    {{ nav.project_tabs(project, 'commitments') }}
   </div>
 </div>
 {% endblock %}
 
 {% block content %}
+
+{{ nav.commitments_tabs(project, 'purchase_orders') }}
 
 <div class="summary-cards">
   <div class="summary-card sc-main">
@@ -53,15 +53,15 @@
 </div>
 
 <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;">
-  <a href="?filter=all"
+  <a href="{{ commitments_base }}/purchase-orders?filter=all"
      class="btn btn-sm{% if active_filter != 'all' %} btn-ghost{% endif %}">
     All ({{ po_total_count }})
   </a>
-  <a href="?filter=unassigned"
+  <a href="{{ commitments_base }}/purchase-orders?filter=unassigned"
      class="btn btn-sm{% if active_filter != 'unassigned' %} btn-ghost{% endif %}">
     Unassigned ({{ po_unassigned_count }})
   </a>
-  <a href="?filter=linked"
+  <a href="{{ commitments_base }}/purchase-orders?filter=linked"
      class="btn btn-sm{% if active_filter != 'linked' %} btn-ghost{% endif %}">
     Linked ({{ po_linked_count }})
   </a>
@@ -105,7 +105,7 @@
             <span class="chip" style="background:#fff3cd;color:#856404;font-size:10px;margin-left:4px;">Variation</span>
             {% endif %}
             <form method="post"
-                  action="/project/{{ project.project_number }}/purchase-orders/{{ po.po_number }}/unlink"
+                  action="{{ commitments_base }}/purchase-orders/{{ po.po_number }}/unlink"
                   style="display:inline;margin-left:6px;"
                   onsubmit="return confirm('Unlink {{ po.po_number }} from {{ po.linked_rto_number }}?');">
               <button type="submit" class="btn btn-sm btn-ghost"
@@ -197,7 +197,7 @@ function openLinkModal(poNumber) {
   document.getElementById('linkOverlay').classList.add('open');
   document.getElementById('linkModal').classList.add('open');
 
-  fetch(`/project/${PROJECT_NUMBER}/purchase-orders/${poNumber}/link-suggestions`)
+  fetch(`/project/${PROJECT_NUMBER}/commitments/purchase-orders/${poNumber}/link-suggestions`)
     .then(r => r.json())
     .then(renderSuggestions)
     .catch(e => {
@@ -282,7 +282,7 @@ function submitLink(rtoId) {
   if (!currentPo) return;
   const f = document.createElement('form');
   f.method = 'POST';
-  f.action = `/project/${PROJECT_NUMBER}/purchase-orders/${currentPo}/link`;
+  f.action = `/project/${PROJECT_NUMBER}/commitments/purchase-orders/${currentPo}/link`;
   const input = document.createElement('input');
   input.type = 'hidden';
   input.name = 'rto_id';
