@@ -52,7 +52,7 @@
     </div>
     <div class="subheader-title">
       {{ package.package_number }}: {{ package.description }}
-      {% if package.is_external %}
+      {% if package.package_source == 'External' or package.is_external %}
       <span class="chip" style="background:#fdf3e6;color:#8b4513;">External</span>
       {% else %}
       <span class="chip" style="background:#e6f0fb;color:#1a4a70;">Internal</span>
@@ -565,7 +565,7 @@
      ════════════════════════════════════════════════════════ #}
   {% elif active_pkg_tab == 'deliverables' %}
 
-  {% if package.deliverables %}
+  {% if package.documents %}
   <table style="margin-top:0;">
     <thead>
       <tr>
@@ -579,7 +579,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for d in package.deliverables %}
+      {% for d in package.documents %}
       <tr>
         <td style="font-family:monospace;font-size:12px;">{{ d.ref or '—' }}</td>
         <td>
@@ -597,8 +597,8 @@
   </table>
   {% else %}
   <div class="empty-state">
-    <strong>No deliverables registered</strong>
-    Add document deliverables (drawings, specifications, reports, as-builts) for this package.
+    <strong>No documents registered</strong>
+    Add document records (drawings, specifications, reports, as-builts) for this package.
   </div>
   {% endif %}
 

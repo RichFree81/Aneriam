@@ -29,6 +29,154 @@ class Project(Base):
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="project_ref")
     packages: Mapped[list["Package"]] = relationship(back_populates="project_ref", order_by="Package.display_order")
+    scope_items: Mapped[list["ProjectScopeItem"]] = relationship(
+        back_populates="project_ref", cascade="all, delete-orphan", order_by="ProjectScopeItem.id"
+    )
+
+
+class WorkType(Base):
+    __tablename__ = "work_types"
+
+    code: Mapped[str] = mapped_column(String(30), primary_key=True)
+    label: Mapped[str] = mapped_column(Text, nullable=False)
+    requires_modifies_ppe: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    ifrs_treatment: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class PlantArea(Base):
+    __tablename__ = "plant_areas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(4), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    level: Mapped[int] = mapped_column(Integer, nullable=False)
+    parent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("plant_areas.id"), nullable=True)
+    is_ppe: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    useful_life_years: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    asset_class: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sars_tax_classification: Mapped[str | None] = mapped_column(Text, nullable=True)
+    existing_or_new: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+
+class IndirectL2Account(Base):
+    __tablename__ = "indirect_l2_accounts"
+
+    code: Mapped[str] = mapped_column(String(7), primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    parent_l1: Mapped[str] = mapped_column(String(3), ForeignKey("control_accounts.code"), nullable=False)
+
+
+class BudgetReserveSubAccount(Base):
+    __tablename__ = "budget_reserve_subaccounts"
+
+    code: Mapped[str] = mapped_column(String(6), primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    balance: Mapped[float] = mapped_column(Numeric(18, 2, asdecimal=False), nullable=False, default=0)
+
+
+class ProjectScopeItem(Base):
+    __tablename__ = "project_scope_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_number: Mapped[str] = mapped_column(String(20), ForeignKey("projects.project_number"), nullable=False, index=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    work_type_code: Mapped[str | None] = mapped_column(String(30), ForeignKey("work_types.code"), nullable=True)
+    modifies_ppe_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    project_ref: Mapped["Project"] = relationship(back_populates="scope_items")
+    work_type_ref: Mapped["WorkType | None"] = relationship()
+    deliverables: Mapped[list["Deliverable"]] = relationship(
+        back_populates="scope_item_ref", cascade="all, delete-orphan", order_by="Deliverable.cbs_l2_code"
+    )
+
+
+class Deliverable(Base):
+    __tablename__ = "deliverables"
+    __table_args__ = (UniqueConstraint("project_number", "cbs_l2_code"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_number: Mapped[str] = mapped_column(String(20), ForeignKey("projects.project_number"), nullable=False, index=True)
+    scope_item_id: Mapped[int] = mapped_column(Integer, ForeignKey("project_scope_items.id", ondelete="CASCADE"), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    commodity_code: Mapped[str] = mapped_column(String(3), ForeignKey("control_accounts.code"), nullable=False)
+    cbs_l2_code: Mapped[str] = mapped_column(String(6), nullable=False, index=True)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False, default="Provisional")
+    type_discriminator: Mapped[str] = mapped_column(String(20), nullable=False, default="Asset")
+
+    scope_item_ref: Mapped["ProjectScopeItem"] = relationship(back_populates="deliverables")
+    commodity_ref: Mapped["ControlAccount"] = relationship()
+    plant_area_links: Mapped[list["DeliverablePlantArea"]] = relationship(
+        back_populates="deliverable_ref", cascade="all, delete-orphan"
+    )
+    cost_item_codes: Mapped[list["CostItemCode"]] = relationship(
+        back_populates="deliverable_ref", cascade="all, delete-orphan", order_by="CostItemCode.code"
+    )
+
+
+class DeliverablePlantArea(Base):
+    __tablename__ = "deliverable_plant_areas"
+    __table_args__ = (UniqueConstraint("deliverable_id", "plant_area_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    deliverable_id: Mapped[int] = mapped_column(Integer, ForeignKey("deliverables.id", ondelete="CASCADE"), nullable=False)
+    plant_area_id: Mapped[int] = mapped_column(Integer, ForeignKey("plant_areas.id"), nullable=False)
+
+    deliverable_ref: Mapped["Deliverable"] = relationship(back_populates="plant_area_links")
+    plant_area_ref: Mapped["PlantArea"] = relationship()
+
+
+class CostItemCode(Base):
+    __tablename__ = "cost_item_codes"
+    __table_args__ = (
+        UniqueConstraint("project_number", "code"),
+        UniqueConstraint("deliverable_id", "sequence"),
+        UniqueConstraint("indirect_l2_code", "sequence"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_number: Mapped[str] = mapped_column(String(20), ForeignKey("projects.project_number"), nullable=False, index=True)
+    deliverable_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("deliverables.id", ondelete="CASCADE"), nullable=True)
+    indirect_l2_code: Mapped[str | None] = mapped_column(String(7), ForeignKey("indirect_l2_accounts.code"), nullable=True)
+    code: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="custom")
+
+    deliverable_ref: Mapped["Deliverable | None"] = relationship(back_populates="cost_item_codes")
+    indirect_l2_ref: Mapped["IndirectL2Account | None"] = relationship()
+
+
+class PackageCostItem(Base):
+    __tablename__ = "package_cost_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    package_id: Mapped[int] = mapped_column(Integer, ForeignKey("packages.id", ondelete="CASCADE"), nullable=False, index=True)
+    cost_item_code_id: Mapped[int] = mapped_column(Integer, ForeignKey("cost_item_codes.id"), nullable=False, index=True)
+    cbs_l2_code: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    value: Mapped[float] = mapped_column(Numeric(18, 2, asdecimal=False), nullable=False, default=0)
+    provisional: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="Draft")
+    superseded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    superseded_by_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("package_cost_items.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now())
+
+    package_ref: Mapped["Package"] = relationship(back_populates="cost_items", foreign_keys=[package_id])
+    cost_item_code_ref: Mapped["CostItemCode"] = relationship()
+
+
+class CostControlAuditLog(Base):
+    __tablename__ = "cost_control_audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_number: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(60), nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    target_type: Mapped[str] = mapped_column(String(40), nullable=False, default="")
+    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
 
 class ImportBatch(Base):
@@ -206,6 +354,9 @@ class Package(Base):
     # tender → adjudication → award → RTO → original PO → variations.
     # Default is set per package_type at seed time (see seed.default_is_external).
     is_external: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    package_source: Mapped[str] = mapped_column(String(20), nullable=False, default="Internal")
+    pricing_basis: Mapped[str] = mapped_column(String(10), nullable=False, default="LS")
+    planned_value: Mapped[float] = mapped_column(Numeric(18, 2, asdecimal=False), nullable=False, default=0)
     # Procurement-side post-award fields. Only meaningful when is_external=True.
     awarded_vendor_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     awarded_amount: Mapped[float | None] = mapped_column(Numeric(18, 2, asdecimal=False), nullable=True)
@@ -232,7 +383,10 @@ class Package(Base):
         cascade="all, delete-orphan",
         foreign_keys="PackageCostNode.package_id",
     )
-    deliverables: Mapped[list["PackageDeliverable"]] = relationship(
+    cost_items: Mapped[list["PackageCostItem"]] = relationship(
+        back_populates="package_ref", cascade="all, delete-orphan", order_by="PackageCostItem.id"
+    )
+    documents: Mapped[list["PackageDocument"]] = relationship(
         back_populates="package_ref", cascade="all, delete-orphan"
     )
 
@@ -354,8 +508,8 @@ class CostNodeAuditLog(Base):
     snapshot: Mapped[str] = mapped_column(Text, nullable=False)  # JSON
 
 
-class PackageDeliverable(Base):
-    __tablename__ = "package_deliverables"
+class PackageDocument(Base):
+    __tablename__ = "package_documents"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     package_id: Mapped[int] = mapped_column(Integer, ForeignKey("packages.id", ondelete="CASCADE"), nullable=False)
@@ -368,7 +522,7 @@ class PackageDeliverable(Base):
     actual_issue_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     location_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    package_ref: Mapped["Package"] = relationship(back_populates="deliverables")
+    package_ref: Mapped["Package"] = relationship(back_populates="documents")
 
 
 class RTO(Base):

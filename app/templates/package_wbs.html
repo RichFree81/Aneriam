@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% set pkg_base = "/project/" ~ project.project_number ~ "/packages/" ~ package.package_number %}
+{% block title %}{{ package.package_number }} - WBS - Cost Control{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb"><a href="/">Portfolio</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}/packages">WBS</a></div>
+    <div class="subheader-title">
+      {{ package.package_number }}: {{ package.description }}
+      <span class="chip">{{ package.package_source }}</span>
+      <span class="chip">{{ "Awarded" if package.is_contracted else "Planned" }}</span>
+    </div>
+    <div class="tab-bar">
+      <a href="{{ pkg_base }}/cost" class="active">Cost Items</a>
+      {% if package.is_external %}<a href="{{ pkg_base }}/tender">Procurement</a>{% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="summary-cards">
+  <div class="summary-card"><div class="sc-label">Pricing basis</div><div class="sc-value">{{ package.pricing_basis }}</div></div>
+  <div class="summary-card"><div class="sc-label">Package category</div><div class="sc-value">{{ package.package_type }}</div></div>
+  <div class="summary-card"><div class="sc-label">Planned value</div><div class="sc-value">{{ package.planned_value | zar }}</div></div>
+  <div class="summary-card"><div class="sc-label">Awarded value</div><div class="sc-value">{{ (package.awarded_amount or 0) | zar }}</div></div>
+</div>
+
+<div class="card">
+  <h2>Package Metadata</h2>
+  <form method="post" action="{{ pkg_base }}/cost/update-package" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;">
+    <label>Package source
+      <select name="package_source">
+        {% for src in ["External", "Internal", "Client"] %}<option value="{{ src }}" {% if package.package_source == src %}selected{% endif %}>{{ src }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Pricing basis
+      <select name="pricing_basis">
+        {% for code, label in pricing_bases.items() %}<option value="{{ code }}" {% if package.pricing_basis == code %}selected{% endif %}>{{ code }} - {{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Package category<input name="package_type" value="{{ package.package_type }}"></label>
+    <label>Planned value<input name="planned_value" type="number" step="0.01" min="0" value="{{ package.planned_value or 0 }}"></label>
+    <button class="btn btn-sm" type="submit">Save</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Cost Item Lines</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th style="width:190px;">Deliverable / L2</th>
+        <th style="width:190px;">Cost Item Code / L3</th>
+        <th style="width:110px;">Type</th>
+        <th class="num" style="width:130px;">Value</th>
+        <th style="width:60px;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in package.cost_items %}
+      <tr {% if item.superseded %}style="text-decoration:line-through;color:#999;"{% endif %}>
+        <td>{{ item.description }}</td>
+        <td>{{ item.cbs_l2_code }}</td>
+        <td><span style="font-family:monospace;">{{ item.cost_item_code_ref.code }}</span> - {{ item.cost_item_code_ref.name }}</td>
+        <td>
+          {% if item.superseded %}<span class="badge">Superseded</span>
+          {% elif item.status == 'Awarded' %}<span class="badge">Awarded</span>
+          {% elif item.provisional %}<span class="chip">PS</span>
+          {% else %}<span class="badge">Firm</span>{% endif %}
+        </td>
+        <td class="num">{{ item.value | zar }}</td>
+        <td>
+          {% if not package.is_contracted %}
+          <form method="post" action="{{ pkg_base }}/cost/delete-line/{{ item.id }}" onsubmit="return confirm('Delete this line?')">
+            <button class="btn btn-sm btn-ghost" type="submit">Del</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      {% if not package.cost_items %}
+      <tr><td colspan="6" class="empty-state">No cost item lines yet.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Create Cost Item Code</h2>
+  <form method="post" action="{{ pkg_base }}/cost/create-code" style="display:grid;grid-template-columns:120px 1.5fr 1.5fr 1fr auto;gap:10px;align-items:end;">
+    <label>L2 type
+      <select name="l2_kind">
+        <option value="deliverable">Deliverable</option>
+        <option value="indirect">Indirect</option>
+      </select>
+    </label>
+    <label>Deliverable
+      <select name="deliverable_id">
+        {% for d in deliverables %}<option value="{{ d.id }}">{{ d.cbs_l2_code }} - {{ d.description }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Indirect L2
+      <select name="indirect_l2_code">
+        {% for l2 in indirect_l2 %}<option value="{{ l2.code }}">{{ l2.code }} - {{ l2.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Name
+      <input name="name" list="cost-item-library" required>
+      <datalist id="cost-item-library">
+        {% for n in direct_library %}<option value="{{ n }}"></option>{% endfor %}
+        {% for n in indirect_library %}<option value="{{ n }}"></option>{% endfor %}
+      </datalist>
+    </label>
+    <input type="hidden" name="source" value="custom">
+    <button class="btn btn-sm" type="submit">Create Code</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Add Cost Item Line</h2>
+  <form method="post" action="{{ pkg_base }}/cost/add-line" style="display:grid;grid-template-columns:1.5fr 2fr 120px 120px 150px auto;gap:10px;align-items:end;">
+    <label>Cost Item Code
+      <select name="cost_item_code_id" required>
+        {% for code in cost_codes %}<option value="{{ code.id }}">{{ code.code }} - {{ code.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Description<input name="description" required></label>
+    <label>Value<input name="value" type="number" min="0" step="0.01" required></label>
+    <label>Type
+      <select name="line_type">
+        <option value="firm">Firm</option>
+        <option value="ps">PS</option>
+      </select>
+    </label>
+    <label title="Use only when replacing an existing provisional sum at the same Package x Cost Item Code intersection.">Supersede PS?
+      <select name="confirm_supersede">
+        <option value="">No</option>
+        <option value="yes">Yes</option>
+      </select>
+    </label>
+    <button class="btn btn-sm" type="submit">Add Line</button>
+  </form>
+</div>
+
+{% if not package.is_contracted %}
+<div class="card">
+  <h2>Award Package</h2>
+  <form method="post" action="{{ pkg_base }}/cost/award" onsubmit="return confirm('Award this package? Award validation will block missing Scope/Plant metadata.')">
+    <button class="btn btn-sm" type="submit">Award Package</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

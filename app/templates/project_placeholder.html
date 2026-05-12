@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% import "_project_nav.html" as nav %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% block title %}{{ project.project_number }} - {{ heading }} - Cost Control{% endblock %}
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb"><a href="/">Portfolio</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a></div>
+    <div class="subheader-title">{{ project.project_number }}: {{ proj_name }}</div>
+    {{ nav.project_tabs(project, active_tab) }}
+  </div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="empty-state">
+    <strong>{{ heading }}</strong>
+    {{ message }}
+  </div>
+</div>
+{% endblock %}

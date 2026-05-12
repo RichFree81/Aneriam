@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% import "_project_nav.html" as nav %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% set reserve = cbs[0].reserve %}
+{% set indirect_l2 = cbs[1].indirect_l2 %}
+{% set deliverables = cbs[2].deliverables %}
+{% set codes = cbs[3].codes %}
+{% set totals = cbs[3].totals %}
+{% set ps_codes = cbs[3].ps_codes %}
+{% block title %}{{ project.project_number }} - CBS - Cost Control{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb"><a href="/">Portfolio</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a></div>
+    <div class="subheader-title">{{ project.project_number }}: {{ proj_name }}</div>
+    {{ nav.project_tabs(project, 'cbs') }}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th style="width:120px;">Code</th>
+        <th>Name</th>
+        <th style="width:120px;">Type</th>
+        <th class="num" style="width:140px;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="hier-l1"><td>101</td><td>Budget Reserves</td><td>Cost Category</td><td></td></tr>
+      {% for row in reserve %}
+      <tr class="hier-l2"><td>{{ row.code }}</td><td class="hier-indent-1">{{ row.name }}</td><td>Reserve</td><td class="num">{{ row.balance | zar }}</td></tr>
+      {% endfor %}
+
+      {% for l1 in ["102", "103"] %}
+      <tr class="hier-l1"><td>{{ l1 }}</td><td>{{ "EPCM" if l1 == "102" else "Preliminaries" }}</td><td>Cost Category</td><td></td></tr>
+      {% for l2 in indirect_l2 if l2.parent_l1 == l1 %}
+      <tr class="hier-l2"><td>{{ l2.code }}</td><td class="hier-indent-1">{{ l2.name }}</td><td>Indirect L2</td><td></td></tr>
+      {% for code in codes if code.indirect_l2_code == l2.code %}
+      <tr class="hier-l3">
+        <td>{{ code.code }}</td>
+        <td class="hier-indent-2">{{ code.name }}{% if code.source == 'custom' %} <span class="badge">(custom)</span>{% endif %}{% if code.code in ps_codes %} <span class="chip">PS</span>{% endif %}</td>
+        <td>Cost Item Code</td>
+        <td class="num">{{ totals.get(code.code, 0) | zar }}</td>
+      </tr>
+      {% endfor %}
+      {% endfor %}
+      {% endfor %}
+
+      {% for l1 in ["201", "202", "203", "204", "205", "206"] %}
+      <tr class="hier-l1"><td>{{ l1 }}</td><td>Cost Category</td><td>Cost Category</td><td></td></tr>
+      {% for d in deliverables if d.commodity_code == l1 %}
+      <tr class="hier-l2"><td>{{ d.cbs_l2_code }}</td><td class="hier-indent-1">{{ d.description }}</td><td>Deliverable</td><td></td></tr>
+      {% for code in codes if code.deliverable_id == d.id %}
+      <tr class="hier-l3">
+        <td>{{ code.code }}</td>
+        <td class="hier-indent-2">{{ code.name }}{% if code.source == 'custom' %} <span class="badge">(custom)</span>{% endif %}{% if code.code in ps_codes %} <span class="chip">PS</span>{% endif %}</td>
+        <td>Cost Item Code</td>
+        <td class="num">{{ totals.get(code.code, 0) | zar }}</td>
+      </tr>
+      {% endfor %}
+      {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

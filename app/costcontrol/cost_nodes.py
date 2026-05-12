@@ -37,6 +37,12 @@ def flatten_cost_nodes(nodes: list[Any], depth: int = 0, ancestor_ids: tuple[int
 
 def package_effective_total(pkg: Any) -> float:
     """Sum the most mature amount on each item node for one package."""
+    if hasattr(pkg, "cost_items") and pkg.cost_items:
+        return sum(
+            float(item.value or 0)
+            for item in pkg.cost_items
+            if not getattr(item, "superseded", False)
+        )
     total = 0.0
     for node in pkg.cost_nodes:
         if node.is_item:

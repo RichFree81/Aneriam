@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from .config import REGISTER_DIR
 from .database import Base, SessionLocal, engine
 from .packages_ingest import seed_packages
-from .seed import seed_control_accounts, seed_projects
+from .seed import seed_control_accounts, seed_cost_control_master_data, seed_projects
 
 
 logger = logging.getLogger(__name__)
@@ -89,6 +89,12 @@ STARTUP_MIGRATIONS: tuple[str, ...] = (
         " 'Engineering Construction Package',"
         " 'Supply Package')"
     ),
+    # WBS/PBS/CBS rebuild.
+    "ALTER TABLE package_deliverables RENAME TO package_documents",
+    "ALTER TABLE packages ADD COLUMN package_source TEXT NOT NULL DEFAULT 'Internal'",
+    "ALTER TABLE packages ADD COLUMN pricing_basis TEXT NOT NULL DEFAULT 'LS'",
+    "ALTER TABLE packages ADD COLUMN planned_value NUMERIC(18,2) NOT NULL DEFAULT 0",
+    "UPDATE packages SET package_source = CASE WHEN is_external = 1 THEN 'External' ELSE 'Internal' END",
 )
 
 
@@ -97,6 +103,9 @@ def _is_expected_sqlite_migration_error(exc: Exception) -> bool:
     expected_fragments = (
         "duplicate column name",
         "no such column",
+        "unknown column",
+        "there is already another table",
+        "no such table",
     )
     return any(fragment in message for fragment in expected_fragments)
 
@@ -129,6 +138,7 @@ def initialise_database() -> None:
     try:
         run_startup_migrations(db)
         seed_control_accounts(db)
+        seed_cost_control_master_data(db)
         seed_projects(db)
         seed_packages(db, REGISTER_DIR)
     finally:

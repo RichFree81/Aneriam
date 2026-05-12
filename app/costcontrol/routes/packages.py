@@ -8,10 +8,20 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from ..cbs import award_package, create_cost_item_line, next_cost_item_code, plan_package
 from ..cost_nodes import flatten_cost_nodes, parse_float, process_cost_column
 from ..dependencies import DbDep
 from ..lookups import get_package_or_404, get_project_or_404
-from ..models import ControlAccount, CostNodeAuditLog, PackageCostNode
+from ..models import (
+    ControlAccount,
+    CostItemCode,
+    CostNodeAuditLog,
+    Deliverable,
+    IndirectL2Account,
+    PackageCostItem,
+    PackageCostNode,
+)
+from ..seed import COST_ITEM_LIBRARY_DIRECT, COST_ITEM_LIBRARY_INDIRECT, PRICING_BASES
 from ..reports import project_totals
 from ..templates import templates
 
@@ -23,6 +33,32 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
     project = get_project_or_404(db, project_number)
     pkg = get_package_or_404(db, project_number, package_number)
     totals = project_totals(db, project_number)
+
+    if active_pkg_tab == "cost":
+        deliverables = (
+            db.query(Deliverable)
+            .filter_by(project_number=project_number)
+            .order_by(Deliverable.cbs_l2_code)
+            .all()
+        )
+        indirect_l2 = db.query(IndirectL2Account).order_by(IndirectL2Account.code).all()
+        cost_codes = db.query(CostItemCode).filter_by(project_number=project_number).order_by(CostItemCode.code).all()
+        award_errors = []
+        return templates.TemplateResponse("package_wbs.html", {
+            "request": request,
+            "project": project,
+            "totals": totals,
+            "package": pkg,
+            "deliverables": deliverables,
+            "indirect_l2": indirect_l2,
+            "cost_codes": cost_codes,
+            "direct_library": COST_ITEM_LIBRARY_DIRECT,
+            "indirect_library": COST_ITEM_LIBRARY_INDIRECT,
+            "pricing_bases": PRICING_BASES,
+            "award_errors": award_errors,
+            "active_tab": "wbs",
+            "active_pkg_tab": active_pkg_tab,
+        })
 
     root_nodes = [n for n in pkg.cost_nodes if n.parent_id is None]
     cost_rows = flatten_cost_nodes(root_nodes)
@@ -58,7 +94,7 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
         "all_sections": all_sections,
         "control_accounts": control_accounts,
         "audit_data": audit_data,
-        "active_tab": "packages",
+        "active_tab": "wbs",
         "active_pkg_tab": active_pkg_tab,
     })
 
@@ -100,6 +136,127 @@ def _cost_redirect(project_number: str, package_number: str):
         f"/project/{project_number}/packages/{package_number}/cost",
         status_code=303,
     )
+
+
+@router.post("/project/{project_number}/packages/{package_number}/cost/update-package")
+def cost_update_package(
+    project_number: str,
+    package_number: str,
+    db: DbDep,
+    package_source: str = Form("Internal"),
+    pricing_basis: str = Form("LS"),
+    package_type: str = Form(""),
+    planned_value: str = Form("0"),
+):
+    pkg = get_package_or_404(db, project_number, package_number)
+    if package_source not in ("External", "Internal", "Client"):
+        raise HTTPException(status_code=400, detail="Package source must be External, Internal, or Client")
+    if pricing_basis not in PRICING_BASES:
+        raise HTTPException(status_code=400, detail="Invalid pricing basis")
+    pkg.package_source = package_source
+    pkg.is_external = package_source == "External"
+    pkg.pricing_basis = pricing_basis
+    if package_type.strip():
+        pkg.package_type = package_type.strip()
+    try:
+        planned = float(planned_value or 0)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Planned value must be numeric") from exc
+    try:
+        plan_package(db, pkg, planned)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return _cost_redirect(project_number, package_number)
+
+
+@router.post("/project/{project_number}/packages/{package_number}/cost/create-code")
+def cost_create_code(
+    project_number: str,
+    package_number: str,
+    db: DbDep,
+    l2_kind: str = Form(...),
+    deliverable_id: str = Form(""),
+    indirect_l2_code: str = Form(""),
+    name: str = Form(...),
+    source: str = Form("custom"),
+):
+    get_package_or_404(db, project_number, package_number)
+    deliverable = None
+    indirect_code = None
+    if l2_kind == "deliverable":
+        deliverable = db.get(Deliverable, int(deliverable_id))
+        if deliverable is None or deliverable.project_number != project_number:
+            raise HTTPException(status_code=404, detail="Deliverable not found")
+    elif l2_kind == "indirect":
+        if db.get(IndirectL2Account, indirect_l2_code) is None:
+            raise HTTPException(status_code=404, detail="Indirect L2 account not found")
+        indirect_code = indirect_l2_code
+    else:
+        raise HTTPException(status_code=400, detail="L2 kind must be deliverable or indirect")
+    code, seq, _ = next_cost_item_code(
+        db,
+        project_number,
+        deliverable=deliverable,
+        indirect_l2_code=indirect_code,
+    )
+    db.add(CostItemCode(
+        project_number=project_number,
+        deliverable_id=deliverable.id if deliverable else None,
+        indirect_l2_code=indirect_code,
+        code=code,
+        sequence=seq,
+        name=name.strip(),
+        source="library" if source == "library" else "custom",
+    ))
+    db.commit()
+    return _cost_redirect(project_number, package_number)
+
+
+@router.post("/project/{project_number}/packages/{package_number}/cost/add-line")
+def cost_add_line(
+    project_number: str,
+    package_number: str,
+    db: DbDep,
+    cost_item_code_id: int = Form(...),
+    description: str = Form(...),
+    value: str = Form(...),
+    line_type: str = Form("firm"),
+    confirm_supersede: str = Form(""),
+):
+    pkg = get_package_or_404(db, project_number, package_number)
+    code = db.get(CostItemCode, cost_item_code_id)
+    if code is None or code.project_number != project_number:
+        raise HTTPException(status_code=404, detail="Cost Item Code not found")
+    try:
+        amount = float(value or 0)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Value must be numeric") from exc
+    try:
+        create_cost_item_line(
+            db,
+            pkg,
+            code,
+            description.strip(),
+            amount,
+            provisional=line_type == "ps",
+            confirm_supersede=confirm_supersede == "yes",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return _cost_redirect(project_number, package_number)
+
+
+@router.post("/project/{project_number}/packages/{package_number}/cost/delete-line/{line_id}")
+def cost_delete_line(project_number: str, package_number: str, line_id: int, db: DbDep):
+    pkg = get_package_or_404(db, project_number, package_number)
+    line = db.get(PackageCostItem, line_id)
+    if line is None or line.package_id != pkg.id:
+        raise HTTPException(status_code=404, detail="Cost Item line not found")
+    db.delete(line)
+    db.commit()
+    return _cost_redirect(project_number, package_number)
 
 
 def _next_sibling_order(pkg, parent_id: int | None) -> int:
@@ -298,8 +455,12 @@ def cost_set_contract(
 @router.post("/project/{project_number}/packages/{package_number}/cost/award")
 def cost_award(project_number: str, package_number: str, db: DbDep):
     pkg = get_package_or_404(db, project_number, package_number)
-    pkg.is_contracted = True
-    db.commit()
+    try:
+        award_package(db, pkg)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _cost_redirect(project_number, package_number)
 
 

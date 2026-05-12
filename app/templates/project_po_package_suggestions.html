@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% import "_project_nav.html" as nav %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% block title %}{{ project.project_number }} - PO Package Suggestions - Cost Control{% endblock %}
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb"><a href="/">Portfolio</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a></div>
+    <div class="subheader-title">{{ project.project_number }}: {{ proj_name }}</div>
+    {{ nav.project_tabs(project, 'wbs') }}
+  </div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="card">
+  <table>
+    <thead><tr><th>PO</th><th>Memo (Main)</th><th class="num">Order value</th><th>Suggested Package</th></tr></thead>
+    <tbody>
+      {% for row in suggestions %}
+      <tr>
+        <td>{{ row.po_number }}</td>
+        <td>{{ row.memo_main }}</td>
+        <td class="num">{{ row.amount | zar }}</td>
+        <td>{% if row.suggested_package %}<strong>{{ row.suggested_package }}</strong> - {{ row.suggested_description }}{% else %}<span class="meta">No suggestion</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      {% if not suggestions %}<tr><td colspan="4" class="empty-state">No purchase orders found for this project.</td></tr>{% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

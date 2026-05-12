@@ -9,11 +9,23 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..capitalisation import IS_CAP_SQL, NOT_CAP_SQL
+from ..cbs import cbs_rows, next_deliverable_code, po_package_suggestions, scope_item_state
 from ..cost_nodes import package_effective_total
 from ..dependencies import DbDep
 from ..hierarchy import build_hierarchy
 from ..lookups import get_project_or_404
-from ..models import ImportBatch, Package, PORtoLink, RTO
+from ..models import (
+    ControlAccount,
+    Deliverable,
+    DeliverablePlantArea,
+    ImportBatch,
+    Package,
+    PlantArea,
+    PORtoLink,
+    ProjectScopeItem,
+    RTO,
+    WorkType,
+)
 from .. import rto as rto_helpers
 from ..reports import project_totals
 from ..templates import templates
@@ -203,7 +215,171 @@ def project_page(
         "filter_date_to": date_to,
         "po_total_count": po_total,
         "po_unassigned_count": po_unassigned,
-        "active_tab": "cost",
+        "active_tab": "dashboard",
+    })
+
+
+@router.get("/project/{project_number}/scope")
+def project_scope_page(
+    project_number: str,
+    request: Request,
+    db: DbDep,
+    work_type: str = "",
+    plant_area: str = "",
+    state: str = "",
+):
+    project = get_project_or_404(db, project_number)
+    scope_items = (
+        db.query(ProjectScopeItem)
+        .filter_by(project_number=project_number)
+        .order_by(ProjectScopeItem.id)
+        .all()
+    )
+    work_types = db.query(WorkType).order_by(WorkType.label).all()
+    plant_areas = db.query(PlantArea).order_by(PlantArea.code).all()
+    commodities = (
+        db.query(ControlAccount)
+        .filter(ControlAccount.code.in_(("201", "202", "203", "204", "205", "206")))
+        .order_by(ControlAccount.code)
+        .all()
+    )
+
+    rows = []
+    for item in scope_items:
+        item_state = scope_item_state(item)
+        if work_type and item.work_type_code != work_type:
+            continue
+        if state and item_state != state:
+            continue
+        deliverables = []
+        for deliverable in item.deliverables:
+            area_codes = [link.plant_area_ref.code for link in deliverable.plant_area_links]
+            if plant_area and plant_area not in area_codes:
+                continue
+            if state and deliverable.state != state and item_state != state:
+                continue
+            deliverables.append(deliverable)
+        rows.append({"item": item, "state": item_state, "deliverables": deliverables})
+
+    return templates.TemplateResponse("project_scope.html", {
+        "request": request,
+        "project": project,
+        "rows": rows,
+        "work_types": work_types,
+        "plant_areas": plant_areas,
+        "commodities": commodities,
+        "filters": {"work_type": work_type, "plant_area": plant_area, "state": state},
+        "active_tab": "scope",
+    })
+
+
+@router.post("/project/{project_number}/scope/add-item")
+def project_scope_add_item(
+    project_number: str,
+    db: DbDep,
+    description: str = Form(...),
+    work_type_code: str = Form(""),
+    modifies_ppe_reference: str = Form(""),
+):
+    get_project_or_404(db, project_number)
+    db.add(ProjectScopeItem(
+        project_number=project_number,
+        description=description.strip(),
+        work_type_code=work_type_code.strip() or None,
+        modifies_ppe_reference=modifies_ppe_reference.strip() or None,
+    ))
+    db.commit()
+    return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
+
+
+@router.post("/project/{project_number}/scope/add-deliverable")
+def project_scope_add_deliverable(
+    project_number: str,
+    db: DbDep,
+    scope_item_id: int = Form(...),
+    description: str = Form(...),
+    commodity_code: str = Form(...),
+    plant_area_ids: list[int] = Form(default=[]),
+):
+    get_project_or_404(db, project_number)
+    scope_item = db.get(ProjectScopeItem, scope_item_id)
+    if scope_item is None or scope_item.project_number != project_number:
+        raise HTTPException(status_code=404, detail="Scope Item not found")
+    if commodity_code not in ("201", "202", "203", "204", "205", "206"):
+        raise HTTPException(status_code=400, detail="Deliverable commodity must be a direct Cost Category")
+    code, seq = next_deliverable_code(db, project_number, commodity_code)
+    deliverable = Deliverable(
+        project_number=project_number,
+        scope_item_id=scope_item.id,
+        description=description.strip(),
+        commodity_code=commodity_code,
+        cbs_l2_code=code,
+        sequence=seq,
+    )
+    db.add(deliverable)
+    db.flush()
+    for plant_area_id in plant_area_ids:
+        if db.get(PlantArea, plant_area_id) is not None:
+            db.add(DeliverablePlantArea(deliverable_id=deliverable.id, plant_area_id=plant_area_id))
+    db.commit()
+    return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
+
+
+@router.get("/project/{project_number}/cbs")
+def project_cbs_page(project_number: str, request: Request, db: DbDep):
+    project = get_project_or_404(db, project_number)
+    return templates.TemplateResponse("project_cbs.html", {
+        "request": request,
+        "project": project,
+        "cbs": cbs_rows(db, project_number),
+        "active_tab": "cbs",
+    })
+
+
+@router.get("/project/{project_number}/po-package-suggestions")
+def project_po_package_suggestions(project_number: str, request: Request, db: DbDep):
+    project = get_project_or_404(db, project_number)
+    return templates.TemplateResponse("project_po_package_suggestions.html", {
+        "request": request,
+        "project": project,
+        "suggestions": po_package_suggestions(db, project_number),
+        "active_tab": "wbs",
+    })
+
+
+@router.get("/project/{project_number}/analysis")
+def project_analysis_placeholder(project_number: str, request: Request, db: DbDep):
+    project = get_project_or_404(db, project_number)
+    return templates.TemplateResponse("project_placeholder.html", {
+        "request": request,
+        "project": project,
+        "active_tab": "analysis",
+        "heading": "Analysis",
+        "message": "Pivoted cost views and performance indicators are deferred for this rebuild.",
+    })
+
+
+@router.get("/project/{project_number}/changes")
+def project_changes_placeholder(project_number: str, request: Request, db: DbDep):
+    project = get_project_or_404(db, project_number)
+    return templates.TemplateResponse("project_placeholder.html", {
+        "request": request,
+        "project": project,
+        "active_tab": "changes",
+        "heading": "Changes",
+        "message": "Variation, compensation event, and trend tracking are deferred for this rebuild.",
+    })
+
+
+@router.get("/project/{project_number}/closeout")
+def project_closeout_placeholder(project_number: str, request: Request, db: DbDep):
+    project = get_project_or_404(db, project_number)
+    return templates.TemplateResponse("project_placeholder.html", {
+        "request": request,
+        "project": project,
+        "active_tab": "closeout",
+        "heading": "Closeout",
+        "message": "Capitalisation closeout is deferred; PBS and Work Type hooks are now in place.",
     })
 
 
@@ -513,7 +689,7 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
         "pkg_stats": pkg_stats,
         "po_total_count": po_total,
         "po_unassigned_count": po_unassigned,
-        "active_tab": "packages",
+        "active_tab": "wbs",
     })
 
 

@@ -7,7 +7,13 @@ C-19 (2026-05-04) — active project list moved out of this file into
 import csv
 from sqlalchemy.orm import Session
 from .config import ACTIVE_PROJECTS_FILE, PROJECT_BUDGETS_FILE
-from .models import ControlAccount, Project
+from .models import (
+    BudgetReserveSubAccount,
+    ControlAccount,
+    IndirectL2Account,
+    Project,
+    WorkType,
+)
 
 PACKAGE_TYPES = (
     "Design Package",
@@ -65,6 +71,66 @@ ESTIMATION_STANDARD_BY_TYPE: dict[str, str] = {
 }
 
 SCHEDULE_STAGES = ("Definition", "Procurement", "Execution", "Close-out")
+
+PRICING_BASES = {
+    "BOQ": "Bill of Quantities",
+    "AS": "Activity Schedule",
+    "TC": "Target Cost",
+    "DC": "Defined Cost",
+    "PL": "Price List",
+    "TM": "Time & Materials",
+    "LS": "Lump Sum",
+}
+
+WORK_TYPES = [
+    ("NewBuild", "New Build", False, "Capitalises to new PPE (IAS 16.7)"),
+    ("TieIn", "Tie-in", True, "Capitalises to existing PPE (IAS 16.13)"),
+    ("Upgrade", "Upgrade", True, "Capitalises to existing PPE (IAS 16.13)"),
+    ("Replacement", "Replacement", True, "Capitalises and derecognises replaced component (IAS 16.70)"),
+    ("MajorOverhaul", "Major Overhaul", True, "Conditional capitalisation (IAS 16.14)"),
+    ("Maintenance", "Maintenance", False, "Expensed repair and maintenance (IAS 16.12)"),
+    ("Indirect", "Indirect", False, "Allocated per directly-attributable cost rules where applicable"),
+]
+
+INDIRECT_L2_ACCOUNTS = [
+    ("102.001", "Engineering", "102"),
+    ("102.002", "Construction management", "102"),
+    ("102.003", "Procurement & expediting", "102"),
+    ("102.099", "EPCM - provisional sums", "102"),
+    ("103.001", "Site establishment & accommodation", "103"),
+    ("103.002", "Insurance & bonds", "103"),
+    ("103.003", "Permits, surveys & legal", "103"),
+    ("103.099", "Preliminaries - provisional sums", "103"),
+]
+
+BUDGET_RESERVE_SUBACCOUNTS = [
+    ("101.01", "Unallocated", "Free pool - approved budget not yet committed"),
+    ("101.02", "Provisional Allocation", "Planned-but-not-awarded package values"),
+]
+
+COST_ITEM_LIBRARY_DIRECT = (
+    "Supply",
+    "Installation",
+    "Spares",
+    "Design & engineering",
+    "Inspection",
+    "Testing & commissioning",
+    "Delivery & logistics",
+    "Commissioning",
+    "Provisional sum",
+)
+
+COST_ITEM_LIBRARY_INDIRECT = (
+    "Engineering hours",
+    "Construction management hours",
+    "Procurement & expediting hours",
+    "Site establishment",
+    "Insurance",
+    "Bonds & guarantees",
+    "Legal & professional",
+    "Permits & approvals",
+    "Provisional sum",
+)
 
 # Source: Control Accounts List sheet (as-is assessment § 13.1)
 # C-13 (2026-05-04) — 901 and 902 flipped to excluded_from_capex=False.
@@ -153,6 +219,40 @@ def seed_control_accounts(db: Session) -> None:
             ca = db.query(ControlAccount).filter_by(code=code).one()
             ca.name = name
             ca.excluded_from_capex = excluded
+    db.commit()
+
+
+def seed_cost_control_master_data(db: Session) -> None:
+    for code, label, requires_modifies_ppe, treatment in WORK_TYPES:
+        row = db.get(WorkType, code)
+        if row is None:
+            db.add(WorkType(
+                code=code,
+                label=label,
+                requires_modifies_ppe=requires_modifies_ppe,
+                ifrs_treatment=treatment,
+            ))
+        else:
+            row.label = label
+            row.requires_modifies_ppe = requires_modifies_ppe
+            row.ifrs_treatment = treatment
+
+    for code, name, parent_l1 in INDIRECT_L2_ACCOUNTS:
+        row = db.get(IndirectL2Account, code)
+        if row is None:
+            db.add(IndirectL2Account(code=code, name=name, parent_l1=parent_l1))
+        else:
+            row.name = name
+            row.parent_l1 = parent_l1
+
+    for code, name, role in BUDGET_RESERVE_SUBACCOUNTS:
+        row = db.get(BudgetReserveSubAccount, code)
+        if row is None:
+            db.add(BudgetReserveSubAccount(code=code, name=name, role=role, balance=0))
+        else:
+            row.name = name
+            row.role = role
+
     db.commit()
 
 

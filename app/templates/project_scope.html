@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% import "_project_nav.html" as nav %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% block title %}{{ project.project_number }} - Scope - Cost Control{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb"><a href="/">Portfolio</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a></div>
+    <div class="subheader-title">{{ project.project_number }}: {{ proj_name }}</div>
+    {{ nav.project_tabs(project, 'scope') }}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <form method="get" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:14px;">
+    <label>Work Type
+      <select name="work_type">
+        <option value="">All</option>
+        {% for wt in work_types %}<option value="{{ wt.code }}" {% if filters.work_type == wt.code %}selected{% endif %}>{{ wt.label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Plant Area
+      <select name="plant_area">
+        <option value="">All</option>
+        {% for area in plant_areas %}<option value="{{ area.code }}" {% if filters.plant_area == area.code %}selected{% endif %}>{{ area.code }} - {{ area.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>State
+      <select name="state">
+        <option value="">All</option>
+        {% for s in ["Provisional", "Committed", "Final"] %}<option value="{{ s }}" {% if filters.state == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="btn btn-sm" type="submit">Filter</button>
+  </form>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th style="width:90px;">Type</th>
+        <th style="width:130px;">Work Type</th>
+        <th style="width:100px;">State</th>
+        <th style="width:90px;">CBS L2</th>
+        <th>Plant Area(s)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr class="hier-l2">
+        <td><strong>{{ row.item.description }}</strong></td>
+        <td>Scope Item</td>
+        <td>{{ row.item.work_type_ref.label if row.item.work_type_ref else 'Not set' }}</td>
+        <td><span class="badge">{{ row.state }}</span></td>
+        <td></td>
+        <td>{{ row.item.modifies_ppe_reference or '' }}</td>
+      </tr>
+      {% for d in row.deliverables %}
+      <tr>
+        <td class="hier-indent-1">{{ d.description }}</td>
+        <td>Asset</td>
+        <td>{{ row.item.work_type_ref.label if row.item.work_type_ref else 'Not set' }}</td>
+        <td><span class="badge">{{ d.state }}</span></td>
+        <td style="font-family:monospace;">{{ d.cbs_l2_code }}</td>
+        <td>{% for link in d.plant_area_links %}<span class="chip">{{ link.plant_area_ref.code }} {{ link.plant_area_ref.name }}</span>{% endfor %}</td>
+      </tr>
+      {% endfor %}
+      {% endfor %}
+      {% if not rows %}
+      <tr><td colspan="6" class="empty-state">No scope items registered.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Add Scope Item</h2>
+  <form method="post" action="/project/{{ project.project_number }}/scope/add-item" style="display:grid;grid-template-columns:2fr 1fr 2fr auto;gap:10px;align-items:end;">
+    <label>Description *<input name="description" required></label>
+    <label>Work Type
+      <select name="work_type_code">
+        <option value="">Select...</option>
+        {% for wt in work_types %}<option value="{{ wt.code }}">{{ wt.label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Modifies PPE reference<input name="modifies_ppe_reference"></label>
+    <button class="btn btn-sm" type="submit">Add</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Add Deliverable</h2>
+  <form method="post" action="/project/{{ project.project_number }}/scope/add-deliverable" style="display:grid;grid-template-columns:1.4fr 2fr 1fr 2fr auto;gap:10px;align-items:end;">
+    <label>Scope Item
+      <select name="scope_item_id" required>
+        {% for row in rows %}<option value="{{ row.item.id }}">{{ row.item.description }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Description *<input name="description" required></label>
+    <label>Cost Category
+      <select name="commodity_code" required>
+        {% for ca in commodities %}<option value="{{ ca.code }}">{{ ca.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Plant Area(s)
+      <select name="plant_area_ids" multiple size="3">
+        {% for area in plant_areas %}<option value="{{ area.id }}">{{ area.code }} - {{ area.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="btn btn-sm" type="submit">Add</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,11 +1,21 @@
 {% macro project_tabs(project, active) -%}
 <div class="tab-bar">
   <a href="/project/{{ project.project_number }}"
-     class="{% if active == 'cost' %}active{% endif %}">Cost Breakdown</a>
+     class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
+  <a href="/project/{{ project.project_number }}/scope"
+     class="{% if active == 'scope' %}active{% endif %}">Scope</a>
   <a href="/project/{{ project.project_number }}/packages"
-     class="{% if active == 'packages' %}active{% endif %}">Packages</a>
+     class="{% if active == 'wbs' %}active{% endif %}">WBS</a>
+  <a href="/project/{{ project.project_number }}/cbs"
+     class="{% if active == 'cbs' %}active{% endif %}">CBS</a>
+  <a href="/project/{{ project.project_number }}/analysis"
+     class="{% if active == 'analysis' %}active{% endif %}">Analysis</a>
+  <a href="/project/{{ project.project_number }}/changes"
+     class="{% if active == 'changes' %}active{% endif %}">Changes</a>
   <a href="/project/{{ project.project_number }}/commitments"
      class="{% if active == 'commitments' %}active{% endif %}">Commitments</a>
+  <a href="/project/{{ project.project_number }}/closeout"
+     class="{% if active == 'closeout' %}active{% endif %}">Closeout</a>
 </div>
 {%- endmacro %}
 
