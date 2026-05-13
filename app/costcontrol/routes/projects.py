@@ -263,12 +263,15 @@ def project_scope_page(
                 "parent_id": item.id,
                 "description": deliverable.description,
                 "type": "Deliverable",
+                "scope_item_id": item.id,
                 "work_type": item.work_type_ref.label if item.work_type_ref else "Not set",
                 "work_type_code": item.work_type_code or "",
                 "state": deliverable.state,
                 "cbs_l2": deliverable.cbs_l2_code,
+                "commodity_code": deliverable.commodity_code,
                 "plant_areas": ", ".join(area_labels),
                 "plant_area_codes": area_codes,
+                "plant_area_ids": [link.plant_area_id for link in deliverable.plant_area_links],
                 "actions": "",
             })
         rows.append({"item": item, "state": item_state, "deliverables": deliverables})
@@ -277,6 +280,8 @@ def project_scope_page(
             "record_id": item.id,
             "description": item.description,
             "type": "Scope Item",
+            "scope_item_id": item.id,
+            "modifies_ppe_reference": item.modifies_ppe_reference or "",
             "work_type": item.work_type_ref.label if item.work_type_ref else "Not set",
             "work_type_code": item.work_type_code or "",
             "state": item_state,
@@ -319,6 +324,35 @@ def project_scope_add_item(
     return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
 
 
+@router.post("/project/{project_number}/scope/update-item/{scope_item_id}")
+def project_scope_update_item(
+    project_number: str,
+    scope_item_id: int,
+    db: DbDep,
+    description: str = Form(...),
+    work_type_code: str = Form(""),
+    modifies_ppe_reference: str = Form(""),
+):
+    item = db.get(ProjectScopeItem, scope_item_id)
+    if item is None or item.project_number != project_number:
+        raise HTTPException(status_code=404, detail="Scope Item not found")
+    item.description = description.strip()
+    item.work_type_code = work_type_code.strip() or None
+    item.modifies_ppe_reference = modifies_ppe_reference.strip() or None
+    db.commit()
+    return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
+
+
+@router.post("/project/{project_number}/scope/delete-item/{scope_item_id}")
+def project_scope_delete_item(project_number: str, scope_item_id: int, db: DbDep):
+    item = db.get(ProjectScopeItem, scope_item_id)
+    if item is None or item.project_number != project_number:
+        raise HTTPException(status_code=404, detail="Scope Item not found")
+    db.delete(item)
+    db.commit()
+    return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
+
+
 @router.post("/project/{project_number}/scope/add-deliverable")
 def project_scope_add_deliverable(
     project_number: str,
@@ -348,6 +382,45 @@ def project_scope_add_deliverable(
     for plant_area_id in plant_area_ids:
         if db.get(PlantArea, plant_area_id) is not None:
             db.add(DeliverablePlantArea(deliverable_id=deliverable.id, plant_area_id=plant_area_id))
+    db.commit()
+    return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
+
+
+@router.post("/project/{project_number}/scope/update-deliverable/{deliverable_id}")
+def project_scope_update_deliverable(
+    project_number: str,
+    deliverable_id: int,
+    db: DbDep,
+    scope_item_id: int = Form(...),
+    description: str = Form(...),
+    commodity_code: str = Form(...),
+    plant_area_ids: list[int] = Form(default=[]),
+):
+    deliverable = db.get(Deliverable, deliverable_id)
+    if deliverable is None or deliverable.project_number != project_number:
+        raise HTTPException(status_code=404, detail="Deliverable not found")
+    scope_item = db.get(ProjectScopeItem, scope_item_id)
+    if scope_item is None or scope_item.project_number != project_number:
+        raise HTTPException(status_code=404, detail="Scope Item not found")
+    if commodity_code not in ("201", "202", "203", "204", "205", "206"):
+        raise HTTPException(status_code=400, detail="Deliverable commodity must be a direct Cost Category")
+    deliverable.scope_item_id = scope_item.id
+    deliverable.description = description.strip()
+    deliverable.commodity_code = commodity_code
+    db.query(DeliverablePlantArea).filter_by(deliverable_id=deliverable.id).delete()
+    for plant_area_id in plant_area_ids:
+        if db.get(PlantArea, plant_area_id) is not None:
+            db.add(DeliverablePlantArea(deliverable_id=deliverable.id, plant_area_id=plant_area_id))
+    db.commit()
+    return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
+
+
+@router.post("/project/{project_number}/scope/delete-deliverable/{deliverable_id}")
+def project_scope_delete_deliverable(project_number: str, deliverable_id: int, db: DbDep):
+    deliverable = db.get(Deliverable, deliverable_id)
+    if deliverable is None or deliverable.project_number != project_number:
+        raise HTTPException(status_code=404, detail="Deliverable not found")
+    db.delete(deliverable)
     db.commit()
     return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
 
@@ -1081,4 +1154,3 @@ def po_link_remove(project_number: str, po_number: str, db: DbDep):
         rto.updated_at = datetime.now()
     db.commit()
     return RedirectResponse(f"/project/{project_number}/commitments/purchase-orders", status_code=303)
-

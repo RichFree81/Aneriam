@@ -153,9 +153,21 @@
     letter-spacing: 0.2px;
     text-align: center;
   }
-  #scopeTreeGrid .scope-empty-actions {
-    color: #aab;
-    font-size: 11px;
+  #scopeTreeGrid .scope-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: #667;
+    cursor: pointer;
+  }
+  #scopeTreeGrid .scope-edit-btn:hover {
+    background: #e6f0fb;
+    color: #1a4a80;
   }
   .scope-modal-grid {
     display: grid;
@@ -174,11 +186,144 @@
   .scope-modal-grid select[multiple] {
     min-height: 112px;
   }
+  .scope-drawer-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.22);
+    z-index: 430;
+  }
+  .scope-drawer-overlay.open { display: block; }
+  .scope-drawer {
+    position: fixed;
+    top: 48px;
+    right: 0;
+    bottom: 0;
+    width: 440px;
+    max-width: calc(100vw - 32px);
+    background: #fff;
+    box-shadow: -8px 0 28px rgba(0,0,0,.24);
+    z-index: 440;
+    transform: translateX(100%);
+    transition: transform 0.16s ease;
+    display: flex;
+    flex-direction: column;
+  }
+  .scope-drawer.open { transform: translateX(0); }
+  .scope-drawer-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid #e8edf3;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .scope-drawer-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a2e4a;
+    margin-right: auto;
+  }
+  .scope-delete-btn {
+    background: #fce8e6;
+    color: #8b1a10;
+    border: 1px solid #f3c1bb;
+  }
+  .scope-delete-btn:hover { background: #f8d7da; }
+  .scope-drawer-body {
+    padding: 16px;
+    overflow-y: auto;
+  }
+  .scope-drawer-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .scope-drawer-form label {
+    font-size: 12px;
+    color: #555;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .scope-drawer-form input,
+  .scope-drawer-form select {
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .scope-drawer-form select[multiple] { min-height: 120px; }
+  .scope-drawer-footer {
+    padding: 12px 16px;
+    border-top: 1px solid #e8edf3;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: auto;
+  }
 </style>
 
 <div class="scope-shell">
   <div id="scopeTreeGrid"></div>
 </div>
+
+{# Edit sidebar #}
+<div class="scope-drawer-overlay" id="scopeEditOverlay" onclick="closeScopeEditDrawer()"></div>
+<aside class="scope-drawer" id="scopeEditDrawer" aria-label="Edit scope record">
+  <div class="scope-drawer-header">
+    <div class="scope-drawer-title" id="scopeEditTitle">Edit</div>
+    <form id="scopeDeleteForm" method="post" onsubmit="return confirm(scopeDeleteMessage());">
+      <button type="submit" class="btn btn-sm scope-delete-btn">Delete</button>
+    </form>
+    <button class="fm-close" onclick="closeScopeEditDrawer()" aria-label="Close">&times;</button>
+  </div>
+  <div class="scope-drawer-body">
+    <form id="scopeEditItemForm" class="scope-drawer-form" method="post">
+      <label>Description *
+        <input name="description" id="editScopeDescription" required autocomplete="off">
+      </label>
+      <label>Work Type
+        <select name="work_type_code" id="editScopeWorkType">
+          <option value="">Select...</option>
+          {% for wt in work_types %}<option value="{{ wt.code }}">{{ wt.label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Modifies PPE reference
+        <input name="modifies_ppe_reference" id="editScopeModifiesPpe" autocomplete="off">
+      </label>
+      <div class="scope-drawer-footer">
+        <button type="button" class="btn btn-sm btn-ghost" onclick="closeScopeEditDrawer()">Cancel</button>
+        <button type="submit" class="btn btn-sm">Save</button>
+      </div>
+    </form>
+
+    <form id="scopeEditDeliverableForm" class="scope-drawer-form" method="post">
+      <label>Scope Item
+        <select name="scope_item_id" id="editDeliverableScopeItem" required>
+          {% for row in rows %}<option value="{{ row.item.id }}">{{ row.item.description }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Description *
+        <input name="description" id="editDeliverableDescription" required autocomplete="off">
+      </label>
+      <label>Cost Category
+        <select name="commodity_code" id="editDeliverableCommodity" required>
+          {% for ca in commodities %}<option value="{{ ca.code }}">{{ ca.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Plant Area(s)
+        <select name="plant_area_ids" id="editDeliverablePlantAreas" multiple size="6">
+          {% for area in plant_areas %}<option value="{{ area.id }}">{{ area.code }} - {{ area.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <div class="scope-drawer-footer">
+        <button type="button" class="btn btn-sm btn-ghost" onclick="closeScopeEditDrawer()">Cancel</button>
+        <button type="submit" class="btn btn-sm">Save</button>
+      </div>
+    </form>
+  </div>
+</aside>
 
 {# Filter modal #}
 <div class="filter-overlay" id="scopeFilterOverlay" onclick="closeScopeFilterModal()"></div>
@@ -300,7 +445,11 @@
   }
 
   function actionsFormatter() {
-    return '<span class="scope-empty-actions">—</span>';
+    return '<button type="button" class="scope-edit-btn" title="Edit" aria-label="Edit">' +
+      '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">' +
+      '<path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207l6.5-6.5z"/>' +
+      '<path d="M2 10.5V13h2.5l7.1-7.1-2.5-2.5L2 10.5zM1 14.5a.5.5 0 0 1-.5-.5v-3.707a.5.5 0 0 1 .146-.354l8.5-8.5a.5.5 0 0 1 .708 0l3.707 3.707a.5.5 0 0 1 0 .708l-8.5 8.5A.5.5 0 0 1 4.707 14.5H1z"/>' +
+      '</svg></button>';
   }
 
   function rowMatchesFilter(rowData, filters) {
@@ -380,6 +529,55 @@
     document.getElementById('deliverableModal').classList.remove('open');
   }
 
+  function setMultiSelectValues(select, values) {
+    const valueSet = new Set((values || []).map(String));
+    Array.from(select.options).forEach(option => {
+      option.selected = valueSet.has(option.value);
+    });
+  }
+
+  function openScopeEditDrawer(data) {
+    const isScope = data.type === 'Scope Item';
+    document.getElementById('scopeEditTitle').textContent = isScope ? 'Edit Scope Item' : 'Edit Deliverable';
+    document.getElementById('scopeDeleteForm').action = isScope
+      ? '/project/{{ project.project_number }}/scope/delete-item/' + data.record_id
+      : '/project/{{ project.project_number }}/scope/delete-deliverable/' + data.record_id;
+    document.getElementById('scopeDeleteForm').dataset.recordType = data.type;
+    document.getElementById('scopeEditItemForm').style.display = isScope ? 'flex' : 'none';
+    document.getElementById('scopeEditDeliverableForm').style.display = isScope ? 'none' : 'flex';
+
+    if (isScope) {
+      document.getElementById('scopeEditItemForm').action =
+        '/project/{{ project.project_number }}/scope/update-item/' + data.record_id;
+      document.getElementById('editScopeDescription').value = data.description || '';
+      document.getElementById('editScopeWorkType').value = data.work_type_code || '';
+      document.getElementById('editScopeModifiesPpe').value = data.modifies_ppe_reference || '';
+    } else {
+      document.getElementById('scopeEditDeliverableForm').action =
+        '/project/{{ project.project_number }}/scope/update-deliverable/' + data.record_id;
+      document.getElementById('editDeliverableScopeItem').value = data.scope_item_id || '';
+      document.getElementById('editDeliverableDescription').value = data.description || '';
+      document.getElementById('editDeliverableCommodity').value = data.commodity_code || '';
+      setMultiSelectValues(document.getElementById('editDeliverablePlantAreas'), data.plant_area_ids || []);
+    }
+
+    document.getElementById('scopeEditOverlay').classList.add('open');
+    document.getElementById('scopeEditDrawer').classList.add('open');
+  }
+
+  function closeScopeEditDrawer() {
+    document.getElementById('scopeEditOverlay').classList.remove('open');
+    document.getElementById('scopeEditDrawer').classList.remove('open');
+  }
+
+  function scopeDeleteMessage() {
+    const type = document.getElementById('scopeDeleteForm').dataset.recordType || 'record';
+    if (type === 'Scope Item') {
+      return 'Delete this Scope Item and any Deliverables beneath it?';
+    }
+    return 'Delete this Deliverable?';
+  }
+
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
@@ -405,7 +603,18 @@
         {title: 'State', field: 'state', width: 120, formatter: stateFormatter, headerSort: true},
         {title: 'CBS L2', field: 'cbs_l2', width: 95, formatter: cbsFormatter, headerSort: true},
         {title: 'Plant Area(s)', field: 'plant_areas', minWidth: 230, widthGrow: 2, headerSort: false},
-        {title: 'Actions', field: 'actions', width: 95, hozAlign: 'center', formatter: actionsFormatter, headerSort: false},
+        {
+          title: '',
+          field: 'actions',
+          width: 52,
+          hozAlign: 'center',
+          formatter: actionsFormatter,
+          headerSort: false,
+          cellClick: function(e, cell) {
+            e.stopPropagation();
+            openScopeEditDrawer(cell.getRow().getData());
+          },
+        },
       ],
     });
   });
@@ -415,6 +624,7 @@
       closeScopeFilterModal();
       closeScopeItemModal();
       closeDeliverableModal();
+      closeScopeEditDrawer();
     }
   });
 </script>
