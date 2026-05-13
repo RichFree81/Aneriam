@@ -67,6 +67,13 @@ def _plant_area_tree(plant_areas: list[PlantArea]) -> list[dict[str, str | int]]
     return tree
 
 
+def _get_deliverable_area_or_400(db: Session, plant_area_id: int) -> PlantArea:
+    plant_area_ref = db.get(PlantArea, plant_area_id)
+    if plant_area_ref is None or plant_area_ref.level != 3:
+        raise HTTPException(status_code=400, detail="Deliverable area must be a level-3 Area")
+    return plant_area_ref
+
+
 def _last_batch(db: Session) -> ImportBatch | None:
     return db.query(ImportBatch).order_by(ImportBatch.imported_at.desc()).first()
 
@@ -413,7 +420,7 @@ def project_scope_add_deliverable(
     scope_item_id: int = Form(...),
     description: str = Form(...),
     commodity_code: str = Form(...),
-    plant_area_ids: list[int] = Form(default=[]),
+    plant_area_id: int = Form(...),
 ):
     get_project_or_404(db, project_number)
     scope_item = db.get(ProjectScopeItem, scope_item_id)
@@ -421,6 +428,7 @@ def project_scope_add_deliverable(
         raise HTTPException(status_code=404, detail="Scope Item not found")
     if commodity_code not in ("201", "202", "203", "204", "205", "206"):
         raise HTTPException(status_code=400, detail="Deliverable commodity must be a direct Cost Category")
+    plant_area_ref = _get_deliverable_area_or_400(db, plant_area_id)
     code, seq = next_deliverable_code(db, project_number, commodity_code)
     deliverable = Deliverable(
         project_number=project_number,
@@ -432,10 +440,7 @@ def project_scope_add_deliverable(
     )
     db.add(deliverable)
     db.flush()
-    for plant_area_id in plant_area_ids:
-        plant_area_ref = db.get(PlantArea, plant_area_id)
-        if plant_area_ref is not None and plant_area_ref.level == 3:
-            db.add(DeliverablePlantArea(deliverable_id=deliverable.id, plant_area_id=plant_area_id))
+    db.add(DeliverablePlantArea(deliverable_id=deliverable.id, plant_area_id=plant_area_ref.id))
     db.commit()
     return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
 
@@ -448,7 +453,7 @@ def project_scope_update_deliverable(
     scope_item_id: int = Form(...),
     description: str = Form(...),
     commodity_code: str = Form(...),
-    plant_area_ids: list[int] = Form(default=[]),
+    plant_area_id: int = Form(...),
 ):
     deliverable = db.get(Deliverable, deliverable_id)
     if deliverable is None or deliverable.project_number != project_number:
@@ -458,14 +463,12 @@ def project_scope_update_deliverable(
         raise HTTPException(status_code=404, detail="Scope Item not found")
     if commodity_code not in ("201", "202", "203", "204", "205", "206"):
         raise HTTPException(status_code=400, detail="Deliverable commodity must be a direct Cost Category")
+    plant_area_ref = _get_deliverable_area_or_400(db, plant_area_id)
     deliverable.scope_item_id = scope_item.id
     deliverable.description = description.strip()
     deliverable.commodity_code = commodity_code
     db.query(DeliverablePlantArea).filter_by(deliverable_id=deliverable.id).delete()
-    for plant_area_id in plant_area_ids:
-        plant_area_ref = db.get(PlantArea, plant_area_id)
-        if plant_area_ref is not None and plant_area_ref.level == 3:
-            db.add(DeliverablePlantArea(deliverable_id=deliverable.id, plant_area_id=plant_area_id))
+    db.add(DeliverablePlantArea(deliverable_id=deliverable.id, plant_area_id=plant_area_ref.id))
     db.commit()
     return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
 

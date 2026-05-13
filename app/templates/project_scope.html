@@ -183,9 +183,6 @@
     font-size: 13px;
     font-family: inherit;
   }
-  .scope-modal-grid select[multiple] {
-    min-height: 112px;
-  }
   .scope-drawer-overlay {
     display: none;
     position: fixed;
@@ -253,7 +250,6 @@
     font-size: 13px;
     font-family: inherit;
   }
-  .scope-drawer-form select[multiple] { min-height: 120px; }
   .scope-drawer-footer {
     padding: 12px 16px;
     border-top: 1px solid #e8edf3;
@@ -320,8 +316,8 @@
           <option value="">Select Facility Group first</option>
         </select>
       </label>
-      <label>Area(s)
-        <select name="plant_area_ids" id="editDeliverablePlantAreas" multiple size="6">
+      <label>Area
+        <select name="plant_area_id" id="editDeliverablePlantArea" required>
           {% for area in plant_areas %}<option value="{{ area.id }}">{{ area.code }} - {{ area.name }}</option>{% endfor %}
         </select>
       </label>
@@ -435,8 +431,8 @@
           <option value="">Select Facility Group first</option>
         </select>
       </label>
-      <label>Area(s)
-        <select name="plant_area_ids" id="addDeliverablePlantAreas" multiple size="5">
+      <label>Area
+        <select name="plant_area_id" id="addDeliverablePlantArea" required>
           {% for area in plant_areas %}<option value="{{ area.id }}">{{ area.code }} - {{ area.name }}</option>{% endfor %}
         </select>
       </label>
@@ -567,22 +563,22 @@
     select.value = selectedValue && items.some(item => item.code === selectedValue) ? selectedValue : '';
   }
 
-  function setAreaOptions(select, items, selectedValues, includeEmpty) {
-    const selected = new Set((selectedValues || []).map(String));
+  function setAreaOptions(select, items, selectedValue, includeEmpty, placeholder = 'All Areas') {
+    const selected = selectedValue ? String(selectedValue) : '';
     select.innerHTML = '';
     if (includeEmpty) {
       const empty = document.createElement('option');
       empty.value = '';
-      empty.textContent = 'All Areas';
+      empty.textContent = placeholder;
       select.appendChild(empty);
     }
     items.forEach(item => {
       const option = document.createElement('option');
       option.value = includeEmpty ? item.code : String(item.id);
       option.textContent = item.code + ' - ' + item.name;
-      option.selected = selected.has(option.value);
       select.appendChild(option);
     });
+    select.value = selected && Array.from(select.options).some(option => option.value === selected) ? selected : '';
   }
 
   function filteredAreaTree(facilityCode, plantUnitCode) {
@@ -596,7 +592,7 @@
   function refreshAreaCascade(prefix, selectedAreaIds) {
     const facilitySelect = document.getElementById(prefix + 'FacilityGroup');
     const unitSelect = document.getElementById(prefix + 'PlantUnit');
-    const areaSelect = document.getElementById(prefix + 'PlantAreas');
+    const areaSelect = document.getElementById(prefix + 'PlantArea');
     const facilityCode = facilitySelect.value;
     const previousUnit = unitSelect.value;
     const units = uniqueByCode(
@@ -606,7 +602,7 @@
     );
     setOptions(unitSelect, units, facilityCode ? 'All Plant Units' : 'Select Facility Group first', previousUnit);
     const areas = filteredAreaTree(facilityCode, unitSelect.value);
-    setAreaOptions(areaSelect, areas, selectedAreaIds || Array.from(areaSelect.selectedOptions).map(o => o.value), false);
+    setAreaOptions(areaSelect, areas, selectedAreaIds || areaSelect.value, true, 'Select Area');
   }
 
   function refreshScopeFilterCascade(apply = true) {
@@ -628,7 +624,7 @@
     const areaSelect = document.getElementById('scopeFilterPlantArea');
     const selectedArea = areaSelect.value;
     const areas = filteredAreaTree(facilityCode, unitCode);
-    setAreaOptions(areaSelect, areas, [selectedArea], true);
+    setAreaOptions(areaSelect, areas, selectedArea, true, 'All Areas');
     if (apply) applyScopeFilters();
   }
 
@@ -665,13 +661,6 @@
     document.getElementById('deliverableModal').classList.remove('open');
   }
 
-  function setMultiSelectValues(select, values) {
-    const valueSet = new Set((values || []).map(String));
-    Array.from(select.options).forEach(option => {
-      option.selected = valueSet.has(option.value);
-    });
-  }
-
   function openScopeEditDrawer(data) {
     const isScope = data.type === 'Scope Item';
     document.getElementById('scopeEditTitle').textContent = isScope ? 'Edit Scope Item' : 'Edit Deliverable';
@@ -698,7 +687,7 @@
       refreshAreaCascade('editDeliverable');
       document.getElementById('editDeliverablePlantUnit').value =
         (data.plant_unit_codes || []).length === 1 ? data.plant_unit_codes[0] : '';
-      refreshAreaCascade('editDeliverable', data.plant_area_ids || []);
+      refreshAreaCascade('editDeliverable', (data.plant_area_ids || [])[0] || '');
     }
 
     document.getElementById('scopeEditOverlay').classList.add('open');
@@ -746,7 +735,7 @@
         {title: 'Work Type', field: 'work_type', width: 160, headerSort: true},
         {title: 'State', field: 'state', width: 120, formatter: stateFormatter, headerSort: true},
         {title: 'CBS L2', field: 'cbs_l2', width: 95, formatter: cbsFormatter, headerSort: true},
-        {title: 'Area(s)', field: 'plant_areas', minWidth: 230, widthGrow: 2, headerSort: false},
+        {title: 'Area', field: 'plant_areas', minWidth: 230, widthGrow: 2, headerSort: false},
         {
           title: '',
           field: 'actions',

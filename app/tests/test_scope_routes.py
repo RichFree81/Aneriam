@@ -85,7 +85,7 @@ def test_scope_edit_drawer_routes_update_and_delete_records():
                 "scope_item_id": str(scope_id),
                 "description": "Updated deliverable",
                 "commodity_code": "206",
-                "plant_area_ids": [str(area_b_id)],
+                "plant_area_id": str(area_b_id),
             },
             follow_redirects=False,
         )
@@ -120,7 +120,7 @@ def test_scope_page_uses_facility_unit_area_hierarchy():
         assert response.status_code == 200
         assert "Facility Group" in response.text
         assert "Plant Unit" in response.text
-        assert "Area(s)" in response.text
+        assert "Area" in response.text
         assert "PLANT_AREA_TREE" in response.text
         assert '"plant_unit_code": "3100"' in response.text
         assert '"plant_unit_name": "MK 07 Furnace"' in response.text
