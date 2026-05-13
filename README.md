@@ -55,7 +55,6 @@ A modular application with a React+MUI frontend and FastAPI+SQLite backend.
 - `docs/`: Centralised documentation ([see governance rules](docs/README.md)).
   - `docs/frontend/`: Frontend UI standards and theme documentation.
   - `docs/specs/`: Architecture specifications (portfolio module, field library, etc.).
-- `reports/`: AI-generated reports and audits ([temporary artefacts](reports/README.md)).
 
 ## Documentation
 

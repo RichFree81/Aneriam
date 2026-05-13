@@ -1,7 +1,7 @@
 """
 Tests for the Portfolio frontend/backend contract fix.
 
-These tests pin down the behaviour resolved by TASK_portfolio_contract_fix:
+These tests pin down the Portfolio frontend/backend contract behaviour:
 - description and logo are optional on create.
 - description, logo, and updated_at are returned on read.
 - updated_at advances past created_at after a PATCH.

@@ -1,6 +1,6 @@
 """add_description_logo_updated_at_to_portfolio
 
-Resolves the Portfolio frontend/backend contract mismatch (BACKEND_AUDIT.md §5 #1–#3):
+Resolves the Portfolio frontend/backend contract mismatch:
 the frontend type expects description, logo, and updated_at on Portfolio but the backend
 table does not provide them. This migration adds the three columns.
 

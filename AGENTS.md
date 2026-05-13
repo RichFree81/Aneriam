@@ -52,10 +52,6 @@ These rules override stylistic preferences, convenience, and "I'll just quickly.
 │   ├── README.md                # Docs governance
 │   ├── frontend/                # Detailed UI standards (page layout, spacing, forms, a11y)
 │   └── specs/                   # Architecture specs (PORTFOLIO_MODULE, field-library, etc.)
-├── reports/
-│   ├── README.md                # Reports are temporary analytical artefacts
-│   ├── FRONTEND_AUDIT.md        # Reference: last frontend audit (2026-04-17 — pre cost-control)
-│   └── BACKEND_AUDIT.md         # Reference: last backend audit (2026-04-17 — pre cost-control)
 ├── frontend/                    # Aneriam platform — React 19 + MUI v7 SPA
 │   ├── AGENTS.md                # Frontend-specific rules
 │   └── src/

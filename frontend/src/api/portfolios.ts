@@ -4,7 +4,7 @@ import { authenticatedFetch } from './client';
 // NOTE: Request/response shapes are hand-typed to mirror the backend Pydantic
 // schemas (PortfolioCreate / PortfolioUpdate / Portfolio response). These should
 // be replaced by types generated from `openapi-typescript` once that tooling is
-// wired up. See TASK_RESULT_portfolio_contract_fix.md.
+// wired up.
 
 export async function getPortfolios(): Promise<Portfolio[]> {
     const response = await authenticatedFetch('/portfolios');
