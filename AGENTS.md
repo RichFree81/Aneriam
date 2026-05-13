@@ -132,6 +132,13 @@ Modifying any of these without being asked is a violation of trust. If a task se
 - `.Collab/Outputs/` and `Collab/Outputs/` contain generated working outputs. Agents may read and write files here when the task requires it. Agents must not delete, move, rename, bulk-clean, or overwrite existing output files unless Richard explicitly gives permission for that specific action.
 - Any recursive cleanup command, build cleanup, `git clean`, `Remove-Item`, `del`, `rmdir`, or script that could touch `.Collab/` or `Collab/` must stop and ask Richard first.
 
+**Repository documentation boundary:**
+- Keep long-lived product, architecture, API, setup, and implementation specifications in `docs/`, `frontend/`, `backend/`, or `app/` as appropriate.
+- Do not place collaborative working artefacts in the repo root or source tree. This includes temporary reports, audit snapshots, task briefs, task results, meeting notes, working papers, generated assessments, implementation briefs, and one-off analysis outputs.
+- New collaborative artefacts must be written under `.Collab/Outputs/` in a suitable subfolder. If the artefact is based on user-supplied material, read from `.Collab/Inputs/` and write the result to `.Collab/Outputs/`.
+- A document belongs in the repo only if it is app-related durable documentation: a specification, architecture decision, setup instruction, source-owned changelog, or developer-facing rule needed to build, test, operate, or maintain the application.
+- Historic collaborative artefacts already in the repo may be moved to `.Collab/Outputs/` or deleted after Richard confirms the specific cleanup set.
+
 ## What "done" looks like for a task
 
 A task is done when:
