@@ -35,6 +35,7 @@ def _client_with_db():
         project_number="5006",
         description="Original scope",
         work_type_code="NewBuild",
+        modifies_ppe_reference="Existing PPE",
     )
     session.add_all([area_a, area_b, scope])
     session.flush()
@@ -69,7 +70,6 @@ def test_scope_edit_drawer_routes_update_and_delete_records():
             data={
                 "description": "Updated scope",
                 "work_type_code": "TieIn",
-                "modifies_ppe_reference": "F3 PPE",
             },
             follow_redirects=False,
         )
@@ -77,7 +77,7 @@ def test_scope_edit_drawer_routes_update_and_delete_records():
         scope = session.get(ProjectScopeItem, scope_id)
         assert scope.description == "Updated scope"
         assert scope.work_type_code == "TieIn"
-        assert scope.modifies_ppe_reference == "F3 PPE"
+        assert scope.modifies_ppe_reference == "Existing PPE"
 
         response = client.post(
             f"/project/5006/scope/update-deliverable/{deliverable_id}",

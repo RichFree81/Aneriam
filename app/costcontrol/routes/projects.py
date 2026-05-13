@@ -311,7 +311,7 @@ def project_scope_add_item(
     db: DbDep,
     description: str = Form(...),
     work_type_code: str = Form(""),
-    modifies_ppe_reference: str = Form(""),
+    modifies_ppe_reference: str | None = Form(None),
 ):
     get_project_or_404(db, project_number)
     db.add(ProjectScopeItem(
@@ -331,14 +331,15 @@ def project_scope_update_item(
     db: DbDep,
     description: str = Form(...),
     work_type_code: str = Form(""),
-    modifies_ppe_reference: str = Form(""),
+    modifies_ppe_reference: str | None = Form(None),
 ):
     item = db.get(ProjectScopeItem, scope_item_id)
     if item is None or item.project_number != project_number:
         raise HTTPException(status_code=404, detail="Scope Item not found")
     item.description = description.strip()
     item.work_type_code = work_type_code.strip() or None
-    item.modifies_ppe_reference = modifies_ppe_reference.strip() or None
+    if modifies_ppe_reference is not None:
+        item.modifies_ppe_reference = modifies_ppe_reference.strip() or None
     db.commit()
     return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
 

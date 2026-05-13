@@ -289,9 +289,6 @@
           {% for wt in work_types %}<option value="{{ wt.code }}">{{ wt.label }}</option>{% endfor %}
         </select>
       </label>
-      <label>Modifies PPE reference
-        <input name="modifies_ppe_reference" id="editScopeModifiesPpe" autocomplete="off">
-      </label>
       <div class="scope-drawer-footer">
         <button type="button" class="btn btn-sm btn-ghost" onclick="closeScopeEditDrawer()">Cancel</button>
         <button type="submit" class="btn btn-sm">Save</button>
@@ -375,9 +372,6 @@
           <option value="">Select...</option>
           {% for wt in work_types %}<option value="{{ wt.code }}">{{ wt.label }}</option>{% endfor %}
         </select>
-      </label>
-      <label>Modifies PPE reference
-        <input name="modifies_ppe_reference" autocomplete="off">
       </label>
     </div>
     <div class="fm-footer">
@@ -551,7 +545,6 @@
         '/project/{{ project.project_number }}/scope/update-item/' + data.record_id;
       document.getElementById('editScopeDescription').value = data.description || '';
       document.getElementById('editScopeWorkType').value = data.work_type_code || '';
-      document.getElementById('editScopeModifiesPpe').value = data.modifies_ppe_reference || '';
     } else {
       document.getElementById('scopeEditDeliverableForm').action =
         '/project/{{ project.project_number }}/scope/update-deliverable/' + data.record_id;
