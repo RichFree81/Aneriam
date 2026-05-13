@@ -19,6 +19,7 @@ scratch_*.py
 *_out*.txt
 test_output.txt
 pytest_*.txt
+lint-output*.txt
 
 # Virtual environments
 venv/
