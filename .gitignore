@@ -60,4 +60,5 @@ app/dist/
 
 # Collaboration working artefacts (business inputs, briefs, assessments — not source)
 Collab/
+.Collab/
 

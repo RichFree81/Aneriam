@@ -127,6 +127,11 @@ Modifying any of these without being asked is a violation of trust. If a task se
 - `frontend/tsconfig.app.json` — strict typing decisions.
 - `frontend/src/api/generated.ts` — regenerated from backend, not edited by hand.
 
+**Collaboration working folders:**
+- `.Collab/Inputs/` and `Collab/Inputs/` contain user-supplied source documents. Agents may read these files when relevant to the task, but must never write, move, rename, delete, clean, overwrite, or reorganise anything in these folders.
+- `.Collab/Outputs/` and `Collab/Outputs/` contain generated working outputs. Agents may read and write files here when the task requires it. Agents must not delete, move, rename, bulk-clean, or overwrite existing output files unless Richard explicitly gives permission for that specific action.
+- Any recursive cleanup command, build cleanup, `git clean`, `Remove-Item`, `del`, `rmdir`, or script that could touch `.Collab/` or `Collab/` must stop and ask Richard first.
+
 ## What "done" looks like for a task
 
 A task is done when:
