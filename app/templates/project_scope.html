@@ -47,14 +47,14 @@
     background: #fff;
     border: 1px solid #dde6ee;
     border-radius: 6px;
-    box-shadow: 0 1px 3px rgba(0,0,0,.12);
+    box-shadow: 0 1px 3px rgba(0,0,0,.07);
     overflow: hidden;
   }
   #scopeTreeGrid { min-height: 420px; }
   #scopeTreeGrid .tabulator {
     border: none;
     background: #fff;
-    color: #111;
+    color: #222;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
@@ -67,8 +67,8 @@
   }
   #scopeTreeGrid .tabulator-col {
     background: #f0f4f8;
-    border-right: 1px solid #c8d4e0;
-    min-height: 31px;
+    border-right: none;
+    min-height: 32px;
   }
   #scopeTreeGrid .tabulator-col .tabulator-col-content {
     padding: 0;
@@ -79,6 +79,7 @@
     font-weight: 600;
     line-height: 1.3;
     white-space: normal;
+    color: #334;
   }
   #scopeTreeGrid .tabulator-col .tabulator-arrow {
     border-bottom-color: #667;
@@ -88,15 +89,15 @@
   #scopeTreeGrid .tabulator-row {
     background: #fff;
     border-bottom: 1px solid #edf0f4;
-    min-height: 31px;
+    min-height: 32px;
   }
   #scopeTreeGrid .tabulator-row.tabulator-selectable:hover {
     background: #f7faff;
   }
   #scopeTreeGrid .tabulator-cell {
-    border-right: 1px solid #dde6ee;
+    border-right: none;
     padding: 6px 8px;
-    line-height: 1.35;
+    line-height: 1.3;
     white-space: normal;
     vertical-align: top;
   }
@@ -127,12 +128,12 @@
   #scopeTreeGrid .scope-code {
     font-family: monospace;
     font-size: 12px;
-    color: #1a4a70;
+    color: #2060a0;
   }
   #scopeTreeGrid .scope-state {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 10px;
+    padding: 2px 10px;
+    border-radius: 12px;
     font-size: 11px;
     background: #e0eaf4;
     color: #1a4a70;
@@ -144,8 +145,8 @@
   #scopeTreeGrid .scope-type {
     display: inline-block;
     min-width: 82px;
-    padding: 2px 8px;
-    border-radius: 10px;
+    padding: 2px 10px;
+    border-radius: 12px;
     font-size: 11px;
     background: #eef2f7;
     color: #334;
