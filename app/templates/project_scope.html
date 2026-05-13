@@ -51,6 +51,7 @@
     overflow: hidden;
   }
   #scopeTreeGrid { min-height: 420px; }
+  #scopeTreeGrid.tabulator,
   #scopeTreeGrid .tabulator {
     border: none;
     background: #fff;
@@ -59,12 +60,14 @@
     font-size: 12px;
     font-variant-numeric: tabular-nums;
   }
-  #scopeTreeGrid .tabulator-header {
+  #scopeTreeGrid .tabulator-header,
+  #scopeTreeGrid .tabulator .tabulator-header {
     border-bottom: 2px solid #d0d8e4;
     background: #f0f4f8;
     color: #334;
     font-weight: 600;
   }
+  #scopeTreeGrid .tabulator-header .tabulator-col,
   #scopeTreeGrid .tabulator-col {
     background: #f0f4f8;
     border-right: none;
@@ -86,7 +89,13 @@
     border-top-color: #667;
     margin-right: 6px;
   }
-  #scopeTreeGrid .tabulator-row {
+  #scopeTreeGrid .tabulator-tableholder,
+  #scopeTreeGrid .tabulator-table {
+    background: #fff;
+  }
+  #scopeTreeGrid .tabulator-row,
+  #scopeTreeGrid .tabulator-row.tabulator-row-even,
+  #scopeTreeGrid .tabulator-row.tabulator-row-odd {
     background: #fff;
     border-bottom: 1px solid #edf0f4;
     min-height: 32px;
@@ -94,6 +103,7 @@
   #scopeTreeGrid .tabulator-row.tabulator-selectable:hover {
     background: #f7faff;
   }
+  #scopeTreeGrid .tabulator-row .tabulator-cell,
   #scopeTreeGrid .tabulator-cell {
     border-right: none;
     padding: 6px 8px;
@@ -109,6 +119,7 @@
     font-weight: 600;
     color: #334;
   }
+  #scopeTreeGrid .tabulator-row.scope-parent,
   #scopeTreeGrid .tabulator-row.scope-parent .tabulator-cell {
     background: #f2f5f9;
   }
@@ -144,15 +155,15 @@
   #scopeTreeGrid .scope-state.final { background: #d3d3d3; color: #333; }
   #scopeTreeGrid .scope-type {
     display: inline-block;
-    min-width: 82px;
-    padding: 2px 10px;
-    border-radius: 12px;
-    font-size: 11px;
-    background: #eef2f7;
+    min-width: 0;
+    padding: 0;
+    border-radius: 0;
+    font-size: 12px;
+    background: transparent;
     color: #334;
-    font-weight: 600;
-    letter-spacing: 0.2px;
-    text-align: center;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-align: left;
   }
   #scopeTreeGrid .scope-edit-btn {
     display: inline-flex;
