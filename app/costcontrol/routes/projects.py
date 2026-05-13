@@ -245,21 +245,47 @@ def project_scope_page(
     )
 
     rows = []
+    scope_grid_rows = []
     for item in scope_items:
         item_state = scope_item_state(item)
-        if work_type and item.work_type_code != work_type:
-            continue
-        if state and item_state != state:
-            continue
         deliverables = []
+        child_rows = []
         for deliverable in item.deliverables:
+            area_labels = [
+                f"{link.plant_area_ref.code} {link.plant_area_ref.name}"
+                for link in deliverable.plant_area_links
+            ]
             area_codes = [link.plant_area_ref.code for link in deliverable.plant_area_links]
-            if plant_area and plant_area not in area_codes:
-                continue
-            if state and deliverable.state != state and item_state != state:
-                continue
             deliverables.append(deliverable)
+            child_rows.append({
+                "id": f"deliverable-{deliverable.id}",
+                "record_id": deliverable.id,
+                "parent_id": item.id,
+                "description": deliverable.description,
+                "type": "Deliverable",
+                "work_type": item.work_type_ref.label if item.work_type_ref else "Not set",
+                "work_type_code": item.work_type_code or "",
+                "state": deliverable.state,
+                "cbs_l2": deliverable.cbs_l2_code,
+                "plant_areas": ", ".join(area_labels),
+                "plant_area_codes": area_codes,
+                "actions": "",
+            })
         rows.append({"item": item, "state": item_state, "deliverables": deliverables})
+        scope_grid_rows.append({
+            "id": f"scope-{item.id}",
+            "record_id": item.id,
+            "description": item.description,
+            "type": "Scope Item",
+            "work_type": item.work_type_ref.label if item.work_type_ref else "Not set",
+            "work_type_code": item.work_type_code or "",
+            "state": item_state,
+            "cbs_l2": "",
+            "plant_areas": "",
+            "plant_area_codes": [],
+            "actions": "",
+            "_children": child_rows,
+        })
 
     return templates.TemplateResponse("project_scope.html", {
         "request": request,
@@ -269,6 +295,7 @@ def project_scope_page(
         "plant_areas": plant_areas,
         "commodities": commodities,
         "filters": {"work_type": work_type, "plant_area": plant_area, "state": state},
+        "scope_grid_rows": scope_grid_rows,
         "active_tab": "scope",
     })
 
@@ -1054,5 +1081,4 @@ def po_link_remove(project_number: str, po_number: str, db: DbDep):
         rto.updated_at = datetime.now()
     db.commit()
     return RedirectResponse(f"/project/{project_number}/commitments/purchase-orders", status_code=303)
-
 

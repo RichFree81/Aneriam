@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from .routes import import_export, packages, procurement, projects
+from .config import BUNDLE_DIR
 from .startup import initialise_database
 
 
 app = FastAPI(title="Cost Control MVP")
+app.mount("/static", StaticFiles(directory=str(BUNDLE_DIR / "static")), name="static")
 app.include_router(import_export.router)
 app.include_router(packages.router)
 app.include_router(procurement.router)
