@@ -309,7 +309,18 @@
           {% for ca in commodities %}<option value="{{ ca.code }}">{{ ca.name }}</option>{% endfor %}
         </select>
       </label>
-      <label>Plant Area(s)
+      <label>Facility Group
+        <select id="editDeliverableFacilityGroup" onchange="refreshAreaCascade('editDeliverable')">
+          <option value="">Select...</option>
+          {% for group in facility_groups %}<option value="{{ group.code }}">{{ group.code }} - {{ group.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Plant Unit
+        <select id="editDeliverablePlantUnit" onchange="refreshAreaCascade('editDeliverable')">
+          <option value="">Select Facility Group first</option>
+        </select>
+      </label>
+      <label>Area(s)
         <select name="plant_area_ids" id="editDeliverablePlantAreas" multiple size="6">
           {% for area in plant_areas %}<option value="{{ area.id }}">{{ area.code }} - {{ area.name }}</option>{% endfor %}
         </select>
@@ -336,10 +347,20 @@
         {% for wt in work_types %}<option value="{{ wt.code }}">{{ wt.label }}</option>{% endfor %}
       </select>
     </label>
-    <label>Plant Area
+    <label>Facility Group
+      <select id="scopeFilterFacilityGroup" onchange="refreshScopeFilterCascade()">
+        <option value="">All Facility Groups</option>
+        {% for group in facility_groups %}<option value="{{ group.code }}">{{ group.code }} - {{ group.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Plant Unit
+      <select id="scopeFilterPlantUnit" onchange="refreshScopeFilterAreas()">
+        <option value="">All Plant Units</option>
+      </select>
+    </label>
+    <label>Area
       <select id="scopeFilterPlantArea" onchange="applyScopeFilters()">
-        <option value="">All Plant Areas</option>
-        {% for area in plant_areas %}<option value="{{ area.code }}">{{ area.code }} - {{ area.name }}</option>{% endfor %}
+        <option value="">All Areas</option>
       </select>
     </label>
     <label>State
@@ -403,8 +424,19 @@
           {% for ca in commodities %}<option value="{{ ca.code }}">{{ ca.name }}</option>{% endfor %}
         </select>
       </label>
-      <label>Plant Area(s)
-        <select name="plant_area_ids" multiple size="5">
+      <label>Facility Group
+        <select id="addDeliverableFacilityGroup" onchange="refreshAreaCascade('addDeliverable')">
+          <option value="">Select...</option>
+          {% for group in facility_groups %}<option value="{{ group.code }}">{{ group.code }} - {{ group.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Plant Unit
+        <select id="addDeliverablePlantUnit" onchange="refreshAreaCascade('addDeliverable')">
+          <option value="">Select Facility Group first</option>
+        </select>
+      </label>
+      <label>Area(s)
+        <select name="plant_area_ids" id="addDeliverablePlantAreas" multiple size="5">
           {% for area in plant_areas %}<option value="{{ area.id }}">{{ area.code }} - {{ area.name }}</option>{% endfor %}
         </select>
       </label>
@@ -421,6 +453,7 @@
 <script src="/static/vendor/tabulator/tabulator.min.js"></script>
 <script>
   const SCOPE_ROWS = {{ scope_grid_rows | tojson }};
+  const PLANT_AREA_TREE = {{ plant_area_tree | tojson }};
   let scopeTable = null;
 
   function stateFormatter(cell) {
@@ -450,8 +483,12 @@
     const workOk = !filters.workType || rowData.work_type_code === filters.workType;
     const stateOk = !filters.state || rowData.state === filters.state;
     const areas = rowData.plant_area_codes || [];
+    const plantUnits = rowData.plant_unit_codes || [];
+    const facilityGroups = rowData.facility_group_codes || [];
+    const facilityOk = !filters.facilityGroup || facilityGroups.includes(filters.facilityGroup);
+    const unitOk = !filters.plantUnit || plantUnits.includes(filters.plantUnit);
     const areaOk = !filters.plantArea || areas.includes(filters.plantArea);
-    return workOk && stateOk && areaOk;
+    return workOk && stateOk && facilityOk && unitOk && areaOk;
   }
 
   function rowOrChildMatches(rowData, filters) {
@@ -462,6 +499,8 @@
   function currentScopeFilters() {
     return {
       workType: document.getElementById('scopeFilterWorkType').value,
+      facilityGroup: document.getElementById('scopeFilterFacilityGroup').value,
+      plantUnit: document.getElementById('scopeFilterPlantUnit').value,
       plantArea: document.getElementById('scopeFilterPlantArea').value,
       state: document.getElementById('scopeFilterState').value,
     };
@@ -469,7 +508,13 @@
 
   function applyScopeFilters() {
     const filters = currentScopeFilters();
-    const activeCount = [filters.workType, filters.plantArea, filters.state].filter(Boolean).length;
+    const activeCount = [
+      filters.workType,
+      filters.facilityGroup,
+      filters.plantUnit,
+      filters.plantArea,
+      filters.state,
+    ].filter(Boolean).length;
     const btn = document.getElementById('scopeFilterBtn');
     const count = document.getElementById('scopeFilterCount');
     btn.classList.toggle('active', activeCount > 0);
@@ -486,9 +531,105 @@
 
   function clearScopeFilters() {
     document.getElementById('scopeFilterWorkType').value = '';
+    document.getElementById('scopeFilterFacilityGroup').value = '';
+    document.getElementById('scopeFilterPlantUnit').value = '';
     document.getElementById('scopeFilterPlantArea').value = '';
     document.getElementById('scopeFilterState').value = '';
+    refreshScopeFilterCascade(false);
     applyScopeFilters();
+  }
+
+  function uniqueByCode(items, codeKey, nameKey) {
+    const seen = new Set();
+    return items
+      .filter(item => item[codeKey])
+      .filter(item => {
+        if (seen.has(item[codeKey])) return false;
+        seen.add(item[codeKey]);
+        return true;
+      })
+      .map(item => ({code: item[codeKey], name: item[nameKey]}))
+      .sort((a, b) => a.code.localeCompare(b.code));
+  }
+
+  function setOptions(select, items, placeholder, selectedValue) {
+    select.innerHTML = '';
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = placeholder;
+    select.appendChild(empty);
+    items.forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.code;
+      option.textContent = item.code + ' - ' + item.name;
+      select.appendChild(option);
+    });
+    select.value = selectedValue && items.some(item => item.code === selectedValue) ? selectedValue : '';
+  }
+
+  function setAreaOptions(select, items, selectedValues, includeEmpty) {
+    const selected = new Set((selectedValues || []).map(String));
+    select.innerHTML = '';
+    if (includeEmpty) {
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = 'All Areas';
+      select.appendChild(empty);
+    }
+    items.forEach(item => {
+      const option = document.createElement('option');
+      option.value = includeEmpty ? item.code : String(item.id);
+      option.textContent = item.code + ' - ' + item.name;
+      option.selected = selected.has(option.value);
+      select.appendChild(option);
+    });
+  }
+
+  function filteredAreaTree(facilityCode, plantUnitCode) {
+    return PLANT_AREA_TREE.filter(area => {
+      const facilityOk = !facilityCode || area.facility_group_code === facilityCode;
+      const unitOk = !plantUnitCode || area.plant_unit_code === plantUnitCode;
+      return facilityOk && unitOk;
+    });
+  }
+
+  function refreshAreaCascade(prefix, selectedAreaIds) {
+    const facilitySelect = document.getElementById(prefix + 'FacilityGroup');
+    const unitSelect = document.getElementById(prefix + 'PlantUnit');
+    const areaSelect = document.getElementById(prefix + 'PlantAreas');
+    const facilityCode = facilitySelect.value;
+    const previousUnit = unitSelect.value;
+    const units = uniqueByCode(
+      filteredAreaTree(facilityCode, ''),
+      'plant_unit_code',
+      'plant_unit_name'
+    );
+    setOptions(unitSelect, units, facilityCode ? 'All Plant Units' : 'Select Facility Group first', previousUnit);
+    const areas = filteredAreaTree(facilityCode, unitSelect.value);
+    setAreaOptions(areaSelect, areas, selectedAreaIds || Array.from(areaSelect.selectedOptions).map(o => o.value), false);
+  }
+
+  function refreshScopeFilterCascade(apply = true) {
+    const facilityCode = document.getElementById('scopeFilterFacilityGroup').value;
+    const unitSelect = document.getElementById('scopeFilterPlantUnit');
+    const previousUnit = unitSelect.value;
+    const units = uniqueByCode(
+      filteredAreaTree(facilityCode, ''),
+      'plant_unit_code',
+      'plant_unit_name'
+    );
+    setOptions(unitSelect, units, 'All Plant Units', previousUnit);
+    refreshScopeFilterAreas(apply);
+  }
+
+  function refreshScopeFilterAreas(apply = true) {
+    const facilityCode = document.getElementById('scopeFilterFacilityGroup').value;
+    const unitCode = document.getElementById('scopeFilterPlantUnit').value;
+    const areaSelect = document.getElementById('scopeFilterPlantArea');
+    const selectedArea = areaSelect.value;
+    const areas = filteredAreaTree(facilityCode, unitCode);
+    setAreaOptions(areaSelect, areas, [selectedArea], true);
+    if (apply) applyScopeFilters();
   }
 
   function openScopeFilterModal() {
@@ -513,6 +654,7 @@
   }
 
   function openDeliverableModal() {
+    refreshAreaCascade('addDeliverable');
     document.getElementById('deliverableOverlay').classList.add('open');
     document.getElementById('deliverableModal').classList.add('open');
     setTimeout(() => document.querySelector('#deliverableModal input[name="description"]').focus(), 60);
@@ -551,7 +693,12 @@
       document.getElementById('editDeliverableScopeItem').value = data.scope_item_id || '';
       document.getElementById('editDeliverableDescription').value = data.description || '';
       document.getElementById('editDeliverableCommodity').value = data.commodity_code || '';
-      setMultiSelectValues(document.getElementById('editDeliverablePlantAreas'), data.plant_area_ids || []);
+      document.getElementById('editDeliverableFacilityGroup').value =
+        (data.facility_group_codes || []).length === 1 ? data.facility_group_codes[0] : '';
+      refreshAreaCascade('editDeliverable');
+      document.getElementById('editDeliverablePlantUnit').value =
+        (data.plant_unit_codes || []).length === 1 ? data.plant_unit_codes[0] : '';
+      refreshAreaCascade('editDeliverable', data.plant_area_ids || []);
     }
 
     document.getElementById('scopeEditOverlay').classList.add('open');
@@ -576,6 +723,10 @@
   }
 
   document.addEventListener('DOMContentLoaded', function() {
+    refreshAreaCascade('addDeliverable');
+    refreshAreaCascade('editDeliverable');
+    refreshScopeFilterCascade(false);
+
     scopeTable = new Tabulator('#scopeTreeGrid', {
       data: SCOPE_ROWS,
       layout: 'fitColumns',
@@ -595,7 +746,7 @@
         {title: 'Work Type', field: 'work_type', width: 160, headerSort: true},
         {title: 'State', field: 'state', width: 120, formatter: stateFormatter, headerSort: true},
         {title: 'CBS L2', field: 'cbs_l2', width: 95, formatter: cbsFormatter, headerSort: true},
-        {title: 'Plant Area(s)', field: 'plant_areas', minWidth: 230, widthGrow: 2, headerSort: false},
+        {title: 'Area(s)', field: 'plant_areas', minWidth: 230, widthGrow: 2, headerSort: false},
         {
           title: '',
           field: 'actions',

@@ -11,6 +11,7 @@ from .models import (
     BudgetReserveSubAccount,
     ControlAccount,
     IndirectL2Account,
+    PlantArea,
     Project,
     WorkType,
 )
@@ -152,6 +153,139 @@ CONTROL_ACCOUNTS = [
     ("902", "902 - Project Expensing",            False),
 ]
 
+# Source: `.Collab/Inputs/RST Area Clasifications/RST Area Clasifications.pptx`.
+# Hierarchy agreed for the app: Facility Group -> Plant Unit -> Area.
+# Source numbering corrections applied:
+# - Arc 03 duplicate 2102 resolved by shifting Taphole onwards to 2103-2108.
+# - Process Support level-3 items corrected to match their level-2 parents.
+AREA_CLASSIFICATIONS = (
+    ("1000", "Raw Materials Handling Facilities", (
+        ("1100", "Raw Materials Receiving", (
+            ("1101", "Road Truck Weighing and Sampling Station"),
+            ("1102", "Raw Materials Unloading & Storage"),
+        )),
+        ("1200", "Raw Materials Processing", (
+            ("1201", "Feedstock Agglomeration"),
+            ("1202", "Feedstock Drying"),
+            ("1203", "Reductants Drying"),
+            ("1204", "Pre-Smelting Materials Storage"),
+            ("1205", "Pre-Smelting Materials Batching"),
+        )),
+    )),
+    ("2000", "Smelting Facilities", (
+        ("2100", "Arc 03 Furnace", (
+            ("2101", "Arc 03 Furnace Proper"),
+            ("2102", "Arc 03 Hearth Cooling"),
+            ("2103", "Arc 03 Taphole Infrastructure"),
+            ("2104", "Arc 03 Electrode"),
+            ("2105", "Arc 03 Furnace Feed"),
+            ("2106", "Arc 03 Furnace Hydraulics"),
+            ("2107", "Arc 03 Off Gas Conditioning"),
+            ("2108", "Arc 03 Cooling Water"),
+        )),
+        ("2200", "Arc 04 Furnace", (
+            ("2201", "Arc 04 Furnace Proper"),
+            ("2202", "Arc 04 Materials Batching"),
+            ("2203", "Arc 04 Off Gas Conditioning"),
+            ("2204", "Arc 04 Cooling Water"),
+        )),
+        ("2300", "Arc 05 Furnace", (
+            ("2301", "Arc 05 Furnace Proper"),
+            ("2302", "Arc 05 Materials Batching"),
+            ("2303", "Arc 05 Off Gas Conditioning"),
+            ("2304", "Arc 05 Cooling Water"),
+        )),
+    )),
+    ("3000", "Remelting Facilities", (
+        ("3100", "MK 07 Furnace", (
+            ("3101", "MK 07 Furnace Proper"),
+            ("3102", "MK 07 Furnace Hydraulics"),
+            ("3103", "MK 07 Off Gas Conditioning"),
+            ("3104", "MK 07 Cooling Water"),
+        )),
+        ("3200", "MK 10 Furnace", (
+            ("3201", "MK 10 Furnace Proper"),
+            ("3202", "MK 10 Furnace Hydraulics"),
+            ("3203", "MK 10 Off Gas Conditioning"),
+            ("3204", "MK 10 Cooling Water"),
+        )),
+    )),
+    ("4000", "Alloy Refining Facilities", (
+        ("4100", "CLU Converter", (
+            ("4101", "CLU Proper"),
+            ("4102", "CLU Hydraulics"),
+            ("4103", "CLU Gas Mixing Station"),
+            ("4104", "CLU Super-Heated Steam"),
+            ("4105", "CLU Materials Batching"),
+            ("4106", "CLU Off Gas Conditioning"),
+            ("4107", "CLU Cooling Water"),
+        )),
+    )),
+    ("5000", "Final Product Handling", (
+        ("5100", "Granshot", (
+            ("5101", "Granshot Proper"),
+            ("5102", "Granshot Cooling Water"),
+        )),
+        ("5200", "Final Product Processing", (
+            ("5201", "Final Product Drying"),
+            ("5202", "Final Product Crushing & Bagging"),
+        )),
+    )),
+    ("8000", "Process Support Facilities", (
+        ("8100", "Ancillaries", (
+            ("8101", "Alloy & Slag Handling Infrastructure"),
+            ("8102", "Slag Processing"),
+            ("8103", "Analytical Testing Infrastructure"),
+        )),
+        ("8200", "Power Generation & Distribution", (
+            ("8201", "HT Power Distribution"),
+            ("8202", "LT Power Distribution & Control"),
+            ("8203", "Earthing & Lightning Protection"),
+        )),
+        ("8400", "Process Automation", (
+            ("8401", "Level 1: Process Control"),
+            ("8402", "Level 2: Supervisory Systems"),
+        )),
+        ("8500", "Utilities", (
+            ("8501", "Water Supply & Treatment"),
+            ("8502", "Process Cooling Water"),
+            ("8503", "Compressed Air"),
+            ("8504", "Industrial Gases"),
+            ("8505", "Fuel Gases"),
+            ("8506", "Fuel Oils"),
+        )),
+    )),
+    ("9000", "Infrastructure", (
+        ("9100", "Operational Infrastructure", (
+            ("9101", "General Site Infrastructure"),
+            ("9102", "Buildings, Rooms & Common Structures"),
+            ("9103", "Maintenance Machinery & Equipment"),
+            ("9104", "Mobile Plant"),
+            ("9105", "Overhead Cranes"),
+            ("9106", "Waste Management"),
+        )),
+        ("9200", "Information Technology (IT) Infrastructure", (
+            ("9201", "IT Hardware & Devices"),
+            ("9202", "IT Software & Applications"),
+            ("9203", "IT Networking & Communication"),
+            ("9204", "IT Data Management & Security"),
+            ("9205", "IT Cloud & Virtualization"),
+            ("9206", "IT Integration & Connectivity"),
+        )),
+        ("9300", "Safety & Security", (
+            ("9301", "Fire Protection Systems"),
+            ("9302", "Emergency Response Systems"),
+            ("9303", "Access Control & Security Systems"),
+        )),
+        ("9400", "Business Systems", (
+            ("9401", "Operational Management Systems"),
+            ("9402", "Compliance & Regulatory Systems"),
+            ("9403", "Collaboration Systems"),
+            ("9404", "Business Continuity Systems"),
+        )),
+    )),
+)
+
 # C-19 — Active projects and budgets are now loaded from text/CSV files.
 # See _load_active_projects() and _load_budgets() below.
 
@@ -222,6 +356,57 @@ def seed_control_accounts(db: Session) -> None:
     db.commit()
 
 
+def _upsert_plant_area(
+    db: Session,
+    *,
+    code: str,
+    name: str,
+    level: int,
+    parent_id: int | None,
+) -> PlantArea:
+    row = db.query(PlantArea).filter_by(code=code).one_or_none()
+    if row is None:
+        row = PlantArea(code=code, name=name, level=level, parent_id=parent_id, is_ppe=(level == 3))
+        db.add(row)
+        db.flush()
+    else:
+        row.name = name
+        row.level = level
+        row.parent_id = parent_id
+        if level == 3:
+            row.is_ppe = True
+    return row
+
+
+def seed_plant_area_hierarchy(db: Session) -> None:
+    """Seed RST Facility Group -> Plant Unit -> Area hierarchy."""
+    for facility_code, facility_name, plant_units in AREA_CLASSIFICATIONS:
+        facility = _upsert_plant_area(
+            db,
+            code=facility_code,
+            name=facility_name,
+            level=1,
+            parent_id=None,
+        )
+        for unit_code, unit_name, areas in plant_units:
+            unit = _upsert_plant_area(
+                db,
+                code=unit_code,
+                name=unit_name,
+                level=2,
+                parent_id=facility.id,
+            )
+            for area_code, area_name in areas:
+                _upsert_plant_area(
+                    db,
+                    code=area_code,
+                    name=area_name,
+                    level=3,
+                    parent_id=unit.id,
+                )
+    db.commit()
+
+
 def seed_cost_control_master_data(db: Session) -> None:
     for code, label, requires_modifies_ppe, treatment in WORK_TYPES:
         row = db.get(WorkType, code)
@@ -253,6 +438,7 @@ def seed_cost_control_master_data(db: Session) -> None:
             row.name = name
             row.role = role
 
+    seed_plant_area_hierarchy(db)
     db.commit()
 
 

@@ -29,15 +29,15 @@ def _client_with_db():
     seed_control_accounts(session)
     seed_cost_control_master_data(session)
     session.add(Project(project_number="5006", project_name="5006 Furnace 3", is_active=True))
-    area_a = PlantArea(code="3101", name="Furnace 3 Proper", level=3, is_ppe=True)
-    area_b = PlantArea(code="3102", name="Casting Area", level=3, is_ppe=True)
+    area_a = session.query(PlantArea).filter_by(code="3101").one()
+    area_b = session.query(PlantArea).filter_by(code="3102").one()
     scope = ProjectScopeItem(
         project_number="5006",
         description="Original scope",
         work_type_code="NewBuild",
         modifies_ppe_reference="Existing PPE",
     )
-    session.add_all([area_a, area_b, scope])
+    session.add(scope)
     session.flush()
     deliverable = Deliverable(
         project_number="5006",
@@ -108,6 +108,24 @@ def test_scope_edit_drawer_routes_update_and_delete_records():
         )
         assert response.status_code == 303
         assert session.get(ProjectScopeItem, scope_id) is None
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+
+
+def test_scope_page_uses_facility_unit_area_hierarchy():
+    client, session, _, _, _ = _client_with_db()
+    try:
+        response = client.get("/project/5006/scope")
+        assert response.status_code == 200
+        assert "Facility Group" in response.text
+        assert "Plant Unit" in response.text
+        assert "Area(s)" in response.text
+        assert "PLANT_AREA_TREE" in response.text
+        assert '"plant_unit_code": "3100"' in response.text
+        assert '"plant_unit_name": "MK 07 Furnace"' in response.text
+        assert "3101 - MK 07 Furnace Proper" in response.text
+        assert '"plant_area_codes": ["3101"]' in response.text
     finally:
         app.dependency_overrides.clear()
         session.close()

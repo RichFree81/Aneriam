@@ -34,6 +34,39 @@ from ..templates import templates
 router = APIRouter()
 
 
+def _plant_area_context(area: PlantArea, areas_by_id: dict[int, PlantArea]) -> dict[str, str]:
+    """Return Facility Group / Plant Unit / Area codes for a level-3 area."""
+    unit = areas_by_id.get(area.parent_id or 0)
+    facility = areas_by_id.get(unit.parent_id) if unit is not None and unit.parent_id else None
+    return {
+        "facility_group_code": facility.code if facility is not None else "",
+        "facility_group_name": facility.name if facility is not None else "",
+        "plant_unit_code": unit.code if unit is not None else "",
+        "plant_unit_name": unit.name if unit is not None else "",
+        "area_code": area.code,
+        "area_name": area.name,
+    }
+
+
+def _plant_area_tree(plant_areas: list[PlantArea]) -> list[dict[str, str | int]]:
+    areas_by_id = {area.id: area for area in plant_areas}
+    tree = []
+    for area in plant_areas:
+        if area.level != 3:
+            continue
+        context = _plant_area_context(area, areas_by_id)
+        tree.append({
+            "id": area.id,
+            "code": context["area_code"],
+            "name": context["area_name"],
+            "plant_unit_code": context["plant_unit_code"],
+            "plant_unit_name": context["plant_unit_name"],
+            "facility_group_code": context["facility_group_code"],
+            "facility_group_name": context["facility_group_name"],
+        })
+    return tree
+
+
 def _last_batch(db: Session) -> ImportBatch | None:
     return db.query(ImportBatch).order_by(ImportBatch.imported_at.desc()).first()
 
@@ -237,6 +270,11 @@ def project_scope_page(
     )
     work_types = db.query(WorkType).order_by(WorkType.label).all()
     plant_areas = db.query(PlantArea).order_by(PlantArea.code).all()
+    areas_by_id = {area.id: area for area in plant_areas}
+    facility_groups = [area for area in plant_areas if area.level == 1]
+    plant_units = [area for area in plant_areas if area.level == 2]
+    selectable_areas = [area for area in plant_areas if area.level == 3]
+    plant_area_tree = _plant_area_tree(plant_areas)
     commodities = (
         db.query(ControlAccount)
         .filter(ControlAccount.code.in_(("201", "202", "203", "204", "205", "206")))
@@ -251,11 +289,18 @@ def project_scope_page(
         deliverables = []
         child_rows = []
         for deliverable in item.deliverables:
-            area_labels = [
-                f"{link.plant_area_ref.code} {link.plant_area_ref.name}"
+            area_contexts = [
+                _plant_area_context(link.plant_area_ref, areas_by_id)
                 for link in deliverable.plant_area_links
             ]
-            area_codes = [link.plant_area_ref.code for link in deliverable.plant_area_links]
+            area_labels = [f"{context['area_code']} {context['area_name']}" for context in area_contexts]
+            area_codes = [context["area_code"] for context in area_contexts]
+            plant_unit_codes = sorted({context["plant_unit_code"] for context in area_contexts if context["plant_unit_code"]})
+            facility_group_codes = sorted({
+                context["facility_group_code"]
+                for context in area_contexts
+                if context["facility_group_code"]
+            })
             deliverables.append(deliverable)
             child_rows.append({
                 "id": f"deliverable-{deliverable.id}",
@@ -271,6 +316,8 @@ def project_scope_page(
                 "commodity_code": deliverable.commodity_code,
                 "plant_areas": ", ".join(area_labels),
                 "plant_area_codes": area_codes,
+                "plant_unit_codes": plant_unit_codes,
+                "facility_group_codes": facility_group_codes,
                 "plant_area_ids": [link.plant_area_id for link in deliverable.plant_area_links],
                 "actions": "",
             })
@@ -288,6 +335,8 @@ def project_scope_page(
             "cbs_l2": "",
             "plant_areas": "",
             "plant_area_codes": [],
+            "plant_unit_codes": [],
+            "facility_group_codes": [],
             "actions": "",
             "_children": child_rows,
         })
@@ -297,7 +346,10 @@ def project_scope_page(
         "project": project,
         "rows": rows,
         "work_types": work_types,
-        "plant_areas": plant_areas,
+        "facility_groups": facility_groups,
+        "plant_units": plant_units,
+        "plant_areas": selectable_areas,
+        "plant_area_tree": plant_area_tree,
         "commodities": commodities,
         "filters": {"work_type": work_type, "plant_area": plant_area, "state": state},
         "scope_grid_rows": scope_grid_rows,
@@ -381,7 +433,8 @@ def project_scope_add_deliverable(
     db.add(deliverable)
     db.flush()
     for plant_area_id in plant_area_ids:
-        if db.get(PlantArea, plant_area_id) is not None:
+        plant_area_ref = db.get(PlantArea, plant_area_id)
+        if plant_area_ref is not None and plant_area_ref.level == 3:
             db.add(DeliverablePlantArea(deliverable_id=deliverable.id, plant_area_id=plant_area_id))
     db.commit()
     return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
@@ -410,7 +463,8 @@ def project_scope_update_deliverable(
     deliverable.commodity_code = commodity_code
     db.query(DeliverablePlantArea).filter_by(deliverable_id=deliverable.id).delete()
     for plant_area_id in plant_area_ids:
-        if db.get(PlantArea, plant_area_id) is not None:
+        plant_area_ref = db.get(PlantArea, plant_area_id)
+        if plant_area_ref is not None and plant_area_ref.level == 3:
             db.add(DeliverablePlantArea(deliverable_id=deliverable.id, plant_area_id=plant_area_id))
     db.commit()
     return RedirectResponse(f"/project/{project_number}/scope", status_code=303)

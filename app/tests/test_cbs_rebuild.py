@@ -82,9 +82,7 @@ def _deliverable_with_code(db, *, complete_metadata: bool = True) -> tuple[Deliv
     db.add(deliverable)
     db.flush()
     if complete_metadata:
-        area = PlantArea(code="3101", name="Furnace 3 Proper", level=3, is_ppe=True)
-        db.add(area)
-        db.flush()
+        area = db.query(PlantArea).filter_by(code="3101").one()
         db.add(DeliverablePlantArea(deliverable_id=deliverable.id, plant_area_id=area.id))
     code = CostItemCode(
         project_number="5006",
