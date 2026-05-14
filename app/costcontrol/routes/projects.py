@@ -12,6 +12,7 @@ from ..capitalisation import IS_CAP_SQL, NOT_CAP_SQL
 from ..cbs import cbs_rows, next_deliverable_code, po_package_suggestions, scope_item_state
 from ..cost_nodes import package_effective_total
 from ..dependencies import DbDep
+from ..formatting import fmt_zar
 from ..hierarchy import build_hierarchy
 from ..lookups import get_project_or_404
 from ..models import (
@@ -837,6 +838,20 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
         "unallocated": unallocated,
         "alloc_pct": alloc_pct,
     }
+    package_grid_rows = [
+        {
+            "package_number": pkg.package_number,
+            "description": pkg.description,
+            "package_type": pkg.package_type,
+            "package_source": pkg.package_source,
+            "pricing_basis": pkg.pricing_basis,
+            "planned_value": float(pkg.planned_value or 0),
+            "planned_value_display": fmt_zar(pkg.planned_value),
+            "package_stage": pkg.package_stage,
+            "url": f"/project/{project.project_number}/packages/{pkg.package_number}",
+        }
+        for pkg in packages
+    ]
 
     po_total, po_unassigned, _ = _po_counts(db, project_number)
     return templates.TemplateResponse("project_packages.html", {
@@ -844,6 +859,7 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
         "project": project,
         "totals": totals,
         "packages": packages,
+        "package_grid_rows": package_grid_rows,
         "pkg_stats": pkg_stats,
         "po_total_count": po_total,
         "po_unassigned_count": po_unassigned,
