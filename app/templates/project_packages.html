@@ -70,22 +70,22 @@
       placeholder: 'No packages registered.',
       initialSort: [{column: 'package_number', dir: 'asc'}],
       columns: [
-        {title: 'Package No.', field: 'package_number', width: 130, formatter: packageNumberFormatter, headerSort: true},
-        {title: 'Description', field: 'description', minWidth: 280, widthGrow: 2, headerSort: true},
-        {title: 'Package category', field: 'package_type', minWidth: 180, widthGrow: 1.3, headerSort: true},
-        {title: 'Source', field: 'package_source', width: 95, formatter: sourceFormatter, headerSort: true},
-        {title: 'Pricing basis', field: 'pricing_basis', width: 115, headerSort: true},
+        {title: 'Package No.', field: 'package_number', width: 145, formatter: packageNumberFormatter, headerSort: true},
+        {title: 'Description', field: 'description', minWidth: 320, widthGrow: 2.4, headerSort: true},
+        {title: 'Package category', field: 'package_type', minWidth: 210, widthGrow: 1.4, headerSort: true},
+        {title: 'Source', field: 'package_source', width: 105, formatter: sourceFormatter, headerSort: true},
+        {title: 'Pricing basis', field: 'pricing_basis', width: 125, headerSort: true},
         {
           title: 'Planned value',
           field: 'planned_value',
-          width: 130,
+          width: 145,
           hozAlign: 'right',
           headerHozAlign: 'right',
           formatter: plannedValueFormatter,
           headerSort: true,
           sorter: 'number',
         },
-        {title: 'Stage', field: 'package_stage', width: 125, formatter: stageFormatter, headerSort: true},
+        {title: 'Stage', field: 'package_stage', width: 135, formatter: stageFormatter, headerSort: true},
       ],
     });
   });
@@ -120,7 +120,7 @@
     padding: 0;
   }
   #packageGrid .tabulator-col .tabulator-col-title {
-    padding: 6px 8px;
+    padding: 6px 28px 6px 8px;
     font-size: 12px;
     font-weight: 600;
     line-height: 1.3;
@@ -131,6 +131,13 @@
     border-bottom-color: #667;
     border-top-color: #667;
     margin-right: 6px;
+  }
+  #packageGrid .tabulator-col .tabulator-col-sorter {
+    right: 6px;
+  }
+  #packageGrid .tabulator-col[tabulator-field="planned_value"] .tabulator-col-title {
+    padding-left: 8px;
+    padding-right: 30px;
   }
   #packageGrid .tabulator-tableholder,
   #packageGrid .tabulator-table {
