@@ -7,7 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from costcontrol.app import app
 from costcontrol.database import Base, get_db
-from costcontrol.models import Package, Project
+from costcontrol.models import Package, PackageCostNode, Project
 from costcontrol.seed import seed_control_accounts, seed_cost_control_master_data
 
 
@@ -140,6 +140,50 @@ def test_package_list_delete_route_deletes_package():
         )
         assert response.status_code == 303
         assert session.get(Package, package_id) is None
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+
+
+def test_package_cost_tab_uses_hierarchical_actions_and_table():
+    client, session, package_id = _client_with_package()
+    try:
+        group = PackageCostNode(
+            package_id=package_id,
+            code="01",
+            description="Earthworks",
+            is_item=False,
+            display_order=0,
+        )
+        session.add(group)
+        session.flush()
+        session.add(PackageCostNode(
+            package_id=package_id,
+            parent_id=group.id,
+            code="01.01",
+            description="Bulk excavation",
+            is_item=True,
+            cc_code="205",
+            baseline_amount=1000,
+            pre_award_amount=1200,
+            contract_amount=1300,
+            display_order=0,
+        ))
+        session.commit()
+
+        response = client.get("/project/5006/packages/5006-PKG-001/cost")
+        assert response.status_code == 200
+        assert "Add Group" in response.text
+        assert "Add Cost Item" in response.text
+        assert "COST_NODE_ROWS" in response.text
+        assert "dataTree: true" in response.text
+        assert "Grand Total" in response.text
+        assert "Earthworks" in response.text
+        assert "Bulk excavation" in response.text
+        assert "Cost Item Lines" not in response.text
+        assert "Create Cost Item Code" not in response.text
+        assert "Add Cost Item Line" not in response.text
+        assert '<span class="chip">{{ package.package_source }}</span>' not in response.text
     finally:
         app.dependency_overrides.clear()
         session.close()

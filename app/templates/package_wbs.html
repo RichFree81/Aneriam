@@ -3,15 +3,32 @@
 {% set pkg_base = "/project/" ~ project.project_number ~ "/packages/" ~ package.package_number %}
 {% block title %}{{ package.package_number }} - WBS - Cost Control{% endblock %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="/static/vendor/tabulator/tabulator.min.css">
+{% endblock %}
+
+{% block actions_items %}
+<a href="#" onclick="openCostGroupModal(); return false;">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zM9 2.5A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zM1 10.5A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zM9 10.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3z"/></svg>
+  Add Group
+</a>
+<a href="#" onclick="openCostItemModal(); return false;">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a.5.5 0 0 1 .5.5v5.5H14a.5.5 0 0 1 0 1H8.5V14a.5.5 0 0 1-1 0V8.5H2a.5.5 0 0 1 0-1h5.5V2a.5.5 0 0 1 .5-.5z"/></svg>
+  Add Cost Item
+</a>
+{% if not package.is_contracted %}
+<a href="#" onclick="openAwardModal(); return false;">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>
+  Award Package
+</a>
+{% endif %}
+{% endblock %}
+
 {% block subheader %}
 <div class="subheader">
   <div class="subheader-inner">
     <div class="subheader-crumb"><a href="/">Portfolio</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}/packages">WBS</a></div>
-    <div class="subheader-title">
-      {{ package.package_number }}: {{ package.description }}
-      <span class="chip">{{ package.package_source }}</span>
-      <span class="chip">{{ "Awarded" if package.is_contracted else "Planned" }}</span>
-    </div>
+    <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
     <div class="tab-bar">
       <a href="{{ pkg_base }}/cost" class="active">Cost Items</a>
       {% if package.is_external %}<a href="{{ pkg_base }}/tender">Procurement</a>{% endif %}
@@ -20,119 +37,318 @@
 </div>
 {% endblock %}
 
+{% block scripts %}
+<script src="/static/vendor/tabulator/tabulator.min.js"></script>
+<script>
+  const COST_NODE_ROWS = {{ cost_node_rows | tojson }};
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function amountFormatter(field) {
+    return function(cell) {
+      const display = cell.getRow().getData()[field + '_display'];
+      return display ? escapeHtml(display) : '';
+    };
+  }
+
+  function typeFormatter(cell) {
+    const type = cell.getValue() || 'Group';
+    const cls = type === 'Cost Item' ? 'cost-type-item' : 'cost-type-group';
+    return '<span class="cost-type ' + cls + '">' + escapeHtml(type) + '</span>';
+  }
+
+  function descriptionFormatter(cell) {
+    const data = cell.getRow().getData();
+    const code = data.code ? '<span class="cost-code">' + escapeHtml(data.code) + '</span>' : '';
+    return code + '<span>' + escapeHtml(data.description || '') + '</span>';
+  }
+
+  function openCostGroupModal() {
+    closeActions();
+    document.getElementById('costGroupOverlay').classList.add('open');
+    document.getElementById('costGroupModal').classList.add('open');
+    setTimeout(() => document.getElementById('groupDescription').focus(), 60);
+  }
+
+  function closeCostGroupModal() {
+    document.getElementById('costGroupOverlay').classList.remove('open');
+    document.getElementById('costGroupModal').classList.remove('open');
+  }
+
+  function openCostItemModal() {
+    closeActions();
+    document.getElementById('costItemOverlay').classList.add('open');
+    document.getElementById('costItemModal').classList.add('open');
+    setTimeout(() => document.getElementById('itemDescription').focus(), 60);
+  }
+
+  function closeCostItemModal() {
+    document.getElementById('costItemOverlay').classList.remove('open');
+    document.getElementById('costItemModal').classList.remove('open');
+  }
+
+  function openAwardModal() {
+    closeActions();
+    document.getElementById('awardOverlay').classList.add('open');
+    document.getElementById('awardModal').classList.add('open');
+  }
+
+  function closeAwardModal() {
+    document.getElementById('awardOverlay').classList.remove('open');
+    document.getElementById('awardModal').classList.remove('open');
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    new Tabulator('#costNodeGrid', {
+      data: COST_NODE_ROWS,
+      layout: 'fitColumns',
+      dataTree: true,
+      dataTreeStartExpanded: true,
+      dataTreeChildField: '_children',
+      placeholder: 'No cost groups or cost items registered.',
+      rowFormatter: function(row) {
+        const data = row.getData();
+        row.getElement().classList.add(data.type === 'Group' ? 'cost-group-row' : 'cost-item-row');
+      },
+      columns: [
+        {title: 'Description', field: 'description', minWidth: 340, widthGrow: 3, formatter: descriptionFormatter, headerSort: true},
+        {title: 'Type', field: 'type', width: 115, formatter: typeFormatter, headerSort: true},
+        {title: 'Control account', field: 'control_account', width: 130, headerSort: true},
+        {title: 'Baseline estimate', field: 'baseline', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('baseline'), sorter: 'number', headerSort: true},
+        {title: 'Assigned cost', field: 'pre_award', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('pre_award'), sorter: 'number', headerSort: true},
+        {title: 'Committed cost', field: 'contract', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('contract'), sorter: 'number', headerSort: true},
+      ],
+    });
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      closeCostGroupModal();
+      closeCostItemModal();
+      closeAwardModal();
+    }
+  });
+</script>
+{% endblock %}
+
 {% block content %}
+<style>
+  #costNodeGrid.tabulator,
+  #costNodeGrid .tabulator {
+    border: none;
+    background: #fff;
+    color: #222;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  #costNodeGrid .tabulator-header,
+  #costNodeGrid .tabulator .tabulator-header {
+    border-bottom: 2px solid #d0d8e4;
+    background: #f0f4f8;
+    color: #334;
+    font-weight: 600;
+  }
+  #costNodeGrid .tabulator-header .tabulator-col,
+  #costNodeGrid .tabulator-col {
+    background: #f0f4f8;
+    border-right: none;
+    min-height: 32px;
+  }
+  #costNodeGrid .tabulator-col .tabulator-col-title {
+    padding: 6px 28px 6px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: normal;
+    color: #334;
+  }
+  #costNodeGrid .tabulator-row,
+  #costNodeGrid .tabulator-row.tabulator-row-even,
+  #costNodeGrid .tabulator-row.tabulator-row-odd {
+    background: #fff;
+    border-bottom: 1px solid #edf0f4;
+    min-height: 32px;
+  }
+  #costNodeGrid .tabulator-row.cost-group-row,
+  #costNodeGrid .tabulator-row.cost-group-row .tabulator-cell {
+    background: #f7f9fc;
+    font-weight: 600;
+  }
+  #costNodeGrid .tabulator-row .tabulator-cell,
+  #costNodeGrid .tabulator-cell {
+    border-right: none;
+    padding: 6px 8px;
+    line-height: 1.3;
+    white-space: normal;
+    vertical-align: top;
+  }
+  #costNodeGrid .tabulator-data-tree-control {
+    border: 1px solid #9aaec2;
+    background: #fff;
+    margin-right: 8px;
+  }
+  #costNodeGrid .cost-code {
+    display: inline-block;
+    font-family: monospace;
+    color: #506070;
+    margin-right: 8px;
+  }
+  #costNodeGrid .cost-type {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  #costNodeGrid .cost-type-group { background: #eef2f7; color: #334; }
+  #costNodeGrid .cost-type-item { background: #e6f0fb; color: #1a4a70; }
+  .package-modal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .package-modal-grid .span-2 { grid-column: span 2; }
+  .package-modal-grid label {
+    font-size: 12px;
+    color: #555;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .package-modal-grid input,
+  .package-modal-grid select {
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .cost-total-strip {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(145px, 0.32fr));
+    gap: 0;
+    border-top: 2px solid #d0d8e4;
+    background: #f7f9fc;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1a2e4a;
+  }
+  .cost-total-strip div {
+    padding: 8px;
+    border-right: 1px solid #edf0f4;
+  }
+  .cost-total-strip div:last-child { border-right: none; }
+  .cost-total-strip .num { text-align: right; white-space: nowrap; }
+</style>
+
 <div class="summary-cards">
-  <div class="summary-card"><div class="sc-label">Pricing basis</div><div class="sc-value">{{ pricing_bases.get(package.pricing_basis, package.pricing_basis) }}</div></div>
-  <div class="summary-card"><div class="sc-label">Package category</div><div class="sc-value">{{ package.package_type }}</div></div>
-  <div class="summary-card"><div class="sc-label">Provisional Allocation</div><div class="sc-value">{{ package.planned_value | zar }}</div></div>
-  <div class="summary-card"><div class="sc-label">Committed Cost</div><div class="sc-value">{{ (package.awarded_amount or 0) | zar }}</div></div>
+  <div class="summary-card sc-main"><div class="sc-label">Pricing basis</div><div class="sc-value">{{ pricing_bases.get(package.pricing_basis, package.pricing_basis) }}</div></div>
+  <div class="summary-card sc-main"><div class="sc-label">Package category</div><div class="sc-value">{{ package.package_type }}</div></div>
+  <div class="summary-card fy"><div class="sc-label">Provisional Allocation</div><div class="sc-value">{{ package.planned_value | zar }}</div></div>
+  <div class="summary-card fy"><div class="sc-label">Committed Cost</div><div class="sc-value">{{ (package.awarded_amount or 0) | zar }}</div></div>
 </div>
 
 <div class="card">
-  <h2>Cost Item Lines</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Description</th>
-        <th style="width:190px;">Deliverable / L2</th>
-        <th style="width:190px;">Cost Item Code / L3</th>
-        <th style="width:110px;">Type</th>
-        <th class="num" style="width:130px;">Value</th>
-        <th style="width:60px;"></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for item in package.cost_items %}
-      <tr {% if item.superseded %}style="text-decoration:line-through;color:#999;"{% endif %}>
-        <td>{{ item.description }}</td>
-        <td>{{ item.cbs_l2_code }}</td>
-        <td><span style="font-family:monospace;">{{ item.cost_item_code_ref.code }}</span> - {{ item.cost_item_code_ref.name }}</td>
-        <td>
-          {% if item.superseded %}<span class="badge">Superseded</span>
-          {% elif item.status == 'Awarded' %}<span class="badge">Awarded</span>
-          {% elif item.provisional %}<span class="chip">PS</span>
-          {% else %}<span class="badge">Firm</span>{% endif %}
-        </td>
-        <td class="num">{{ item.value | zar }}</td>
-        <td>
-          {% if not package.is_contracted %}
-          <form method="post" action="{{ pkg_base }}/cost/delete-line/{{ item.id }}" onsubmit="return confirm('Delete this line?')">
-            <button class="btn btn-sm btn-ghost" type="submit">Del</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-      {% if not package.cost_items %}
-      <tr><td colspan="6" class="empty-state">No cost item lines yet.</td></tr>
-      {% endif %}
-    </tbody>
-  </table>
+  <div id="costNodeGrid"></div>
+  <div class="cost-total-strip">
+    <div>Grand Total</div>
+    <div class="num">{{ cost_node_totals.baseline | zar if cost_node_totals.baseline else 'R 0.00' }}</div>
+    <div class="num">{{ cost_node_totals.pre_award | zar if cost_node_totals.pre_award else 'R 0.00' }}</div>
+    <div class="num">{{ cost_node_totals.contract | zar if cost_node_totals.contract else 'R 0.00' }}</div>
+  </div>
 </div>
 
-<div class="card">
-  <h2>Create Cost Item Code</h2>
-  <form method="post" action="{{ pkg_base }}/cost/create-code" style="display:grid;grid-template-columns:120px 1.5fr 1.5fr 1fr auto;gap:10px;align-items:end;">
-    <label>L2 type
-      <select name="l2_kind">
-        <option value="deliverable">Deliverable</option>
-        <option value="indirect">Indirect</option>
-      </select>
-    </label>
-    <label>Deliverable
-      <select name="deliverable_id">
-        {% for d in deliverables %}<option value="{{ d.id }}">{{ d.cbs_l2_code }} - {{ d.description }}</option>{% endfor %}
-      </select>
-    </label>
-    <label>Indirect L2
-      <select name="indirect_l2_code">
-        {% for l2 in indirect_l2 %}<option value="{{ l2.code }}">{{ l2.code }} - {{ l2.name }}</option>{% endfor %}
-      </select>
-    </label>
-    <label>Name
-      <input name="name" list="cost-item-library" required>
-      <datalist id="cost-item-library">
-        {% for n in direct_library %}<option value="{{ n }}"></option>{% endfor %}
-        {% for n in indirect_library %}<option value="{{ n }}"></option>{% endfor %}
-      </datalist>
-    </label>
-    <input type="hidden" name="source" value="custom">
-    <button class="btn btn-sm" type="submit">Create Code</button>
+<div class="filter-overlay" id="costGroupOverlay" onclick="closeCostGroupModal()"></div>
+<div class="filter-modal" id="costGroupModal" style="width:560px;">
+  <div class="fm-header">
+    <span>Add Cost Group</span>
+    <button class="fm-close" onclick="closeCostGroupModal()" aria-label="Close">&times;</button>
+  </div>
+  <form method="post" action="{{ pkg_base }}/cost/add-section">
+    <div class="fm-fields package-modal-grid">
+      <label>Parent group
+        <select name="parent_id">
+          <option value="">Top level</option>
+          {% for node in cost_group_options %}<option value="{{ node.id }}">{% if node.code %}{{ node.code }} - {% endif %}{{ node.description }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Code
+        <input name="code" autocomplete="off">
+      </label>
+      <label class="span-2">Description *
+        <input name="description" id="groupDescription" required autocomplete="off">
+      </label>
+    </div>
+    <div class="fm-footer">
+      <button type="button" class="btn btn-sm btn-ghost" onclick="closeCostGroupModal()">Cancel</button>
+      <button type="submit" class="btn btn-sm">Add Group</button>
+    </div>
   </form>
 </div>
 
-<div class="card">
-  <h2>Add Cost Item Line</h2>
-  <form method="post" action="{{ pkg_base }}/cost/add-line" style="display:grid;grid-template-columns:1.5fr 2fr 120px 120px 150px auto;gap:10px;align-items:end;">
-    <label>Cost Item Code
-      <select name="cost_item_code_id" required>
-        {% for code in cost_codes %}<option value="{{ code.id }}">{{ code.code }} - {{ code.name }}</option>{% endfor %}
-      </select>
-    </label>
-    <label>Description<input name="description" required></label>
-    <label>Value<input name="value" type="number" min="0" step="0.01" required></label>
-    <label>Type
-      <select name="line_type">
-        <option value="firm">Firm</option>
-        <option value="ps">PS</option>
-      </select>
-    </label>
-    <label title="Use only when replacing an existing provisional sum at the same Package x Cost Item Code intersection.">Supersede PS?
-      <select name="confirm_supersede">
-        <option value="">No</option>
-        <option value="yes">Yes</option>
-      </select>
-    </label>
-    <button class="btn btn-sm" type="submit">Add Line</button>
+<div class="filter-overlay" id="costItemOverlay" onclick="closeCostItemModal()"></div>
+<div class="filter-modal" id="costItemModal" style="width:720px;">
+  <div class="fm-header">
+    <span>Add Cost Item</span>
+    <button class="fm-close" onclick="closeCostItemModal()" aria-label="Close">&times;</button>
+  </div>
+  <form method="post" action="{{ pkg_base }}/cost/add-item">
+    <div class="fm-fields package-modal-grid">
+      <label>Parent group
+        <select name="parent_id">
+          <option value="">Top level</option>
+          {% for node in cost_group_options %}<option value="{{ node.id }}">{% if node.code %}{{ node.code }} - {% endif %}{{ node.description }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Control account
+        <select name="cc_code">
+          <option value="">Select...</option>
+          {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Code
+        <input name="code" autocomplete="off">
+      </label>
+      <label>Description *
+        <input name="description" id="itemDescription" required autocomplete="off">
+      </label>
+      <label>Baseline estimate
+        <input name="baseline_amount" type="number" min="0" step="0.01">
+      </label>
+      <label>Assigned cost
+        <input name="pre_award_amount" type="number" min="0" step="0.01">
+      </label>
+      <label>Committed cost
+        <input name="contract_amount" type="number" min="0" step="0.01">
+      </label>
+    </div>
+    <div class="fm-footer">
+      <button type="button" class="btn btn-sm btn-ghost" onclick="closeCostItemModal()">Cancel</button>
+      <button type="submit" class="btn btn-sm">Add Cost Item</button>
+    </div>
   </form>
 </div>
 
-{% if not package.is_contracted %}
-<div class="card">
-  <h2>Award Package</h2>
+<div class="filter-overlay" id="awardOverlay" onclick="closeAwardModal()"></div>
+<div class="filter-modal" id="awardModal" style="width:520px;">
+  <div class="fm-header">
+    <span>Award Package</span>
+    <button class="fm-close" onclick="closeAwardModal()" aria-label="Close">&times;</button>
+  </div>
   <form method="post" action="{{ pkg_base }}/cost/award" onsubmit="return confirm('Award this package? Award validation will block missing Scope/Plant metadata.')">
-    <button class="btn btn-sm" type="submit">Award Package</button>
+    <div class="fm-fields">
+      <p style="margin:0;color:#556;line-height:1.5;">Awarding the package moves assigned cost into committed cost and locks the relevant package values.</p>
+    </div>
+    <div class="fm-footer">
+      <button type="button" class="btn btn-sm btn-ghost" onclick="closeAwardModal()">Cancel</button>
+      <button type="submit" class="btn btn-sm">Award Package</button>
+    </div>
   </form>
 </div>
-{% endif %}
 {% endblock %}

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from ..cbs import award_package, create_cost_item_line, next_cost_item_code, plan_package
 from ..cost_nodes import flatten_cost_nodes, parse_float, process_cost_column
 from ..dependencies import DbDep
+from ..formatting import fmt_zar
 from ..lookups import get_package_or_404, get_project_or_404
 from ..models import (
     ControlAccount,
@@ -29,6 +30,77 @@ from ..templates import templates
 router = APIRouter()
 
 
+def _cost_node_amount(node: PackageCostNode, column: str) -> float:
+    value = getattr(node, column) or 0
+    return float(value)
+
+
+def _cost_node_subtotals(node: PackageCostNode) -> dict[str, float]:
+    baseline = _cost_node_amount(node, "baseline_amount")
+    pre_award = _cost_node_amount(node, "pre_award_amount")
+    contract = _cost_node_amount(node, "contract_amount")
+    for child in node.children:
+        child_totals = _cost_node_subtotals(child)
+        baseline += child_totals["baseline"]
+        pre_award += child_totals["pre_award"]
+        contract += child_totals["contract"]
+    return {
+        "baseline": baseline,
+        "pre_award": pre_award,
+        "contract": contract,
+    }
+
+
+def _cost_node_grid_row(node: PackageCostNode) -> dict:
+    totals = _cost_node_subtotals(node)
+    children = [_cost_node_grid_row(child) for child in sorted(node.children, key=lambda n: n.display_order)]
+    is_item = node.is_item
+    row = {
+        "id": node.id,
+        "node_id": node.id,
+        "parent_id": node.parent_id,
+        "code": node.code or "",
+        "description": node.description,
+        "type": "Cost Item" if is_item else "Group",
+        "control_account": node.cc_code or "",
+        "baseline": totals["baseline"],
+        "baseline_display": fmt_zar(totals["baseline"]) if totals["baseline"] else "",
+        "pre_award": totals["pre_award"],
+        "pre_award_display": fmt_zar(totals["pre_award"]) if totals["pre_award"] else "",
+        "contract": totals["contract"],
+        "contract_display": fmt_zar(totals["contract"]) if totals["contract"] else "",
+        "unit": node.unit,
+        "qty": node.qty,
+        "rate": node.rate,
+        "baseline_amount": node.baseline_amount,
+        "pre_award_unit": node.pre_award_unit,
+        "pre_award_qty": node.pre_award_qty,
+        "pre_award_rate": node.pre_award_rate,
+        "pre_award_amount": node.pre_award_amount,
+        "contract_unit": node.contract_unit,
+        "contract_qty": node.contract_qty,
+        "contract_rate": node.contract_rate,
+        "contract_amount": node.contract_amount,
+        "_children": children,
+    }
+    return row
+
+
+def _cost_node_options(nodes: list[PackageCostNode]) -> list[PackageCostNode]:
+    ordered: list[PackageCostNode] = []
+
+    def walk(node: PackageCostNode) -> None:
+        ordered.append(node)
+        for child in sorted(node.children, key=lambda n: n.display_order):
+            if not child.is_item:
+                walk(child)
+
+    for node in sorted(nodes, key=lambda n: n.display_order):
+        if not node.is_item:
+            walk(node)
+    return ordered
+
+
 def _package_detail_response(request: Request, db: Session, project_number: str, package_number: str, active_pkg_tab: str):
     project = get_project_or_404(db, project_number)
     pkg = get_package_or_404(db, project_number, package_number)
@@ -43,6 +115,18 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
         )
         indirect_l2 = db.query(IndirectL2Account).order_by(IndirectL2Account.code).all()
         cost_codes = db.query(CostItemCode).filter_by(project_number=project_number).order_by(CostItemCode.code).all()
+        root_nodes = [n for n in pkg.cost_nodes if n.parent_id is None]
+        cost_node_rows = [
+            _cost_node_grid_row(node)
+            for node in sorted(root_nodes, key=lambda n: n.display_order)
+        ]
+        cost_node_totals = {
+            "baseline": sum(row["baseline"] for row in cost_node_rows),
+            "pre_award": sum(row["pre_award"] for row in cost_node_rows),
+            "contract": sum(row["contract"] for row in cost_node_rows),
+        }
+        cost_group_options = _cost_node_options(root_nodes)
+        control_accounts = db.query(ControlAccount).order_by(ControlAccount.code).all()
         award_errors = []
         return templates.TemplateResponse("package_wbs.html", {
             "request": request,
@@ -55,6 +139,10 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "direct_library": COST_ITEM_LIBRARY_DIRECT,
             "indirect_library": COST_ITEM_LIBRARY_INDIRECT,
             "pricing_bases": PRICING_BASES,
+            "cost_node_rows": cost_node_rows,
+            "cost_node_totals": cost_node_totals,
+            "cost_group_options": cost_group_options,
+            "control_accounts": control_accounts,
             "award_errors": award_errors,
             "active_tab": "wbs",
             "active_pkg_tab": active_pkg_tab,
@@ -473,4 +561,3 @@ def cost_delete_node(project_number: str, package_number: str, node_id: int, db:
     db.delete(node)
     db.commit()
     return _cost_redirect(project_number, package_number)
-
