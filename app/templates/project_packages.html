@@ -106,27 +106,26 @@
       placeholder: 'No packages registered.',
       initialSort: [{column: 'package_number', dir: 'asc'}],
       columns: [
-        {title: 'Package No.', field: 'package_number', width: 135, formatter: packageNumberFormatter, headerSort: true},
-        {title: 'Description', field: 'description', minWidth: 300, widthGrow: 2.1, headerSort: true},
-        {title: 'Package category', field: 'package_type', minWidth: 285, widthGrow: 2, headerSort: true},
-        {title: 'Source', field: 'package_source', width: 95, formatter: sourceFormatter, headerSort: true},
-        {title: 'Pricing basis', field: 'pricing_basis_label', width: 125, headerSort: true},
+        {title: 'Package No.', field: 'package_number', width: 128, formatter: packageNumberFormatter, headerSort: true},
+        {title: 'Description', field: 'description', minWidth: 270, widthGrow: 2, headerSort: true},
+        {title: 'Package category', field: 'package_type', minWidth: 260, widthGrow: 1.9, headerSort: true},
+        {title: 'Source', field: 'package_source', width: 90, formatter: sourceFormatter, headerSort: true},
+        {title: 'Pricing basis', field: 'pricing_basis_label', width: 118, headerSort: true},
         {
           title: 'Planned value',
           field: 'planned_value',
-          width: 135,
+          width: 128,
           hozAlign: 'right',
           headerHozAlign: 'right',
           formatter: plannedValueFormatter,
           headerSort: true,
           sorter: 'number',
         },
-        {title: 'Stage', field: 'package_stage', width: 125, formatter: stageFormatter, headerSort: true},
+        {title: 'Stage', field: 'package_stage', width: 112, formatter: stageFormatter, headerSort: true},
         {
           title: '',
           field: 'actions',
           width: 52,
-          frozen: true,
           cssClass: 'package-actions-cell',
           hozAlign: 'center',
           formatter: packageEditFormatter,
@@ -238,8 +237,7 @@
     background: #e6f0fb;
     color: #1a4a80;
   }
-  #packageGrid .package-actions-cell,
-  #packageGrid .tabulator-col[tabulator-field="actions"] {
+  #packageGrid .package-actions-cell {
     background: #fff;
     box-shadow: -1px 0 0 #edf0f4;
   }
