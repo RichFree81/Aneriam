@@ -65,6 +65,18 @@
     return code + '<span>' + escapeHtml(data.description || '') + '</span>';
   }
 
+  function editFormatter() {
+    return '<button type="button" class="cost-edit-btn" title="Edit" aria-label="Edit">' +
+      '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">' +
+      '<path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207l6.5-6.5z"/>' +
+      '<path d="M2 10.5V13h2.5l7.1-7.1-2.5-2.5L2 10.5zM1 14.5a.5.5 0 0 1-.5-.5v-3.707a.5.5 0 0 1 .146-.354l8.5-8.5a.5.5 0 0 1 .708 0l3.707 3.707a.5.5 0 0 1 0 .708l-8.5 8.5A.5.5 0 0 1 4.707 14.5H1z"/>' +
+      '</svg></button>';
+  }
+
+  function formValue(value) {
+    return value === null || value === undefined ? '' : value;
+  }
+
   function openCostGroupModal() {
     closeActions();
     document.getElementById('costGroupOverlay').classList.add('open');
@@ -100,6 +112,45 @@
     document.getElementById('awardModal').classList.remove('open');
   }
 
+  function openCostEditDrawer(data) {
+    const isItem = data.type === 'Cost Item';
+    document.getElementById('costEditTitle').textContent = isItem ? 'Edit Cost Item' : 'Edit Group';
+    document.getElementById('costDeleteForm').action = '{{ pkg_base }}/cost/delete-node/' + data.node_id;
+    document.getElementById('costDeleteForm').dataset.nodeType = data.type || 'record';
+    document.getElementById('costEditGroupForm').style.display = isItem ? 'none' : 'flex';
+    document.getElementById('costEditItemForm').style.display = isItem ? 'flex' : 'none';
+
+    if (isItem) {
+      document.getElementById('costEditItemForm').action = '{{ pkg_base }}/cost/update-item/' + data.node_id;
+      document.getElementById('editItemCode').value = formValue(data.code);
+      document.getElementById('editItemDescription').value = formValue(data.description);
+      document.getElementById('editItemControlAccount').value = formValue(data.control_account);
+      document.getElementById('editItemBaseline').value = formValue(data.baseline_amount);
+      document.getElementById('editItemAssigned').value = formValue(data.pre_award_amount);
+      document.getElementById('editItemCommitted').value = formValue(data.contract_amount);
+    } else {
+      document.getElementById('costEditGroupForm').action = '{{ pkg_base }}/cost/update-section/' + data.node_id;
+      document.getElementById('editGroupCode').value = formValue(data.code);
+      document.getElementById('editGroupDescription').value = formValue(data.description);
+    }
+
+    document.getElementById('costEditOverlay').classList.add('open');
+    document.getElementById('costEditDrawer').classList.add('open');
+  }
+
+  function closeCostEditDrawer() {
+    document.getElementById('costEditOverlay').classList.remove('open');
+    document.getElementById('costEditDrawer').classList.remove('open');
+  }
+
+  function costDeleteMessage() {
+    const type = document.getElementById('costDeleteForm').dataset.nodeType || 'record';
+    if (type === 'Group') {
+      return 'Delete this group and all cost items beneath it?';
+    }
+    return 'Delete this cost item?';
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     new Tabulator('#costNodeGrid', {
       data: COST_NODE_ROWS,
@@ -119,6 +170,18 @@
         {title: 'Baseline estimate', field: 'baseline', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('baseline'), sorter: 'number', headerSort: true},
         {title: 'Assigned cost', field: 'pre_award', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('pre_award'), sorter: 'number', headerSort: true},
         {title: 'Committed cost', field: 'contract', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('contract'), sorter: 'number', headerSort: true},
+        {
+          title: '',
+          field: 'actions',
+          width: 52,
+          hozAlign: 'center',
+          formatter: editFormatter,
+          headerSort: false,
+          cellClick: function(e, cell) {
+            e.stopPropagation();
+            openCostEditDrawer(cell.getRow().getData());
+          },
+        },
       ],
     });
   });
@@ -128,6 +191,7 @@
       closeCostGroupModal();
       closeCostItemModal();
       closeAwardModal();
+      closeCostEditDrawer();
     }
   });
 </script>
@@ -208,6 +272,21 @@
   }
   #costNodeGrid .cost-type-group { background: #eef2f7; color: #334; }
   #costNodeGrid .cost-type-item { background: #e6f0fb; color: #1a4a70; }
+  #costNodeGrid .cost-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 1px solid #c8d4e0;
+    border-radius: 4px;
+    background: #f6f9fc;
+    color: #1a4a80;
+    cursor: pointer;
+  }
+  #costNodeGrid .cost-edit-btn:hover {
+    background: #e6f0fb;
+  }
   .package-modal-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -245,6 +324,81 @@
   }
   .cost-total-strip div:last-child { border-right: none; }
   .cost-total-strip .num { text-align: right; white-space: nowrap; }
+  .cost-drawer-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.22);
+    z-index: 430;
+  }
+  .cost-drawer-overlay.open { display: block; }
+  .cost-drawer {
+    position: fixed;
+    top: 48px;
+    right: 0;
+    bottom: 0;
+    width: 440px;
+    max-width: calc(100vw - 32px);
+    background: #fff;
+    box-shadow: -8px 0 28px rgba(0,0,0,.24);
+    z-index: 440;
+    transform: translateX(100%);
+    transition: transform 0.16s ease;
+    display: flex;
+    flex-direction: column;
+  }
+  .cost-drawer.open { transform: translateX(0); }
+  .cost-drawer-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid #e8edf3;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .cost-drawer-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a2e4a;
+    margin-right: auto;
+  }
+  .cost-delete-btn {
+    background: #fce8e6;
+    color: #8b1a10;
+    border: 1px solid #f3c1bb;
+  }
+  .cost-delete-btn:hover { background: #f8d7da; }
+  .cost-drawer-body {
+    padding: 16px;
+    overflow-y: auto;
+  }
+  .cost-drawer-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .cost-drawer-form label {
+    font-size: 12px;
+    color: #555;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .cost-drawer-form input,
+  .cost-drawer-form select {
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .cost-drawer-footer {
+    padding: 12px 16px;
+    border-top: 1px solid #e8edf3;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: auto;
+  }
 </style>
 
 <div class="summary-cards">
@@ -263,6 +417,59 @@
     <div class="num">{{ cost_node_totals.contract | zar if cost_node_totals.contract else 'R 0.00' }}</div>
   </div>
 </div>
+
+<div class="cost-drawer-overlay" id="costEditOverlay" onclick="closeCostEditDrawer()"></div>
+<aside class="cost-drawer" id="costEditDrawer" aria-label="Edit cost record">
+  <div class="cost-drawer-header">
+    <div class="cost-drawer-title" id="costEditTitle">Edit</div>
+    <form id="costDeleteForm" method="post" onsubmit="return confirm(costDeleteMessage());">
+      <button type="submit" class="btn btn-sm cost-delete-btn">Delete</button>
+    </form>
+    <button class="fm-close" onclick="closeCostEditDrawer()" aria-label="Close">&times;</button>
+  </div>
+  <div class="cost-drawer-body">
+    <form id="costEditGroupForm" class="cost-drawer-form" method="post">
+      <label>Code
+        <input name="code" id="editGroupCode" autocomplete="off">
+      </label>
+      <label>Description *
+        <input name="description" id="editGroupDescription" required autocomplete="off">
+      </label>
+      <div class="cost-drawer-footer">
+        <button type="button" class="btn btn-sm btn-ghost" onclick="closeCostEditDrawer()">Cancel</button>
+        <button type="submit" class="btn btn-sm">Save</button>
+      </div>
+    </form>
+
+    <form id="costEditItemForm" class="cost-drawer-form" method="post">
+      <label>Code
+        <input name="code" id="editItemCode" autocomplete="off">
+      </label>
+      <label>Description *
+        <input name="description" id="editItemDescription" required autocomplete="off">
+      </label>
+      <label>Control account
+        <select name="cc_code" id="editItemControlAccount">
+          <option value="">Select...</option>
+          {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Baseline estimate
+        <input name="baseline_amount" id="editItemBaseline" type="number" min="0" step="0.01">
+      </label>
+      <label>Assigned cost
+        <input name="pre_award_amount" id="editItemAssigned" type="number" min="0" step="0.01">
+      </label>
+      <label>Committed cost
+        <input name="contract_amount" id="editItemCommitted" type="number" min="0" step="0.01">
+      </label>
+      <div class="cost-drawer-footer">
+        <button type="button" class="btn btn-sm btn-ghost" onclick="closeCostEditDrawer()">Cancel</button>
+        <button type="submit" class="btn btn-sm">Save</button>
+      </div>
+    </form>
+  </div>
+</aside>
 
 <div class="filter-overlay" id="costGroupOverlay" onclick="closeCostGroupModal()"></div>
 <div class="filter-modal" id="costGroupModal" style="width:560px;">

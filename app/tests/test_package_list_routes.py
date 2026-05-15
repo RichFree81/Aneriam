@@ -159,7 +159,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         )
         session.add(group)
         session.flush()
-        session.add(PackageCostNode(
+        item = PackageCostNode(
             package_id=package_id,
             parent_id=group.id,
             code="01.01",
@@ -170,7 +170,8 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             pre_award_amount=1200,
             contract_amount=1300,
             display_order=0,
-        ))
+        )
+        session.add(item)
         session.commit()
 
         response = client.get("/project/5006/packages/5006-PKG-001/cost")
@@ -180,6 +181,11 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert "COST_NODE_ROWS" in response.text
         assert "dataTree: true" in response.text
         assert "Grand Total" in response.text
+        assert "costEditDrawer" in response.text
+        assert "cost-edit-btn" in response.text
+        assert "/cost/update-section/" in response.text
+        assert "/cost/update-item/" in response.text
+        assert "/cost/delete-node/" in response.text
         assert "Earthworks" in response.text
         assert "Bulk excavation" in response.text
         start = response.text.index("const COST_NODE_ROWS = ") + len("const COST_NODE_ROWS = ")
@@ -192,6 +198,44 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert "Create Cost Item Code" not in response.text
         assert "Add Cost Item Line" not in response.text
         assert '<span class="chip">{{ package.package_source }}</span>' not in response.text
+
+        response = client.post(
+            f"/project/5006/packages/5006-PKG-001/cost/update-section/{group.id}",
+            data={"code": "02", "description": "Civils"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        session.refresh(group)
+        assert group.code == "02"
+        assert group.description == "Civils"
+
+        response = client.post(
+            f"/project/5006/packages/5006-PKG-001/cost/update-item/{item.id}",
+            data={
+                "code": "02.01",
+                "description": "Bulk earthworks",
+                "cc_code": "206",
+                "baseline_amount": "1400",
+                "pre_award_amount": "1500",
+                "contract_amount": "1600",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        session.refresh(item)
+        assert item.code == "02.01"
+        assert item.description == "Bulk earthworks"
+        assert item.cc_code == "206"
+        assert item.baseline_amount == 1400
+        assert item.pre_award_amount == 1500
+        assert item.contract_amount == 1600
+
+        response = client.post(
+            f"/project/5006/packages/5006-PKG-001/cost/delete-node/{item.id}",
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert session.get(PackageCostNode, item.id) is None
     finally:
         app.dependency_overrides.clear()
         session.close()
