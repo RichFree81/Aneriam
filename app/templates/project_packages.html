@@ -126,6 +126,8 @@
           title: '',
           field: 'actions',
           width: 52,
+          frozen: true,
+          cssClass: 'package-actions-cell',
           hozAlign: 'center',
           formatter: packageEditFormatter,
           headerSort: false,
@@ -226,15 +228,20 @@
     justify-content: center;
     width: 24px;
     height: 24px;
-    border: none;
+    border: 1px solid #c8d4e0;
     border-radius: 4px;
-    background: transparent;
-    color: #667;
+    background: #f6f9fc;
+    color: #1a4a80;
     cursor: pointer;
   }
   #packageGrid .package-edit-btn:hover {
     background: #e6f0fb;
     color: #1a4a80;
+  }
+  #packageGrid .package-actions-cell,
+  #packageGrid .tabulator-col[tabulator-field="actions"] {
+    background: #fff;
+    box-shadow: -1px 0 0 #edf0f4;
   }
   #packageGrid .pkg-source-external { background: #fdf3e6; color: #8b4513; }
   #packageGrid .pkg-source-client { background: #f4e9fb; color: #5b2a76; }
