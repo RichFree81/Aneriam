@@ -62,6 +62,42 @@
     return cell.getRow().getData().planned_value_display || 'R 0.00';
   }
 
+  function packageEditFormatter() {
+    return '<button type="button" class="package-edit-btn" title="Edit package" aria-label="Edit package">' +
+      '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">' +
+      '<path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207l6.5-6.5z"/>' +
+      '<path d="M2 10.5V13h2.5l7.1-7.1-2.5-2.5L2 10.5zM1 14.5a.5.5 0 0 1-.5-.5v-3.707a.5.5 0 0 1 .146-.354l8.5-8.5a.5.5 0 0 1 .708 0l3.707 3.707a.5.5 0 0 1 0 .708l-8.5 8.5A.5.5 0 0 1 4.707 14.5H1z"/>' +
+      '</svg></button>';
+  }
+
+  function openPackageEditDrawer(data) {
+    document.getElementById('packageEditTitle').textContent = 'Edit ' + (data.package_number || 'Package');
+    document.getElementById('packageDeleteForm').action =
+      '/project/{{ project.project_number }}/packages/delete/' + data.record_id;
+    document.getElementById('packageDeleteForm').dataset.packageNumber = data.package_number || '';
+    document.getElementById('packageEditForm').action =
+      '/project/{{ project.project_number }}/packages/update/' + data.record_id;
+    document.getElementById('editPackageNumber').value = data.package_number || '';
+    document.getElementById('editPackageDescription').value = data.description || '';
+    document.getElementById('editPackageType').value = data.package_type || '';
+    document.getElementById('editPackageSource').value = data.package_source || 'Internal';
+    document.getElementById('editPricingBasis').value = data.pricing_basis || 'LS';
+    document.getElementById('editPackageStage').value = data.package_stage || 'Definition';
+    document.getElementById('editPlannedValue').value = data.planned_value || 0;
+    document.getElementById('packageEditOverlay').classList.add('open');
+    document.getElementById('packageEditDrawer').classList.add('open');
+  }
+
+  function closePackageEditDrawer() {
+    document.getElementById('packageEditOverlay').classList.remove('open');
+    document.getElementById('packageEditDrawer').classList.remove('open');
+  }
+
+  function packageDeleteMessage() {
+    const packageNumber = document.getElementById('packageDeleteForm').dataset.packageNumber || 'this package';
+    return 'Delete ' + packageNumber + '? This will also delete package cost buildup data stored beneath it.';
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     new Tabulator('#packageGrid', {
       data: PACKAGE_ROWS,
@@ -86,8 +122,24 @@
           sorter: 'number',
         },
         {title: 'Stage', field: 'package_stage', width: 125, formatter: stageFormatter, headerSort: true},
+        {
+          title: '',
+          field: 'actions',
+          width: 52,
+          hozAlign: 'center',
+          formatter: packageEditFormatter,
+          headerSort: false,
+          cellClick: function(e, cell) {
+            e.stopPropagation();
+            openPackageEditDrawer(cell.getRow().getData());
+          },
+        },
       ],
     });
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closePackageEditDrawer();
   });
 </script>
 {% endblock %}
@@ -168,9 +220,109 @@
     font-family: monospace;
     font-size: 12px;
   }
+  #packageGrid .package-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: #667;
+    cursor: pointer;
+  }
+  #packageGrid .package-edit-btn:hover {
+    background: #e6f0fb;
+    color: #1a4a80;
+  }
   #packageGrid .pkg-source-external { background: #fdf3e6; color: #8b4513; }
   #packageGrid .pkg-source-client { background: #f4e9fb; color: #5b2a76; }
   #packageGrid .pkg-source-internal { background: #e6f0fb; color: #1a4a70; }
+  .package-drawer-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.22);
+    z-index: 430;
+  }
+  .package-drawer-overlay.open { display: block; }
+  .package-drawer {
+    position: fixed;
+    top: 48px;
+    right: 0;
+    bottom: 0;
+    width: 440px;
+    max-width: calc(100vw - 32px);
+    background: #fff;
+    box-shadow: -8px 0 28px rgba(0,0,0,.24);
+    z-index: 440;
+    transform: translateX(100%);
+    transition: transform 0.16s ease;
+    display: flex;
+    flex-direction: column;
+  }
+  .package-drawer.open { transform: translateX(0); }
+  .package-drawer-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid #e8edf3;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .package-drawer-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a2e4a;
+    margin-right: auto;
+  }
+  .package-delete-btn {
+    background: #fce8e6;
+    color: #8b1a10;
+    border: 1px solid #f3c1bb;
+  }
+  .package-delete-btn:hover { background: #f8d7da; }
+  .package-drawer-body {
+    padding: 16px;
+    overflow-y: auto;
+  }
+  .package-drawer-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .package-drawer-form label {
+    font-size: 12px;
+    color: #555;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .package-drawer-form input,
+  .package-drawer-form select,
+  .package-drawer-form textarea {
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .package-drawer-form textarea {
+    min-height: 86px;
+    resize: vertical;
+  }
+  .package-drawer-form input[readonly] {
+    background: #f6f8fa;
+    color: #667;
+  }
+  .package-drawer-footer {
+    padding: 12px 16px;
+    border-top: 1px solid #e8edf3;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: auto;
+  }
 </style>
 
 <div class="summary-cards">
@@ -210,4 +362,52 @@
   </div>
   {% endif %}
 </div>
+
+<div class="package-drawer-overlay" id="packageEditOverlay" onclick="closePackageEditDrawer()"></div>
+<aside class="package-drawer" id="packageEditDrawer" aria-label="Edit package">
+  <div class="package-drawer-header">
+    <div class="package-drawer-title" id="packageEditTitle">Edit Package</div>
+    <form id="packageDeleteForm" method="post" onsubmit="return confirm(packageDeleteMessage());">
+      <button type="submit" class="btn btn-sm package-delete-btn">Delete</button>
+    </form>
+    <button class="fm-close" onclick="closePackageEditDrawer()" aria-label="Close">&times;</button>
+  </div>
+  <div class="package-drawer-body">
+    <form id="packageEditForm" class="package-drawer-form" method="post">
+      <label>Package No.
+        <input id="editPackageNumber" readonly>
+      </label>
+      <label>Description *
+        <textarea name="description" id="editPackageDescription" required></textarea>
+      </label>
+      <label>Package category *
+        <select name="package_type" id="editPackageType" required>
+          {% for package_type in package_types %}<option value="{{ package_type }}">{{ package_type }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Package source
+        <select name="package_source" id="editPackageSource">
+          {% for source in ["External", "Internal", "Client"] %}<option value="{{ source }}">{{ source }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Pricing basis
+        <select name="pricing_basis" id="editPricingBasis">
+          {% for code, label in pricing_bases.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Stage
+        <select name="package_stage" id="editPackageStage">
+          {% for stage in package_stages %}<option value="{{ stage }}">{{ stage }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Planned value
+        <input name="planned_value" id="editPlannedValue" type="number" min="0" step="0.01">
+      </label>
+      <div class="package-drawer-footer">
+        <button type="button" class="btn btn-sm btn-ghost" onclick="closePackageEditDrawer()">Cancel</button>
+        <button type="submit" class="btn btn-sm">Save</button>
+      </div>
+    </form>
+  </div>
+</aside>
 {% endblock %}

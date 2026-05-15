@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..capitalisation import IS_CAP_SQL, NOT_CAP_SQL
-from ..cbs import cbs_rows, next_deliverable_code, po_package_suggestions, scope_item_state
+from ..cbs import cbs_rows, next_deliverable_code, plan_package, po_package_suggestions, scope_item_state
 from ..dependencies import DbDep
 from ..formatting import fmt_zar
 from ..hierarchy import build_hierarchy
@@ -28,7 +28,7 @@ from ..models import (
 )
 from .. import rto as rto_helpers
 from ..reports import project_totals
-from ..seed import PRICING_BASES
+from ..seed import PACKAGE_STAGES, PACKAGE_TYPES, PRICING_BASES, normalise_package_stage
 from ..templates import templates
 
 
@@ -839,6 +839,7 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
     package_grid_rows = [
         {
             "package_number": pkg.package_number,
+            "record_id": pkg.id,
             "description": pkg.description,
             "package_type": pkg.package_type,
             "package_source": pkg.package_source,
@@ -860,10 +861,76 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
         "packages": packages,
         "package_grid_rows": package_grid_rows,
         "pkg_stats": pkg_stats,
+        "package_types": PACKAGE_TYPES,
+        "package_stages": PACKAGE_STAGES,
+        "pricing_bases": PRICING_BASES,
         "po_total_count": po_total,
         "po_unassigned_count": po_unassigned,
         "active_tab": "wbs",
     })
+
+
+@router.post("/project/{project_number}/packages/update/{package_id}")
+def project_package_update(
+    project_number: str,
+    package_id: int,
+    db: DbDep,
+    description: str = Form(...),
+    package_type: str = Form(...),
+    package_source: str = Form("Internal"),
+    pricing_basis: str = Form("LS"),
+    package_stage: str = Form("Definition"),
+    planned_value: str = Form("0"),
+):
+    pkg = db.get(Package, package_id)
+    if pkg is None or pkg.project_number != project_number:
+        raise HTTPException(status_code=404, detail="Package not found")
+
+    description = description.strip()
+    package_type = package_type.strip()
+    package_stage = normalise_package_stage(package_stage.strip())
+
+    if not description:
+        raise HTTPException(status_code=400, detail="Description is required")
+    if not package_type:
+        raise HTTPException(status_code=400, detail="Package category is required")
+    if package_source not in ("External", "Internal", "Client"):
+        raise HTTPException(status_code=400, detail="Package source must be External, Internal, or Client")
+    if pricing_basis not in PRICING_BASES:
+        raise HTTPException(status_code=400, detail="Invalid pricing basis")
+    if package_stage not in PACKAGE_STAGES:
+        raise HTTPException(status_code=400, detail="Invalid package stage")
+
+    try:
+        planned = float(planned_value or 0)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Planned value must be numeric") from exc
+
+    pkg.description = description
+    pkg.package_type = package_type
+    pkg.package_source = package_source
+    pkg.is_external = package_source == "External"
+    pkg.pricing_basis = pricing_basis
+    pkg.package_stage = package_stage
+
+    try:
+        plan_package(db, pkg, planned)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    db.commit()
+    return RedirectResponse(f"/project/{project_number}/packages", status_code=303)
+
+
+@router.post("/project/{project_number}/packages/delete/{package_id}")
+def project_package_delete(project_number: str, package_id: int, db: DbDep):
+    pkg = db.get(Package, package_id)
+    if pkg is None or pkg.project_number != project_number:
+        raise HTTPException(status_code=404, detail="Package not found")
+
+    db.delete(pkg)
+    db.commit()
+    return RedirectResponse(f"/project/{project_number}/packages", status_code=303)
 
 
 def _active_package_cost_items(pkg: Package):
