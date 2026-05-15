@@ -28,6 +28,7 @@ from ..models import (
 )
 from .. import rto as rto_helpers
 from ..reports import project_totals
+from ..seed import PRICING_BASES
 from ..templates import templates
 
 
@@ -842,6 +843,7 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
             "package_type": pkg.package_type,
             "package_source": pkg.package_source,
             "pricing_basis": pkg.pricing_basis,
+            "pricing_basis_label": PRICING_BASES.get(pkg.pricing_basis, pkg.pricing_basis),
             "planned_value": float(pkg.planned_value or 0),
             "planned_value_display": fmt_zar(pkg.planned_value),
             "package_stage": pkg.package_stage,
