@@ -58,8 +58,14 @@
     return '<span class="chip ' + cls + '">' + escapeHtml(value) + '</span>';
   }
 
-  function plannedValueFormatter(cell) {
-    return cell.getRow().getData().planned_value_display || 'R 0.00';
+  function amountFormatter(cell) {
+    return cell.getRow().getData().amount_display || 'R 0.00';
+  }
+
+  function costStatusFormatter(cell) {
+    const value = cell.getValue() || 'Provisional Allocation';
+    const cls = 'pkg-cost-status-' + value.toLowerCase().replace(/\s+/g, '-');
+    return '<span class="pkg-cost-status ' + cls + '">' + escapeHtml(value) + '</span>';
   }
 
   function packageEditFormatter() {
@@ -111,13 +117,14 @@
         {title: 'Package category', field: 'package_type', minWidth: 260, widthGrow: 1.9, headerSort: true},
         {title: 'Source', field: 'package_source', width: 90, formatter: sourceFormatter, headerSort: true},
         {title: 'Pricing basis', field: 'pricing_basis_label', width: 118, headerSort: true},
+        {title: 'Cost status', field: 'cost_status', width: 155, formatter: costStatusFormatter, headerSort: true},
         {
-          title: 'Planned value',
-          field: 'planned_value',
+          title: 'Amount',
+          field: 'amount',
           width: 128,
           hozAlign: 'right',
           headerHozAlign: 'right',
-          formatter: plannedValueFormatter,
+          formatter: amountFormatter,
           headerSort: true,
           sorter: 'number',
         },
@@ -188,7 +195,7 @@
   #packageGrid .tabulator-col .tabulator-col-sorter {
     right: 6px;
   }
-  #packageGrid .tabulator-col[tabulator-field="planned_value"] .tabulator-col-title {
+  #packageGrid .tabulator-col[tabulator-field="amount"] .tabulator-col-title {
     padding-left: 8px;
     padding-right: 30px;
   }
@@ -241,6 +248,19 @@
     background: #fff;
     box-shadow: -1px 0 0 #edf0f4;
   }
+  #packageGrid .pkg-cost-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  #packageGrid .pkg-cost-status-provisional-allocation { background: #fff4d8; color: #7a4b00; }
+  #packageGrid .pkg-cost-status-assigned-cost { background: #e6f0fb; color: #1a4a70; }
+  #packageGrid .pkg-cost-status-committed-cost { background: #d1e7dd; color: #0a5233; }
   #packageGrid .pkg-source-external { background: #fdf3e6; color: #8b4513; }
   #packageGrid .pkg-source-client { background: #f4e9fb; color: #5b2a76; }
   #packageGrid .pkg-source-internal { background: #e6f0fb; color: #1a4a70; }
@@ -405,7 +425,7 @@
           {% for stage in package_stages %}<option value="{{ stage }}">{{ stage }}</option>{% endfor %}
         </select>
       </label>
-      <label>Planned value
+      <label>Provisional Allocation
         <input name="planned_value" id="editPlannedValue" type="number" min="0" step="0.01">
       </label>
       <div class="package-drawer-footer">

@@ -161,7 +161,7 @@ def cost_update_package(
     try:
         planned = float(planned_value or 0)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Planned value must be numeric") from exc
+        raise HTTPException(status_code=400, detail="Provisional allocation must be numeric") from exc
     try:
         plan_package(db, pkg, planned)
     except ValueError as exc:
@@ -473,5 +473,4 @@ def cost_delete_node(project_number: str, package_number: str, node_id: int, db:
     db.delete(node)
     db.commit()
     return _cost_redirect(project_number, package_number)
-
 

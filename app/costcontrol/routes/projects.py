@@ -838,6 +838,7 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
     }
     package_grid_rows = [
         {
+            **_package_cost_position(pkg),
             "package_number": pkg.package_number,
             "record_id": pkg.id,
             "description": pkg.description,
@@ -904,7 +905,7 @@ def project_package_update(
     try:
         planned = float(planned_value or 0)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Planned value must be numeric") from exc
+        raise HTTPException(status_code=400, detail="Provisional allocation must be numeric") from exc
 
     pkg.description = description
     pkg.package_type = package_type
@@ -990,6 +991,31 @@ def _package_committed_total(pkg: Package) -> float:
     if node_contracts:
         return node_contracts
     return float(pkg.awarded_amount or 0) if pkg.is_contracted else 0.0
+
+
+def _package_cost_position(pkg: Package) -> dict[str, float | str]:
+    committed = _package_committed_total(pkg)
+    if committed:
+        return {
+            "amount": committed,
+            "amount_display": fmt_zar(committed),
+            "cost_status": "Committed Cost",
+        }
+
+    assigned = _package_assigned_total(pkg)
+    if assigned:
+        return {
+            "amount": assigned,
+            "amount_display": fmt_zar(assigned),
+            "cost_status": "Assigned Cost",
+        }
+
+    provisional = float(pkg.planned_value or 0)
+    return {
+        "amount": provisional,
+        "amount_display": fmt_zar(provisional),
+        "cost_status": "Provisional Allocation",
+    }
 
 
 def _package_provisional_balance(pkg: Package) -> float:

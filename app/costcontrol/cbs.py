@@ -133,15 +133,15 @@ def plan_package(db: Session, pkg: Package, planned_value: float) -> None:
     delta = planned_value - previous
     unallocated, provisional = reserve_accounts(db, pkg.project_number)
     if delta > 0 and float(unallocated.balance or 0) < delta:
-        raise ValueError("Planned value exceeds 101.01 Unallocated balance")
+        raise ValueError("Provisional allocation exceeds 101.01 Unallocated balance")
     unallocated.balance = float(unallocated.balance or 0) - delta
     provisional.balance = float(provisional.balance or 0) + delta
     pkg.planned_value = planned_value
     write_audit(
         db,
         pkg.project_number,
-        "Package Planned",
-        f"{pkg.package_number} planned value set to {planned_value:.2f}; reserve delta {delta:.2f}",
+        "Package Provisional Allocation",
+        f"{pkg.package_number} provisional allocation set to {planned_value:.2f}; reserve delta {delta:.2f}",
         target_type="Package",
         target_id=pkg.id,
     )

@@ -24,8 +24,8 @@
 <div class="summary-cards">
   <div class="summary-card"><div class="sc-label">Pricing basis</div><div class="sc-value">{{ pricing_bases.get(package.pricing_basis, package.pricing_basis) }}</div></div>
   <div class="summary-card"><div class="sc-label">Package category</div><div class="sc-value">{{ package.package_type }}</div></div>
-  <div class="summary-card"><div class="sc-label">Planned value</div><div class="sc-value">{{ package.planned_value | zar }}</div></div>
-  <div class="summary-card"><div class="sc-label">Awarded value</div><div class="sc-value">{{ (package.awarded_amount or 0) | zar }}</div></div>
+  <div class="summary-card"><div class="sc-label">Provisional Allocation</div><div class="sc-value">{{ package.planned_value | zar }}</div></div>
+  <div class="summary-card"><div class="sc-label">Committed Cost</div><div class="sc-value">{{ (package.awarded_amount or 0) | zar }}</div></div>
 </div>
 
 <div class="card">

@@ -55,6 +55,10 @@ def test_package_list_uses_edit_drawer_not_inline_metadata_form():
         assert response.status_code == 200
         assert "packageEditDrawer" in response.text
         assert "package-edit-btn" in response.text
+        assert "Cost status" in response.text
+        assert "Amount" in response.text
+        assert "Provisional Allocation" in response.text
+        assert "Planned value" not in response.text
         assert "project/5006/packages/update/" in response.text
         assert "project/5006/packages/delete/" in response.text
         assert "Package Metadata" not in response.text
