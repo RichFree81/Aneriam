@@ -871,6 +871,79 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
     })
 
 
+@router.post("/project/{project_number}/packages/add")
+def project_package_add(
+    project_number: str,
+    db: DbDep,
+    package_number: str = Form(...),
+    description: str = Form(...),
+    package_type: str = Form(...),
+    package_source: str = Form("Internal"),
+    pricing_basis: str = Form("LS"),
+    package_stage: str = Form("Definition"),
+    planned_value: str = Form("0"),
+):
+    get_project_or_404(db, project_number)
+
+    package_number = package_number.strip()
+    description = description.strip()
+    package_type = package_type.strip()
+    package_stage = normalise_package_stage(package_stage.strip())
+
+    if not package_number:
+        raise HTTPException(status_code=400, detail="Package number is required")
+    if db.query(Package).filter_by(package_number=package_number).first() is not None:
+        raise HTTPException(status_code=400, detail="Package number already exists")
+    if not description:
+        raise HTTPException(status_code=400, detail="Description is required")
+    if not package_type:
+        raise HTTPException(status_code=400, detail="Package category is required")
+    if package_source not in ("External", "Internal", "Client"):
+        raise HTTPException(status_code=400, detail="Package source must be External, Internal, or Client")
+    if pricing_basis not in PRICING_BASES:
+        raise HTTPException(status_code=400, detail="Invalid pricing basis")
+    if package_stage not in PACKAGE_STAGES:
+        raise HTTPException(status_code=400, detail="Invalid package stage")
+
+    try:
+        provisional_allocation = float(planned_value or 0)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Provisional allocation must be numeric") from exc
+
+    display_order = (
+        max(
+            (
+                pkg.display_order
+                for pkg in db.query(Package).filter_by(project_number=project_number).all()
+            ),
+            default=0,
+        )
+        + 1
+    )
+    pkg = Package(
+        package_number=package_number,
+        project_number=project_number,
+        description=description,
+        package_type=package_type,
+        package_stage=package_stage,
+        package_source=package_source,
+        is_external=package_source == "External",
+        pricing_basis=pricing_basis,
+        planned_value=0,
+        display_order=display_order,
+    )
+    db.add(pkg)
+    try:
+        db.flush()
+        plan_package(db, pkg, provisional_allocation)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return RedirectResponse(f"/project/{project_number}/packages", status_code=303)
+
+
 @router.post("/project/{project_number}/packages/update/{package_id}")
 def project_package_update(
     project_number: str,

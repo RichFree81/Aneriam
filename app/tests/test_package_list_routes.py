@@ -59,6 +59,10 @@ def test_package_list_uses_edit_drawer_not_inline_metadata_form():
         assert "Amount" in response.text
         assert "Provisional Allocation" in response.text
         assert "Planned value" not in response.text
+        assert "Add Package" in response.text
+        assert "/project/5006/packages/add" in response.text
+        assert "Import Data" not in response.text
+        assert "Refresh Package Register" not in response.text
         assert "project/5006/packages/update/" in response.text
         assert "project/5006/packages/delete/" in response.text
         assert "Package Metadata" not in response.text
@@ -91,6 +95,37 @@ def test_package_list_update_route_updates_package_metadata():
         assert package.pricing_basis == "BOQ"
         assert package.package_stage == "Procurement"
         assert package.planned_value == 30000.50
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+
+
+def test_package_list_add_route_creates_package():
+    client, session, _ = _client_with_package()
+    try:
+        response = client.post(
+            "/project/5006/packages/add",
+            data={
+                "package_number": "5006-PKG-002",
+                "description": "New package",
+                "package_type": "Services Package",
+                "package_source": "Internal",
+                "pricing_basis": "TM",
+                "package_stage": "Definition",
+                "planned_value": "1200.00",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        package = session.query(Package).filter_by(package_number="5006-PKG-002").one()
+        assert package.project_number == "5006"
+        assert package.description == "New package"
+        assert package.package_type == "Services Package"
+        assert package.package_source == "Internal"
+        assert package.is_external is False
+        assert package.pricing_basis == "TM"
+        assert package.package_stage == "Definition"
+        assert package.planned_value == 1200.00
     finally:
         app.dependency_overrides.clear()
         session.close()
