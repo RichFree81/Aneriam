@@ -176,16 +176,20 @@
     <div class="sc-value">{{ (project.approved_capex or 0) | zar }}</div>
   </div>
   <div class="summary-card fy">
-    <div class="sc-label">Total Allocated Budget</div>
-    <div class="sc-value">{{ pkg_stats.total_alloc | zar }}</div>
-  </div>
-  <div class="summary-card fy">
-    <div class="sc-label">Unallocated Budget</div>
+    <div class="sc-label">Unallocated</div>
     <div class="sc-value">{{ pkg_stats.unallocated | zar }}</div>
   </div>
   <div class="summary-card fy">
-    <div class="sc-label">% Allocated</div>
-    <div class="sc-value">{{ "%.1f"|format(pkg_stats.alloc_pct) }}%</div>
+    <div class="sc-label">Provisional Allocation</div>
+    <div class="sc-value">{{ pkg_stats.provisional_allocation | zar }}</div>
+  </div>
+  <div class="summary-card fy">
+    <div class="sc-label">Assigned</div>
+    <div class="sc-value">{{ pkg_stats.assigned | zar }}</div>
+  </div>
+  <div class="summary-card fy">
+    <div class="sc-label">Committed</div>
+    <div class="sc-value">{{ pkg_stats.committed | zar }}</div>
   </div>
 </div>
 

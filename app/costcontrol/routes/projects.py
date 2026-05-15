@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from ..capitalisation import IS_CAP_SQL, NOT_CAP_SQL
 from ..cbs import cbs_rows, next_deliverable_code, po_package_suggestions, scope_item_state
-from ..cost_nodes import package_effective_total
 from ..dependencies import DbDep
 from ..formatting import fmt_zar
 from ..hierarchy import build_hierarchy
@@ -823,20 +822,18 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
         .all()
     )
 
-    # Package budget allocation totals — per item, use most mature value:
-    # contract_amount if set, else pre_award_amount, else baseline_amount
-    total_alloc = sum(
-        package_effective_total(pkg)
-        for pkg in packages if pkg.package_stage != "Cancelled"
-    )
+    active_packages = [pkg for pkg in packages if pkg.package_stage != "Cancelled"]
+    provisional_allocation = sum(_package_provisional_balance(pkg) for pkg in active_packages)
+    assigned = sum(_package_assigned_total(pkg) for pkg in active_packages)
+    committed = sum(_package_committed_total(pkg) for pkg in active_packages)
     budget = project.current_budget or 0.0
-    unallocated = budget - total_alloc
-    alloc_pct = (total_alloc / budget * 100) if budget else 0.0
+    unallocated = budget - provisional_allocation - assigned - committed
 
     pkg_stats = {
-        "total_alloc": total_alloc,
+        "provisional_allocation": provisional_allocation,
+        "assigned": assigned,
+        "committed": committed,
         "unallocated": unallocated,
-        "alloc_pct": alloc_pct,
     }
     package_grid_rows = [
         {
@@ -865,6 +862,73 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
         "po_unassigned_count": po_unassigned,
         "active_tab": "wbs",
     })
+
+
+def _active_package_cost_items(pkg: Package):
+    return [item for item in pkg.cost_items if not item.superseded]
+
+
+def _package_draft_line_total(pkg: Package) -> float:
+    return sum(
+        float(item.value or 0)
+        for item in _active_package_cost_items(pkg)
+        if item.status != "Awarded"
+    )
+
+
+def _package_awarded_line_total(pkg: Package) -> float:
+    return sum(
+        float(item.value or 0)
+        for item in _active_package_cost_items(pkg)
+        if item.status == "Awarded"
+    )
+
+
+def _package_node_assigned_total(pkg: Package) -> float:
+    total = 0.0
+    for node in pkg.cost_nodes:
+        if node.is_item:
+            value = node.pre_award_amount or node.baseline_amount
+            if value:
+                total += float(value)
+    return total
+
+
+def _package_node_committed_total(pkg: Package) -> float:
+    total = 0.0
+    for node in pkg.cost_nodes:
+        if node.is_item and node.contract_amount:
+            total += float(node.contract_amount)
+    return total
+
+
+def _package_assigned_total(pkg: Package) -> float:
+    """Budget allocated to WBS cost items, but not yet awarded."""
+    draft_total = _package_draft_line_total(pkg)
+    if draft_total:
+        return draft_total
+    if pkg.is_contracted:
+        return 0.0
+    return _package_node_assigned_total(pkg)
+
+
+def _package_committed_total(pkg: Package) -> float:
+    """Awarded or contractually committed package amount."""
+    awarded_lines = _package_awarded_line_total(pkg)
+    if awarded_lines:
+        return awarded_lines
+    node_contracts = _package_node_committed_total(pkg)
+    if node_contracts:
+        return node_contracts
+    return float(pkg.awarded_amount or 0) if pkg.is_contracted else 0.0
+
+
+def _package_provisional_balance(pkg: Package) -> float:
+    """Remaining package-level reservation not yet assigned to WBS cost items."""
+    if pkg.is_contracted:
+        return 0.0
+    assigned = _package_assigned_total(pkg)
+    return max(float(pkg.planned_value or 0) - assigned, 0.0)
 
 
 def _po_counts(db: Session, project_number: str) -> tuple[int, int, int]:
