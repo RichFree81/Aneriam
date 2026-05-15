@@ -81,8 +81,9 @@ def _cost_node_grid_row(node: PackageCostNode) -> dict:
         "contract_qty": node.contract_qty,
         "contract_rate": node.contract_rate,
         "contract_amount": node.contract_amount,
-        "_children": children,
     }
+    if children:
+        row["_children"] = children
     return row
 
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -180,6 +182,12 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert "Grand Total" in response.text
         assert "Earthworks" in response.text
         assert "Bulk excavation" in response.text
+        start = response.text.index("const COST_NODE_ROWS = ") + len("const COST_NODE_ROWS = ")
+        end = response.text.index(";\n\n  function escapeHtml", start)
+        tree_data = json.loads(response.text[start:end])
+        leaf = tree_data[0]["_children"][0]
+        assert leaf["type"] == "Cost Item"
+        assert "_children" not in leaf
         assert "Cost Item Lines" not in response.text
         assert "Create Cost Item Code" not in response.text
         assert "Add Cost Item Line" not in response.text
