@@ -55,13 +55,19 @@ def _cost_node_grid_row(node: PackageCostNode) -> dict:
     totals = _cost_node_subtotals(node)
     children = [_cost_node_grid_row(child) for child in sorted(node.children, key=lambda n: n.display_order)]
     is_item = node.is_item
+    if is_item:
+        node_type = "Cost Line"
+    elif node.parent_id is None:
+        node_type = "Level 2 Item"
+    else:
+        node_type = "Cost Item Account"
     row = {
         "id": node.id,
         "node_id": node.id,
         "parent_id": node.parent_id,
         "code": node.code or "",
         "description": node.description,
-        "type": "Cost Item" if is_item else "Group",
+        "type": node_type,
         "control_account": node.cc_code or "",
         "baseline": totals["baseline"],
         "baseline_display": fmt_zar(totals["baseline"]) if totals["baseline"] else "",
@@ -102,6 +108,26 @@ def _cost_node_options(nodes: list[PackageCostNode]) -> list[PackageCostNode]:
     return ordered
 
 
+def _level2_options(nodes: list[PackageCostNode]) -> list[PackageCostNode]:
+    return sorted([node for node in nodes if node.parent_id is None and not node.is_item], key=lambda n: n.display_order)
+
+
+def _cost_account_options(nodes: list[PackageCostNode]) -> list[PackageCostNode]:
+    return sorted([node for node in nodes if node.parent_id is not None and not node.is_item], key=lambda n: n.display_order)
+
+
+def _cost_account_option_rows(nodes: list[PackageCostNode]) -> list[dict]:
+    return [
+        {
+            "id": node.id,
+            "parent_id": node.parent_id,
+            "code": node.code or "",
+            "description": node.description,
+        }
+        for node in _cost_account_options(nodes)
+    ]
+
+
 def _package_detail_response(request: Request, db: Session, project_number: str, package_number: str, active_pkg_tab: str):
     project = get_project_or_404(db, project_number)
     pkg = get_package_or_404(db, project_number, package_number)
@@ -127,6 +153,7 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "contract": sum(row["contract"] for row in cost_node_rows),
         }
         cost_group_options = _cost_node_options(root_nodes)
+        all_cost_nodes = list(pkg.cost_nodes)
         control_accounts = db.query(ControlAccount).order_by(ControlAccount.code).all()
         award_errors = []
         return templates.TemplateResponse("package_wbs.html", {
@@ -143,6 +170,8 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "cost_node_rows": cost_node_rows,
             "cost_node_totals": cost_node_totals,
             "cost_group_options": cost_group_options,
+            "level2_options": _level2_options(all_cost_nodes),
+            "cost_account_options": _cost_account_option_rows(all_cost_nodes),
             "control_accounts": control_accounts,
             "award_errors": award_errors,
             "active_tab": "wbs",
@@ -370,6 +399,48 @@ def _resolve_parent_id(db: Session, pkg, parent_id_str: str) -> int | None:
     return parent_int
 
 
+def _resolve_level2_node(db: Session, pkg, level2_id: str) -> PackageCostNode:
+    if not level2_id.strip():
+        raise HTTPException(status_code=400, detail="A Level 2 item is required")
+    node = db.get(PackageCostNode, int(level2_id))
+    if node is None or node.package_id != pkg.id or node.parent_id is not None or node.is_item:
+        raise HTTPException(status_code=400, detail="Level 2 item must belong to the same package")
+    return node
+
+
+def _resolve_cost_account_node(db: Session, pkg, account_id: str) -> PackageCostNode:
+    if not account_id.strip():
+        raise HTTPException(status_code=400, detail="A Level 3 cost item account is required")
+    node = db.get(PackageCostNode, int(account_id))
+    if node is None or node.package_id != pkg.id or node.parent_id is None or node.is_item:
+        raise HTTPException(status_code=400, detail="Cost line must be assigned to a Level 3 cost item account")
+    return node
+
+
+def _create_cost_account_node(
+    db: Session,
+    pkg,
+    *,
+    level2_node: PackageCostNode,
+    account_name: str,
+    source: str,
+) -> PackageCostNode:
+    name = account_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Cost item account name is required")
+    node = PackageCostNode(
+        package_id=pkg.id,
+        parent_id=level2_node.id,
+        code="",
+        description=name,
+        is_item=False,
+        display_order=_next_sibling_order(pkg, level2_node.id),
+    )
+    db.add(node)
+    db.flush()
+    return node
+
+
 @router.post("/project/{project_number}/packages/{package_number}/cost/add-section")
 def cost_add_section(
     project_number: str,
@@ -381,6 +452,10 @@ def cost_add_section(
 ):
     pkg = get_package_or_404(db, project_number, package_number)
     parent_int = _resolve_parent_id(db, pkg, parent_id)
+    if parent_int is not None:
+        parent = db.get(PackageCostNode, parent_int)
+        if parent is None or parent.parent_id is not None or parent.is_item:
+            raise HTTPException(status_code=400, detail="Cost item accounts must sit directly below a Level 2 item")
     node = PackageCostNode(
         package_id=pkg.id,
         parent_id=parent_int,
@@ -407,6 +482,8 @@ def cost_update_section(
     node = db.get(PackageCostNode, node_id)
     if node is None or node.package_id != pkg.id:
         raise HTTPException(status_code=404, detail="Cost node not found")
+    if node.is_item:
+        raise HTTPException(status_code=400, detail="Use the cost line editor for cost lines")
     node.code = code.strip()
     node.description = description.strip()
     db.commit()
@@ -436,6 +513,11 @@ def cost_add_item(
     code: str = Form(""),
     description: str = Form(...),
     parent_id: str = Form(""),
+    level2_id: str = Form(""),
+    account_mode: str = Form("existing"),
+    cost_account_id: str = Form(""),
+    library_account_name: str = Form(""),
+    custom_account_name: str = Form(""),
     cc_code: str = Form(""),
     baseline_unit: str = Form("Sum"),
     baseline_qty: str = Form(""),
@@ -451,7 +533,27 @@ def cost_add_item(
     contract_amount: str = Form(""),
 ):
     pkg = get_package_or_404(db, project_number, package_number)
-    parent_int = _resolve_parent_id(db, pkg, parent_id)
+    if account_mode == "library":
+        level2_node = _resolve_level2_node(db, pkg, level2_id)
+        parent_node = _create_cost_account_node(
+            db,
+            pkg,
+            level2_node=level2_node,
+            account_name=library_account_name,
+            source="library",
+        )
+    elif account_mode == "custom":
+        level2_node = _resolve_level2_node(db, pkg, level2_id)
+        parent_node = _create_cost_account_node(
+            db,
+            pkg,
+            level2_node=level2_node,
+            account_name=custom_account_name,
+            source="custom",
+        )
+    else:
+        parent_node = _resolve_cost_account_node(db, pkg, cost_account_id or parent_id)
+    parent_int = parent_node.id
     bl_u, bl_q, bl_r, bl_a = process_cost_column(baseline_unit, baseline_qty, baseline_rate, baseline_amount)
     pa_u, pa_q, pa_r, pa_a = process_cost_column(pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount)
     ct_u, ct_q, ct_r, ct_a = process_cost_column(contract_unit, contract_qty, contract_rate, contract_amount)
@@ -500,6 +602,8 @@ def cost_update_item(
     node = db.get(PackageCostNode, node_id)
     if node is None or node.package_id != pkg.id:
         raise HTTPException(status_code=404, detail="Cost node not found")
+    if not node.is_item:
+        raise HTTPException(status_code=400, detail="Use the group editor for Level 2 items and cost item accounts")
     bl_u, bl_q, bl_r, bl_a = process_cost_column(baseline_unit, baseline_qty, baseline_rate, baseline_amount)
     pa_u, pa_q, pa_r, pa_a = process_cost_column(pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount)
     ct_u, ct_q, ct_r, ct_a = process_cost_column(contract_unit, contract_qty, contract_rate, contract_amount)

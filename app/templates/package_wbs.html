@@ -10,11 +10,11 @@
 {% block actions_items %}
 <a href="#" onclick="openCostGroupModal(); return false;">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zM9 2.5A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zM1 10.5A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zM9 10.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3z"/></svg>
-  Add Group
+  Add Level 2 Item
 </a>
 <a href="#" onclick="openCostItemModal(); return false;">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a.5.5 0 0 1 .5.5v5.5H14a.5.5 0 0 1 0 1H8.5V14a.5.5 0 0 1-1 0V8.5H2a.5.5 0 0 1 0-1h5.5V2a.5.5 0 0 1 .5-.5z"/></svg>
-  Add Cost Item
+  Add Cost Line
 </a>
 {% if not package.is_contracted %}
 <a href="#" onclick="openAwardModal(); return false;">
@@ -41,6 +41,8 @@
 <script src="/static/vendor/tabulator/tabulator.min.js"></script>
 <script>
   const COST_NODE_ROWS = {{ cost_node_rows | tojson }};
+  const COST_ACCOUNT_OPTIONS = {{ cost_account_options | tojson }};
+  const STANDARD_COST_ACCOUNTS = {{ direct_library | tojson }};
 
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -54,8 +56,8 @@
   }
 
   function typeFormatter(cell) {
-    const type = cell.getValue() || 'Group';
-    const cls = type === 'Cost Item' ? 'cost-type-item' : 'cost-type-group';
+    const type = cell.getValue() || 'Level 2 Item';
+    const cls = type === 'Cost Line' ? 'cost-type-item' : 'cost-type-group';
     return '<span class="cost-type ' + cls + '">' + escapeHtml(type) + '</span>';
   }
 
@@ -93,6 +95,7 @@
     closeActions();
     document.getElementById('costItemOverlay').classList.add('open');
     document.getElementById('costItemModal').classList.add('open');
+    refreshCostAccountOptions();
     setTimeout(() => document.getElementById('itemDescription').focus(), 60);
   }
 
@@ -113,8 +116,8 @@
   }
 
   function openCostEditDrawer(data) {
-    const isItem = data.type === 'Cost Item';
-    document.getElementById('costEditTitle').textContent = isItem ? 'Edit Cost Item' : 'Edit Group';
+    const isItem = data.type === 'Cost Line';
+    document.getElementById('costEditTitle').textContent = isItem ? 'Edit Cost Line' : 'Edit ' + data.type;
     document.getElementById('costDeleteForm').action = '{{ pkg_base }}/cost/delete-node/' + data.node_id;
     document.getElementById('costDeleteForm').dataset.nodeType = data.type || 'record';
     document.getElementById('costEditGroupForm').style.display = isItem ? 'none' : 'flex';
@@ -145,10 +148,60 @@
 
   function costDeleteMessage() {
     const type = document.getElementById('costDeleteForm').dataset.nodeType || 'record';
-    if (type === 'Group') {
-      return 'Delete this group and all cost items beneath it?';
+    if (type === 'Level 2 Item') {
+      return 'Delete this Level 2 item, its cost item accounts, and all cost lines beneath it?';
     }
-    return 'Delete this cost item?';
+    if (type === 'Cost Item Account') {
+      return 'Delete this cost item account and all cost lines beneath it?';
+    }
+    return 'Delete this cost line?';
+  }
+
+  function refreshCostAccountOptions() {
+    const level2Id = document.getElementById('costLineLevel2').value;
+    const accountSelect = document.getElementById('costLineAccount');
+    const modeSelect = document.getElementById('costLineAccountMode');
+    accountSelect.innerHTML = '';
+
+    const matching = COST_ACCOUNT_OPTIONS.filter(account => String(account.parent_id) === String(level2Id));
+    if (!level2Id) {
+      accountSelect.appendChild(new Option('Select Level 2 first...', ''));
+      accountSelect.disabled = true;
+      modeSelect.value = 'existing';
+      modeSelect.disabled = true;
+    } else if (matching.length) {
+      accountSelect.disabled = false;
+      modeSelect.disabled = false;
+      matching.forEach(account => {
+        const label = (account.code ? account.code + ' - ' : '') + account.description;
+        accountSelect.appendChild(new Option(label, account.id));
+      });
+      accountSelect.appendChild(new Option('+ Add cost item account', '__add__'));
+    } else {
+      accountSelect.disabled = false;
+      modeSelect.disabled = false;
+      accountSelect.appendChild(new Option('+ Add cost item account', '__add__'));
+      accountSelect.value = '__add__';
+    }
+    refreshCostAccountCreateFields();
+  }
+
+  function refreshCostAccountCreateFields() {
+    const accountSelect = document.getElementById('costLineAccount');
+    const modeSelect = document.getElementById('costLineAccountMode');
+    const createFields = document.getElementById('costAccountCreateFields');
+    const libraryField = document.getElementById('standardAccountField');
+    const customField = document.getElementById('customAccountField');
+    const addingAccount = accountSelect.value === '__add__';
+    createFields.style.display = addingAccount ? 'grid' : 'none';
+    modeSelect.disabled = !addingAccount;
+    if (!addingAccount) {
+      modeSelect.value = 'existing';
+    } else if (modeSelect.value === 'existing') {
+      modeSelect.value = 'library';
+    }
+    libraryField.style.display = addingAccount && modeSelect.value === 'library' ? 'flex' : 'none';
+    customField.style.display = addingAccount && modeSelect.value === 'custom' ? 'flex' : 'none';
   }
 
   document.addEventListener('DOMContentLoaded', function() {
@@ -161,11 +214,11 @@
       placeholder: 'No cost groups or cost items registered.',
       rowFormatter: function(row) {
         const data = row.getData();
-        row.getElement().classList.add(data.type === 'Group' ? 'cost-group-row' : 'cost-item-row');
+        row.getElement().classList.add(data.type === 'Cost Line' ? 'cost-item-row' : 'cost-group-row');
       },
       columns: [
         {title: 'Description', field: 'description', minWidth: 340, widthGrow: 3, formatter: descriptionFormatter, headerSort: true},
-        {title: 'Type', field: 'type', width: 115, formatter: typeFormatter, headerSort: true},
+        {title: 'Type', field: 'type', width: 150, formatter: typeFormatter, headerSort: true},
         {title: 'Control account', field: 'control_account', width: 130, headerSort: true},
         {title: 'Baseline estimate', field: 'baseline', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('baseline'), sorter: 'number', headerSort: true},
         {title: 'Assigned cost', field: 'pre_award', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('pre_award'), sorter: 'number', headerSort: true},
@@ -474,17 +527,11 @@
 <div class="filter-overlay" id="costGroupOverlay" onclick="closeCostGroupModal()"></div>
 <div class="filter-modal" id="costGroupModal" style="width:560px;">
   <div class="fm-header">
-    <span>Add Cost Group</span>
+    <span>Add Level 2 Item</span>
     <button class="fm-close" onclick="closeCostGroupModal()" aria-label="Close">&times;</button>
   </div>
   <form method="post" action="{{ pkg_base }}/cost/add-section">
     <div class="fm-fields package-modal-grid">
-      <label>Parent group
-        <select name="parent_id">
-          <option value="">Top level</option>
-          {% for node in cost_group_options %}<option value="{{ node.id }}">{% if node.code %}{{ node.code }} - {% endif %}{{ node.description }}</option>{% endfor %}
-        </select>
-      </label>
       <label>Code
         <input name="code" autocomplete="off">
       </label>
@@ -494,7 +541,7 @@
     </div>
     <div class="fm-footer">
       <button type="button" class="btn btn-sm btn-ghost" onclick="closeCostGroupModal()">Cancel</button>
-      <button type="submit" class="btn btn-sm">Add Group</button>
+      <button type="submit" class="btn btn-sm">Add Level 2 Item</button>
     </div>
   </form>
 </div>
@@ -502,17 +549,38 @@
 <div class="filter-overlay" id="costItemOverlay" onclick="closeCostItemModal()"></div>
 <div class="filter-modal" id="costItemModal" style="width:720px;">
   <div class="fm-header">
-    <span>Add Cost Item</span>
+    <span>Add Cost Line</span>
     <button class="fm-close" onclick="closeCostItemModal()" aria-label="Close">&times;</button>
   </div>
   <form method="post" action="{{ pkg_base }}/cost/add-item">
     <div class="fm-fields package-modal-grid">
-      <label>Parent group
-        <select name="parent_id">
-          <option value="">Top level</option>
-          {% for node in cost_group_options %}<option value="{{ node.id }}">{% if node.code %}{{ node.code }} - {% endif %}{{ node.description }}</option>{% endfor %}
+      <label>Level 2 item *
+        <select name="level2_id" id="costLineLevel2" required onchange="refreshCostAccountOptions()">
+          <option value="">Select...</option>
+          {% for node in level2_options %}<option value="{{ node.id }}">{% if node.code %}{{ node.code }} - {% endif %}{{ node.description }}</option>{% endfor %}
         </select>
       </label>
+      <label>Level 3 cost item account *
+        <select name="cost_account_id" id="costLineAccount" required onchange="refreshCostAccountCreateFields()">
+          <option value="">Select Level 2 first...</option>
+        </select>
+      </label>
+      <div id="costAccountCreateFields" class="span-2 package-modal-grid" style="display:none;">
+        <label>Add account by
+          <select name="account_mode" id="costLineAccountMode" onchange="refreshCostAccountCreateFields()">
+            <option value="library">Standard library</option>
+            <option value="custom">Custom account</option>
+          </select>
+        </label>
+        <label id="standardAccountField">Standard account
+          <select name="library_account_name">
+            {% for item in direct_library %}<option value="{{ item }}">{{ item }}</option>{% endfor %}
+          </select>
+        </label>
+        <label id="customAccountField" style="display:none;">Custom account name
+          <input name="custom_account_name" autocomplete="off">
+        </label>
+      </div>
       <label>Control account
         <select name="cc_code">
           <option value="">Select...</option>
@@ -537,7 +605,7 @@
     </div>
     <div class="fm-footer">
       <button type="button" class="btn btn-sm btn-ghost" onclick="closeCostItemModal()">Cancel</button>
-      <button type="submit" class="btn btn-sm">Add Cost Item</button>
+      <button type="submit" class="btn btn-sm">Add Cost Line</button>
     </div>
   </form>
 </div>

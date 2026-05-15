@@ -150,20 +150,30 @@ def test_package_list_delete_route_deletes_package():
 def test_package_cost_tab_uses_hierarchical_actions_and_table():
     client, session, package_id = _client_with_package()
     try:
-        group = PackageCostNode(
+        level2 = PackageCostNode(
             package_id=package_id,
             code="01",
             description="Earthworks",
             is_item=False,
             display_order=0,
         )
-        session.add(group)
+        session.add(level2)
+        session.flush()
+        account = PackageCostNode(
+            package_id=package_id,
+            parent_id=level2.id,
+            code="",
+            description="Bulk earthworks",
+            is_item=False,
+            display_order=0,
+        )
+        session.add(account)
         session.flush()
         item = PackageCostNode(
             package_id=package_id,
-            parent_id=group.id,
+            parent_id=account.id,
             code="01.01",
-            description="Bulk excavation",
+            description="Bulk excavation line",
             is_item=True,
             cc_code="205",
             baseline_amount=1000,
@@ -176,8 +186,11 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
 
         response = client.get("/project/5006/packages/5006-PKG-001/cost")
         assert response.status_code == 200
-        assert "Add Group" in response.text
-        assert "Add Cost Item" in response.text
+        assert "Add Level 2 Item" in response.text
+        assert "Add Cost Line" in response.text
+        assert "Level 3 cost item account" in response.text
+        assert "Standard library" in response.text
+        assert "Custom account" in response.text
         assert "COST_NODE_ROWS" in response.text
         assert "dataTree: true" in response.text
         assert "Grand Total" in response.text
@@ -189,10 +202,13 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert "Earthworks" in response.text
         assert "Bulk excavation" in response.text
         start = response.text.index("const COST_NODE_ROWS = ") + len("const COST_NODE_ROWS = ")
-        end = response.text.index(";\n\n  function escapeHtml", start)
+        end = response.text.index(";\n  const COST_ACCOUNT_OPTIONS", start)
         tree_data = json.loads(response.text[start:end])
-        leaf = tree_data[0]["_children"][0]
-        assert leaf["type"] == "Cost Item"
+        assert tree_data[0]["type"] == "Level 2 Item"
+        account_row = tree_data[0]["_children"][0]
+        assert account_row["type"] == "Cost Item Account"
+        leaf = account_row["_children"][0]
+        assert leaf["type"] == "Cost Line"
         assert "_children" not in leaf
         assert "Cost Item Lines" not in response.text
         assert "Create Cost Item Code" not in response.text
@@ -200,14 +216,14 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert '<span class="chip">{{ package.package_source }}</span>' not in response.text
 
         response = client.post(
-            f"/project/5006/packages/5006-PKG-001/cost/update-section/{group.id}",
+            f"/project/5006/packages/5006-PKG-001/cost/update-section/{level2.id}",
             data={"code": "02", "description": "Civils"},
             follow_redirects=False,
         )
         assert response.status_code == 303
-        session.refresh(group)
-        assert group.code == "02"
-        assert group.description == "Civils"
+        session.refresh(level2)
+        assert level2.code == "02"
+        assert level2.description == "Civils"
 
         response = client.post(
             f"/project/5006/packages/5006-PKG-001/cost/update-item/{item.id}",
@@ -229,6 +245,55 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert item.baseline_amount == 1400
         assert item.pre_award_amount == 1500
         assert item.contract_amount == 1600
+
+        response = client.post(
+            "/project/5006/packages/5006-PKG-001/cost/add-item",
+            data={
+                "level2_id": str(level2.id),
+                "account_mode": "library",
+                "library_account_name": "Installation",
+                "description": "Install anchor bolts",
+                "baseline_amount": "900",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        new_account = session.query(PackageCostNode).filter_by(
+            package_id=package_id,
+            parent_id=level2.id,
+            description="Installation",
+            is_item=False,
+        ).one()
+        new_line = session.query(PackageCostNode).filter_by(
+            package_id=package_id,
+            parent_id=new_account.id,
+            description="Install anchor bolts",
+            is_item=True,
+        ).one()
+        assert new_line.baseline_amount == 900
+
+        response = client.post(
+            "/project/5006/packages/5006-PKG-001/cost/add-item",
+            data={
+                "cost_account_id": str(account.id),
+                "description": "Cart spoil",
+                "baseline_amount": "300",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert session.query(PackageCostNode).filter_by(parent_id=account.id, description="Cart spoil").one().is_item
+
+        response = client.post(
+            "/project/5006/packages/5006-PKG-001/cost/add-item",
+            data={
+                "parent_id": str(level2.id),
+                "description": "Invalid direct line",
+                "baseline_amount": "100",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
 
         response = client.post(
             f"/project/5006/packages/5006-PKG-001/cost/delete-node/{item.id}",
