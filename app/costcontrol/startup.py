@@ -132,11 +132,83 @@ def run_startup_migrations(db: Session) -> None:
                 )
 
 
+def repair_package_cost_nodes_workstream_fk(db: Session) -> None:
+    """Remove stale workstream_id/FK left by older SQLite schemas.
+
+    SQLite cannot reliably drop a column that participates in a foreign key.
+    Older cost-control databases can therefore retain a `workstream_id`
+    reference to the removed `workstreams` table, causing inserts into
+    `package_cost_nodes` to fail with "no such table: main.workstreams".
+    """
+    columns = [row[1] for row in db.execute(text("PRAGMA table_info(package_cost_nodes)")).fetchall()]
+    foreign_keys = db.execute(text("PRAGMA foreign_key_list(package_cost_nodes)")).fetchall()
+    has_stale_workstream = "workstream_id" in columns or any(row[2] == "workstreams" for row in foreign_keys)
+    if not has_stale_workstream:
+        return
+
+    logger.info("Rebuilding package_cost_nodes to remove stale workstream foreign key")
+    db.commit()
+    db.execute(text("PRAGMA foreign_keys=OFF"))
+    try:
+        db.execute(text("DROP TABLE IF EXISTS package_cost_nodes_rebuild"))
+        db.execute(text("""
+            CREATE TABLE package_cost_nodes_rebuild (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+                parent_id INTEGER REFERENCES package_cost_nodes(id) ON DELETE CASCADE,
+                code VARCHAR(30) NOT NULL DEFAULT '',
+                description TEXT NOT NULL,
+                is_item BOOLEAN NOT NULL DEFAULT 0,
+                cc_code VARCHAR(3) REFERENCES control_accounts(code),
+                unit VARCHAR(20) NOT NULL DEFAULT 'Sum',
+                qty NUMERIC(18,4),
+                rate NUMERIC(18,2),
+                baseline_amount NUMERIC(18,2),
+                pre_award_unit VARCHAR(20) NOT NULL DEFAULT 'Sum',
+                pre_award_qty NUMERIC(18,4),
+                pre_award_rate NUMERIC(18,2),
+                pre_award_amount NUMERIC(18,2),
+                contract_unit VARCHAR(20) NOT NULL DEFAULT 'Sum',
+                contract_qty NUMERIC(18,4),
+                contract_rate NUMERIC(18,2),
+                contract_amount NUMERIC(18,2),
+                display_order INTEGER NOT NULL DEFAULT 0
+            )
+        """))
+        db.execute(text("""
+            INSERT INTO package_cost_nodes_rebuild (
+                id, package_id, parent_id, code, description, is_item, cc_code,
+                unit, qty, rate, baseline_amount,
+                pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount,
+                contract_unit, contract_qty, contract_rate, contract_amount,
+                display_order
+            )
+            SELECT
+                id, package_id, parent_id, code, description, is_item, cc_code,
+                unit, qty, rate, baseline_amount,
+                COALESCE(pre_award_unit, 'Sum'), pre_award_qty, pre_award_rate, pre_award_amount,
+                COALESCE(contract_unit, 'Sum'), contract_qty, contract_rate, contract_amount,
+                display_order
+            FROM package_cost_nodes
+        """))
+        db.execute(text("DROP TABLE package_cost_nodes"))
+        db.execute(text("ALTER TABLE package_cost_nodes_rebuild RENAME TO package_cost_nodes"))
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to rebuild package_cost_nodes")
+        raise
+    finally:
+        db.execute(text("PRAGMA foreign_keys=ON"))
+        db.commit()
+
+
 def initialise_database() -> None:
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         run_startup_migrations(db)
+        repair_package_cost_nodes_workstream_fk(db)
         seed_control_accounts(db)
         seed_cost_control_master_data(db)
         seed_projects(db)
