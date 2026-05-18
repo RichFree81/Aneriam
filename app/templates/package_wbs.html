@@ -219,7 +219,7 @@
       columns: [
         {title: 'Description', field: 'description', minWidth: 340, widthGrow: 3, formatter: descriptionFormatter, headerSort: true},
         {title: 'Type', field: 'type', width: 150, formatter: typeFormatter, headerSort: true},
-        {title: 'Control account', field: 'control_account', width: 130, headerSort: true},
+        {title: 'Cost Category', field: 'control_account', width: 130, headerSort: true},
         {title: 'Baseline estimate', field: 'baseline', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('baseline'), sorter: 'number', headerSort: true},
         {title: 'Assigned cost', field: 'pre_award', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('pre_award'), sorter: 'number', headerSort: true},
         {title: 'Committed cost', field: 'contract', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('contract'), sorter: 'number', headerSort: true},
@@ -499,13 +499,13 @@
     </form>
 
     <form id="costEditItemForm" class="cost-drawer-form" method="post">
-      <label>Cost item code
-        <input name="code" id="editItemCode" autocomplete="off">
-      </label>
-      <label>Description *
+      <label>Cost line description *
         <input name="description" id="editItemDescription" required autocomplete="off">
       </label>
-      <label>Control account
+      <label>CBS cost item code
+        <input name="code" id="editItemCode" autocomplete="off">
+      </label>
+      <label>Cost Category (CBS Level 1)
         <select name="cc_code" id="editItemControlAccount">
           <option value="">Select...</option>
           {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
@@ -561,38 +561,38 @@
           {% for node in cost_grouping_options %}<option value="{{ node.id }}">{% if node.code %}{{ node.code }} - {% endif %}{{ node.description }}</option>{% endfor %}
         </select>
       </label>
-      <label>Level 3 cost item account *
+      <label>Cost Item Account (CBS Level 3) *
         <select name="cost_account_id" id="costLineAccount" required onchange="refreshCostAccountCreateFields()">
           <option value="">Select Cost Grouping first...</option>
         </select>
       </label>
       <div id="costAccountCreateFields" class="span-2 package-modal-grid" style="display:none;">
-        <label>Add account by
+        <label>Create Cost Item Account by
           <select name="account_mode" id="costLineAccountMode" onchange="refreshCostAccountCreateFields()">
             <option value="library">Standard library</option>
             <option value="custom">Custom account</option>
           </select>
         </label>
-        <label id="standardAccountField">Standard account
+        <label id="standardAccountField">Standard Cost Item Account
           <select name="library_account_name">
             {% for item in direct_library %}<option value="{{ item }}">{{ item }}</option>{% endfor %}
           </select>
         </label>
-        <label id="customAccountField" style="display:none;">Custom account name
+        <label id="customAccountField" style="display:none;">Custom Cost Item Account
           <input name="custom_account_name" autocomplete="off">
         </label>
       </div>
-      <label>Control account
+      <label class="span-2">Cost line description *
+        <input name="description" id="itemDescription" required autocomplete="off">
+      </label>
+      <label>CBS cost item code
+        <input name="code" autocomplete="off">
+      </label>
+      <label>Cost Category (CBS Level 1)
         <select name="cc_code">
           <option value="">Select...</option>
           {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
         </select>
-      </label>
-      <label>Cost item code
-        <input name="code" autocomplete="off">
-      </label>
-      <label>Description *
-        <input name="description" id="itemDescription" required autocomplete="off">
       </label>
       <label>Baseline estimate
         <input name="baseline_amount" type="number" min="0" step="0.01">

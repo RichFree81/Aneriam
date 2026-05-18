@@ -188,7 +188,10 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert response.status_code == 200
         assert "Add Cost Grouping" in response.text
         assert "Add Cost Line" in response.text
-        assert "Level 3 cost item account" in response.text
+        assert "Cost Item Account (CBS Level 3)" in response.text
+        assert "Cost Category (CBS Level 1)" in response.text
+        assert "CBS cost item code" in response.text
+        assert "Cost line description" in response.text
         assert "Standard library" in response.text
         assert "Custom account" in response.text
         assert "COST_NODE_ROWS" in response.text
