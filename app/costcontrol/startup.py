@@ -67,6 +67,20 @@ STARTUP_MIGRATIONS: tuple[str, ...] = (
     "ALTER TABLE packages ADD COLUMN awarded_amount NUMERIC(18,2)",
     "ALTER TABLE packages ADD COLUMN awarded_date DATE",
     "ALTER TABLE packages ADD COLUMN procurement_stage TEXT NOT NULL DEFAULT 'Pre-Tender'",
+    (
+        "CREATE TABLE IF NOT EXISTS package_cost_sheets ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE, "
+        "sheet_number VARCHAR(30) NOT NULL, "
+        "title TEXT NOT NULL, "
+        "sheet_type VARCHAR(20) NOT NULL DEFAULT 'Original', "
+        "status VARCHAR(30) NOT NULL DEFAULT 'Draft', "
+        "description TEXT NOT NULL DEFAULT '', "
+        "display_order INTEGER NOT NULL DEFAULT 0, "
+        "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+        "UNIQUE(package_id, sheet_number))"
+    ),
+    "ALTER TABLE package_cost_nodes ADD COLUMN cost_sheet_id INTEGER REFERENCES package_cost_sheets(id) ON DELETE CASCADE",
     # Slice E: first linked PO is Original; later links are Variations.
     "ALTER TABLE po_rto_links ADD COLUMN is_original BOOLEAN NOT NULL DEFAULT 0",
     (
@@ -220,6 +234,7 @@ def repair_package_cost_nodes_workstream_fk(db: Session) -> None:
             CREATE TABLE package_cost_nodes_rebuild (
                 id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                 package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+                cost_sheet_id INTEGER REFERENCES package_cost_sheets(id) ON DELETE CASCADE,
                 parent_id INTEGER REFERENCES package_cost_nodes(id) ON DELETE CASCADE,
                 code VARCHAR(30) NOT NULL DEFAULT '',
                 description TEXT NOT NULL,
@@ -240,16 +255,19 @@ def repair_package_cost_nodes_workstream_fk(db: Session) -> None:
                 display_order INTEGER NOT NULL DEFAULT 0
             )
         """))
-        db.execute(text("""
+        cost_sheet_select = "cost_sheet_id" if "cost_sheet_id" in columns else "NULL"
+        db.execute(text(f"""
             INSERT INTO package_cost_nodes_rebuild (
-                id, package_id, parent_id, code, description, is_item, cc_code,
+                id, package_id, cost_sheet_id, parent_id, code, description, is_item, cc_code,
                 unit, qty, rate, baseline_amount,
                 pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount,
                 contract_unit, contract_qty, contract_rate, contract_amount,
                 display_order
             )
             SELECT
-                id, package_id, parent_id, code, description, is_item, cc_code,
+                id, package_id,
+                {cost_sheet_select},
+                parent_id, code, description, is_item, cc_code,
                 unit, qty, rate, baseline_amount,
                 COALESCE(pre_award_unit, 'Sum'), pre_award_qty, pre_award_rate, pre_award_amount,
                 COALESCE(contract_unit, 'Sum'), contract_qty, contract_rate, contract_amount,
@@ -339,6 +357,53 @@ def repair_auto_cbs_cost_node_hierarchy(db: Session) -> None:
         raise
 
 
+def ensure_package_cost_sheets(db: Session) -> None:
+    """Create original cost sheets and attach legacy package cost rows."""
+    if not all(_table_exists(db, table) for table in ("packages", "package_cost_sheets", "package_cost_nodes")):
+        return
+    if not _column_exists(db, "package_cost_nodes", "cost_sheet_id"):
+        return
+
+    packages = db.execute(text("SELECT id FROM packages ORDER BY id")).fetchall()
+    if not packages:
+        return
+
+    try:
+        for (package_id,) in packages:
+            original = db.execute(text("""
+                SELECT id
+                FROM package_cost_sheets
+                WHERE package_id = :package_id AND sheet_type = 'Original'
+                ORDER BY display_order, id
+                LIMIT 1
+            """), {"package_id": package_id}).first()
+            if original is None:
+                db.execute(text("""
+                    INSERT INTO package_cost_sheets (
+                        package_id, sheet_number, title, sheet_type, status,
+                        description, display_order, created_at
+                    )
+                    VALUES (
+                        :package_id, 'ORIGINAL', 'Original Cost Sheet', 'Original',
+                        'Draft', '', 0, CURRENT_TIMESTAMP
+                    )
+                """), {"package_id": package_id})
+                original_id = db.execute(text("SELECT last_insert_rowid()")).scalar_one()
+            else:
+                original_id = original.id
+            db.execute(text("""
+                UPDATE package_cost_nodes
+                SET cost_sheet_id = :original_id
+                WHERE package_id = :package_id
+                  AND cost_sheet_id IS NULL
+            """), {"original_id": original_id, "package_id": package_id})
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to ensure package cost sheets")
+        raise
+
+
 def initialise_database() -> None:
     db = SessionLocal()
     try:
@@ -352,6 +417,7 @@ def initialise_database() -> None:
         run_startup_migrations(db)
         repair_package_cost_nodes_workstream_fk(db)
         repair_auto_cbs_cost_node_hierarchy(db)
+        ensure_package_cost_sheets(db)
         seed_control_accounts(db)
         seed_cost_control_master_data(db)
         seed_projects(db)

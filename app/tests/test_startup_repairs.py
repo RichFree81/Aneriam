@@ -6,6 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from costcontrol.startup import (
     migrate_cost_component_schema,
+    ensure_package_cost_sheets,
     repair_auto_cbs_cost_node_hierarchy,
     repair_package_cost_nodes_workstream_fk,
 )
@@ -251,6 +252,85 @@ def test_repair_auto_cbs_cost_node_hierarchy_flattens_old_generated_rows():
             WHERE id IN (100, 101)
         """)).scalar_one()
         assert remaining_group_count == 0
+
+
+def test_ensure_package_cost_sheets_creates_original_and_assigns_legacy_nodes():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    with Session(engine) as session:
+        session.execute(text("PRAGMA foreign_keys=OFF"))
+        session.execute(text("""
+            CREATE TABLE packages (
+                id INTEGER PRIMARY KEY,
+                package_number TEXT NOT NULL
+            )
+        """))
+        session.execute(text("""
+            CREATE TABLE package_cost_sheets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                package_id INTEGER NOT NULL,
+                sheet_number VARCHAR(30) NOT NULL,
+                title TEXT NOT NULL,
+                sheet_type VARCHAR(20) NOT NULL DEFAULT 'Original',
+                status VARCHAR(30) NOT NULL DEFAULT 'Draft',
+                description TEXT NOT NULL DEFAULT '',
+                display_order INTEGER NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(package_id, sheet_number)
+            )
+        """))
+        session.execute(text("""
+            CREATE TABLE package_cost_nodes (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                package_id INTEGER NOT NULL,
+                cost_sheet_id INTEGER,
+                parent_id INTEGER,
+                code VARCHAR(30) NOT NULL DEFAULT '',
+                description TEXT NOT NULL,
+                is_item BOOLEAN NOT NULL DEFAULT 0,
+                cc_code VARCHAR(3),
+                unit VARCHAR(20) NOT NULL DEFAULT 'Sum',
+                qty NUMERIC(18,4),
+                rate NUMERIC(18,2),
+                baseline_amount NUMERIC(18,2),
+                pre_award_unit VARCHAR(20) NOT NULL DEFAULT 'Sum',
+                pre_award_qty NUMERIC(18,4),
+                pre_award_rate NUMERIC(18,2),
+                pre_award_amount NUMERIC(18,2),
+                contract_unit VARCHAR(20) NOT NULL DEFAULT 'Sum',
+                contract_qty NUMERIC(18,4),
+                contract_rate NUMERIC(18,2),
+                contract_amount NUMERIC(18,2),
+                display_order INTEGER NOT NULL DEFAULT 0
+            )
+        """))
+        session.execute(text("INSERT INTO packages (id, package_number) VALUES (1, 'PKG')"))
+        session.execute(text("""
+            INSERT INTO package_cost_nodes (id, package_id, description, is_item)
+            VALUES (10, 1, 'Legacy line', 1)
+        """))
+        session.commit()
+
+        ensure_package_cost_sheets(session)
+
+        sheet = session.execute(text("""
+            SELECT id, sheet_number, title, sheet_type
+            FROM package_cost_sheets
+            WHERE package_id = 1
+        """)).mappings().one()
+        assert sheet["sheet_number"] == "ORIGINAL"
+        assert sheet["title"] == "Original Cost Sheet"
+        assert sheet["sheet_type"] == "Original"
+
+        node_sheet_id = session.execute(text("""
+            SELECT cost_sheet_id
+            FROM package_cost_nodes
+            WHERE id = 10
+        """)).scalar_one()
+        assert node_sheet_id == sheet["id"]
 
         repair_package_cost_nodes_workstream_fk(session)
 

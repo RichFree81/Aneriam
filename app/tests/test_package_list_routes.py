@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from costcontrol.app import app
 from costcontrol.database import Base, get_db
-from costcontrol.models import CostComponent, CostItemCode, Package, PackageCostNode, Project, ProjectScopeItem
+from costcontrol.models import CostComponent, CostItemCode, Package, PackageCostNode, PackageCostSheet, Project, ProjectScopeItem
 from costcontrol.seed import seed_control_accounts, seed_cost_control_master_data
 
 
@@ -176,6 +176,12 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
 
         response = client.get("/project/5006/packages/5006-PKG-001/cost")
         assert response.status_code == 200
+        original_sheet = session.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Original").one()
+        session.refresh(level2)
+        assert level2.cost_sheet_id == original_sheet.id
+        assert "Original Cost Sheet" in response.text
+        assert "Add Variation Cost Sheet" in response.text
+        assert f'name="sheet_id" value="{original_sheet.id}"' in response.text
         assert "Add Cost Grouping" in response.text
         assert "Add Cost Line" in response.text
         assert "Related Control Account" in response.text
@@ -223,6 +229,30 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert '<span class="chip">{{ package.package_source }}</span>' not in response.text
 
         response = client.post(
+            "/project/5006/packages/5006-PKG-001/cost/add-sheet",
+            data={
+                "title": "Variation 001 - scope change",
+                "description": "Additional civils",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        variation_sheet = session.query(PackageCostSheet).filter_by(
+            package_id=package_id,
+            sheet_type="Variation",
+            title="Variation 001 - scope change",
+        ).one()
+        assert variation_sheet.sheet_number == "VAR-001"
+        assert response.headers["location"].endswith(f"/cost?sheet_id={variation_sheet.id}")
+
+        response = client.get(f"/project/5006/packages/5006-PKG-001/cost?sheet_id={variation_sheet.id}")
+        assert response.status_code == 200
+        assert "Variation 001 - scope change" in response.text
+        start = response.text.index("const COST_NODE_ROWS = ") + len("const COST_NODE_ROWS = ")
+        end = response.text.index(";\n  const COST_COMPONENT_OPTIONS", start)
+        assert json.loads(response.text[start:end]) == []
+
+        response = client.post(
             f"/project/5006/packages/5006-PKG-001/cost/update-section/{level2.id}",
             data={"code": "02", "description": "Civils"},
             follow_redirects=False,
@@ -255,6 +285,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         response = client.post(
             "/project/5006/packages/5006-PKG-001/cost/add-section",
             data={
+                "sheet_id": str(variation_sheet.id),
                 "code": "SHOULD-NOT-BE-USED",
                 "description": "Steelwork",
             },
@@ -264,10 +295,11 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         new_grouping = session.query(PackageCostNode).filter_by(
             package_id=package_id,
             parent_id=None,
+            cost_sheet_id=variation_sheet.id,
             description="Steelwork",
             is_item=False,
         ).one()
-        assert new_grouping.code == "2"
+        assert new_grouping.code == "1"
 
         scope = ProjectScopeItem(project_number="5006", description="Furnace shell")
         session.add(scope)
@@ -298,6 +330,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             data={
                 "cost_component_id": str(component.id),
                 "cost_grouping_id": str(level2.id),
+                "sheet_id": str(original_sheet.id),
                 "cc_code": "205",
                 "cost_item_code_id": str(existing_code.id),
                 "account_mode": "existing",
@@ -334,6 +367,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             "/project/5006/packages/5006-PKG-001/cost/add-item",
             data={
                 "cost_component_id": str(component.id),
+                "sheet_id": str(variation_sheet.id),
                 "cc_code": "205",
                 "cost_item_code_id": "__add__",
                 "account_mode": "custom",
@@ -353,6 +387,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert custom_code.code == "205.01.02"
         custom_line = session.query(PackageCostNode).filter_by(
             package_id=package_id,
+            cost_sheet_id=variation_sheet.id,
             parent_id=None,
             description="Install refractory",
             is_item=True,

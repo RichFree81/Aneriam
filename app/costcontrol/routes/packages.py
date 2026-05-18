@@ -21,6 +21,7 @@ from ..models import (
     IndirectL2Account,
     PackageCostItem,
     PackageCostNode,
+    PackageCostSheet,
 )
 from ..seed import COST_ITEM_LIBRARY_DIRECT, COST_ITEM_LIBRARY_INDIRECT, PRICING_BASES
 from ..reports import project_totals
@@ -28,6 +29,70 @@ from ..templates import templates
 
 
 router = APIRouter()
+
+
+def _sheet_redirect(project_number: str, package_number: str, sheet_id: int | None = None):
+    suffix = f"?sheet_id={sheet_id}" if sheet_id is not None else ""
+    return RedirectResponse(
+        f"/project/{project_number}/packages/{package_number}/cost{suffix}",
+        status_code=303,
+    )
+
+
+def _next_cost_sheet_number(db: Session, package_id: int) -> str:
+    count = db.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Variation").count()
+    return f"VAR-{count + 1:03d}"
+
+
+def _ensure_cost_sheets(db: Session, pkg) -> list[PackageCostSheet]:
+    sheets = (
+        db.query(PackageCostSheet)
+        .filter_by(package_id=pkg.id)
+        .order_by(PackageCostSheet.display_order, PackageCostSheet.id)
+        .all()
+    )
+    original = next((sheet for sheet in sheets if sheet.sheet_type == "Original"), None)
+    if original is None:
+        original = PackageCostSheet(
+            package_id=pkg.id,
+            sheet_number="ORIGINAL",
+            title="Original Cost Sheet",
+            sheet_type="Original",
+            status="Draft",
+            display_order=0,
+            created_at=datetime.now(),
+        )
+        db.add(original)
+        db.flush()
+        sheets.insert(0, original)
+    for node in pkg.cost_nodes:
+        if node.cost_sheet_id is None:
+            node.cost_sheet_id = original.id
+    db.commit()
+    return (
+        db.query(PackageCostSheet)
+        .filter_by(package_id=pkg.id)
+        .order_by(PackageCostSheet.display_order, PackageCostSheet.id)
+        .all()
+    )
+
+
+def _active_cost_sheet(request: Request, sheets: list[PackageCostSheet]) -> PackageCostSheet:
+    requested = request.query_params.get("sheet_id", "")
+    if requested:
+        for sheet in sheets:
+            if str(sheet.id) == requested:
+                return sheet
+    return next((sheet for sheet in sheets if sheet.sheet_type == "Original"), sheets[0])
+
+
+def _resolve_cost_sheet(db: Session, pkg, sheet_id: str) -> PackageCostSheet:
+    if sheet_id.strip():
+        sheet = db.get(PackageCostSheet, int(sheet_id))
+        if sheet is None or sheet.package_id != pkg.id:
+            raise HTTPException(status_code=400, detail="Cost Sheet must belong to the same package")
+        return sheet
+    return _ensure_cost_sheets(db, pkg)[0]
 
 
 def _cost_node_amount(node: PackageCostNode, column: str) -> float:
@@ -147,6 +212,8 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
     totals = project_totals(db, project_number)
 
     if active_pkg_tab == "cost":
+        cost_sheets = _ensure_cost_sheets(db, pkg)
+        active_cost_sheet = _active_cost_sheet(request, cost_sheets)
         cost_components = (
             db.query(CostComponent)
             .filter_by(project_number=project_number)
@@ -156,7 +223,10 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
         indirect_l2 = db.query(IndirectL2Account).order_by(IndirectL2Account.code).all()
         cost_codes = db.query(CostItemCode).filter_by(project_number=project_number).order_by(CostItemCode.code).all()
         cost_item_account_names = {code.code: code.name for code in cost_codes}
-        root_nodes = [n for n in pkg.cost_nodes if n.parent_id is None]
+        root_nodes = [
+            n for n in pkg.cost_nodes
+            if n.parent_id is None and n.cost_sheet_id == active_cost_sheet.id
+        ]
         cost_node_rows = [
             _cost_node_grid_row(node, cost_item_account_names)
             for node in sorted(root_nodes, key=lambda n: n.display_order)
@@ -185,6 +255,8 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "cost_node_rows": cost_node_rows,
             "cost_node_totals": cost_node_totals,
             "cost_group_options": cost_group_options,
+            "cost_sheets": cost_sheets,
+            "active_cost_sheet": active_cost_sheet,
             "control_accounts": control_accounts,
             "award_errors": award_errors,
             "active_tab": "wbs",
@@ -262,11 +334,8 @@ def package_detail(project_number: str, package_number: str, request: Request, d
 # Cost node CRUD routes
 # ---------------------------------------------------------------------------
 
-def _cost_redirect(project_number: str, package_number: str):
-    return RedirectResponse(
-        f"/project/{project_number}/packages/{package_number}/cost",
-        status_code=303,
-    )
+def _cost_redirect(project_number: str, package_number: str, sheet_id: int | None = None):
+    return _sheet_redirect(project_number, package_number, sheet_id)
 
 
 @router.post("/project/{project_number}/packages/{package_number}/cost/update-package")
@@ -390,15 +459,18 @@ def cost_delete_line(project_number: str, package_number: str, line_id: int, db:
     return _cost_redirect(project_number, package_number)
 
 
-def _next_sibling_order(pkg, parent_id: int | None) -> int:
-    siblings = [n for n in pkg.cost_nodes if n.parent_id == parent_id]
+def _next_sibling_order(pkg, parent_id: int | None, sheet_id: int | None = None) -> int:
+    siblings = [
+        n for n in pkg.cost_nodes
+        if n.parent_id == parent_id and (sheet_id is None or n.cost_sheet_id == sheet_id)
+    ]
     return max((n.display_order for n in siblings), default=-1) + 1
 
 
-def _next_group_code(pkg, parent_id: int | None, db: Session) -> str:
+def _next_group_code(pkg, parent_id: int | None, db: Session, sheet_id: int | None = None) -> str:
     siblings = [
         n for n in pkg.cost_nodes
-        if n.parent_id == parent_id and not n.is_item
+        if n.parent_id == parent_id and not n.is_item and (sheet_id is None or n.cost_sheet_id == sheet_id)
     ]
     sequence = len(siblings) + 1
     if parent_id is None:
@@ -408,7 +480,7 @@ def _next_group_code(pkg, parent_id: int | None, db: Session) -> str:
     return f"{parent_code}.{sequence}"
 
 
-def _resolve_parent_id(db: Session, pkg, parent_id_str: str) -> int | None:
+def _resolve_parent_id(db: Session, pkg, parent_id_str: str, sheet_id: int | None = None) -> int | None:
     """Parse a form-supplied parent_id and verify it belongs to *pkg*.
 
     Raises HTTP 400 if the parent exists but lives in a different package —
@@ -420,16 +492,16 @@ def _resolve_parent_id(db: Session, pkg, parent_id_str: str) -> int | None:
         return None
     parent_int = int(parent_id_str)
     parent = db.get(PackageCostNode, parent_int)
-    if parent is None or parent.package_id != pkg.id:
+    if parent is None or parent.package_id != pkg.id or (sheet_id is not None and parent.cost_sheet_id != sheet_id):
         raise HTTPException(status_code=400, detail="Parent must belong to the same package")
     return parent_int
 
 
-def _resolve_cost_line_parent(db: Session, pkg, grouping_id: str) -> int | None:
+def _resolve_cost_line_parent(db: Session, pkg, grouping_id: str, sheet_id: int | None = None) -> int | None:
     if not grouping_id.strip():
         return None
     node = db.get(PackageCostNode, int(grouping_id))
-    if node is None or node.package_id != pkg.id or node.is_item:
+    if node is None or node.package_id != pkg.id or node.is_item or (sheet_id is not None and node.cost_sheet_id != sheet_id):
         raise HTTPException(status_code=400, detail="Worksheet Grouping must belong to the same package")
     return node.id
 
@@ -495,24 +567,27 @@ def cost_add_section(
     code: str = Form(""),
     description: str = Form(...),
     parent_id: str = Form(""),
+    sheet_id: str = Form(""),
 ):
     pkg = get_package_or_404(db, project_number, package_number)
-    parent_int = _resolve_parent_id(db, pkg, parent_id)
+    sheet = _resolve_cost_sheet(db, pkg, sheet_id)
+    parent_int = _resolve_parent_id(db, pkg, parent_id, sheet.id)
     if parent_int is not None:
         parent = db.get(PackageCostNode, parent_int)
         if parent is None or parent.parent_id is not None or parent.is_item:
             raise HTTPException(status_code=400, detail="Cost item accounts must sit directly below a Cost Grouping")
     node = PackageCostNode(
         package_id=pkg.id,
+        cost_sheet_id=sheet.id,
         parent_id=parent_int,
-        code=_next_group_code(pkg, parent_int, db),
+        code=_next_group_code(pkg, parent_int, db, sheet.id),
         description=description.strip(),
         is_item=False,
-        display_order=_next_sibling_order(pkg, parent_int),
+        display_order=_next_sibling_order(pkg, parent_int, sheet.id),
     )
     db.add(node)
     db.commit()
-    return _cost_redirect(project_number, package_number)
+    return _cost_redirect(project_number, package_number, sheet.id)
 
 
 @router.post("/project/{project_number}/packages/{package_number}/cost/update-section/{node_id}")
@@ -532,7 +607,7 @@ def cost_update_section(
         raise HTTPException(status_code=400, detail="Use the cost line editor for cost lines")
     node.description = description.strip()
     db.commit()
-    return _cost_redirect(project_number, package_number)
+    return _cost_redirect(project_number, package_number, node.cost_sheet_id)
 
 
 def _write_audit_log(db: Session, node: PackageCostNode, action: str) -> None:
@@ -550,6 +625,34 @@ def _write_audit_log(db: Session, node: PackageCostNode, action: str) -> None:
     db.commit()
 
 
+@router.post("/project/{project_number}/packages/{package_number}/cost/add-sheet")
+def cost_add_sheet(
+    project_number: str,
+    package_number: str,
+    db: DbDep,
+    title: str = Form(...),
+    description: str = Form(""),
+):
+    pkg = get_package_or_404(db, project_number, package_number)
+    _ensure_cost_sheets(db, pkg)
+    sheet_number = _next_cost_sheet_number(db, pkg.id)
+    display_order = db.query(PackageCostSheet).filter_by(package_id=pkg.id).count()
+    sheet = PackageCostSheet(
+        package_id=pkg.id,
+        sheet_number=sheet_number,
+        title=title.strip(),
+        sheet_type="Variation",
+        status="Draft",
+        description=description.strip(),
+        display_order=display_order,
+        created_at=datetime.now(),
+    )
+    db.add(sheet)
+    db.commit()
+    db.refresh(sheet)
+    return _cost_redirect(project_number, package_number, sheet.id)
+
+
 @router.post("/project/{project_number}/packages/{package_number}/cost/add-item")
 def cost_add_item(
     project_number: str,
@@ -558,6 +661,7 @@ def cost_add_item(
     code: str = Form(""),
     description: str = Form(...),
     parent_id: str = Form(""),
+    sheet_id: str = Form(""),
     cost_grouping_id: str = Form(""),
     cost_component_id: str = Form(""),
     level2_id: str = Form(""),
@@ -580,6 +684,7 @@ def cost_add_item(
     contract_amount: str = Form(""),
 ):
     pkg = get_package_or_404(db, project_number, package_number)
+    sheet = _resolve_cost_sheet(db, pkg, sheet_id)
     selected_component_id = cost_component_id or level2_id
     cost_code = _resolve_or_create_cost_item_code(
         db,
@@ -597,12 +702,13 @@ def cost_add_item(
         raise HTTPException(status_code=400, detail="Related Control Account must match the selected Cost Component")
     code = cost_code.code
     cc_code = cc_code.strip() or component.commodity_code
-    parent_int = _resolve_cost_line_parent(db, pkg, cost_grouping_id or parent_id)
+    parent_int = _resolve_cost_line_parent(db, pkg, cost_grouping_id or parent_id, sheet.id)
     bl_u, bl_q, bl_r, bl_a = process_cost_column(baseline_unit, baseline_qty, baseline_rate, baseline_amount)
     pa_u, pa_q, pa_r, pa_a = process_cost_column(pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount)
     ct_u, ct_q, ct_r, ct_a = process_cost_column(contract_unit, contract_qty, contract_rate, contract_amount)
     node = PackageCostNode(
         package_id=pkg.id,
+        cost_sheet_id=sheet.id,
         parent_id=parent_int,
         code=code.strip(),
         description=description.strip(),
@@ -611,13 +717,13 @@ def cost_add_item(
         unit=bl_u, qty=bl_q, rate=bl_r, baseline_amount=bl_a,
         pre_award_unit=pa_u, pre_award_qty=pa_q, pre_award_rate=pa_r, pre_award_amount=pa_a,
         contract_unit=ct_u, contract_qty=ct_q, contract_rate=ct_r, contract_amount=ct_a or None,
-        display_order=_next_sibling_order(pkg, parent_int),
+        display_order=_next_sibling_order(pkg, parent_int, sheet.id),
     )
     db.add(node)
     db.commit()
     db.refresh(node)
     _write_audit_log(db, node, "Created")
-    return _cost_redirect(project_number, package_number)
+    return _cost_redirect(project_number, package_number, sheet.id)
 
 
 @router.post("/project/{project_number}/packages/{package_number}/cost/update-item/{node_id}")
@@ -669,7 +775,7 @@ def cost_update_item(
     node.contract_amount = ct_a or None
     db.commit()
     _write_audit_log(db, node, "Updated")
-    return _cost_redirect(project_number, package_number)
+    return _cost_redirect(project_number, package_number, node.cost_sheet_id)
 
 
 @router.post("/project/{project_number}/packages/{package_number}/cost/set-contract/{node_id}")
@@ -687,7 +793,7 @@ def cost_set_contract(
     node.contract_amount = parse_float(contract_amount)
     db.commit()
     _write_audit_log(db, node, "Updated")
-    return _cost_redirect(project_number, package_number)
+    return _cost_redirect(project_number, package_number, node.cost_sheet_id)
 
 
 @router.post("/project/{project_number}/packages/{package_number}/cost/award")
@@ -708,6 +814,7 @@ def cost_delete_node(project_number: str, package_number: str, node_id: int, db:
     node = db.get(PackageCostNode, node_id)
     if node is None or node.package_id != pkg.id:
         raise HTTPException(status_code=404, detail="Cost node not found")
+    sheet_id = node.cost_sheet_id
     db.delete(node)
     db.commit()
-    return _cost_redirect(project_number, package_number)
+    return _cost_redirect(project_number, package_number, sheet_id)

@@ -397,6 +397,9 @@ class Package(Base):
     cost_items: Mapped[list["PackageCostItem"]] = relationship(
         back_populates="package_ref", cascade="all, delete-orphan", order_by="PackageCostItem.id"
     )
+    cost_sheets: Mapped[list["PackageCostSheet"]] = relationship(
+        back_populates="package_ref", cascade="all, delete-orphan", order_by="PackageCostSheet.display_order"
+    )
     documents: Mapped[list["PackageDocument"]] = relationship(
         back_populates="package_ref", cascade="all, delete-orphan"
     )
@@ -433,6 +436,28 @@ class PackageScheduleInput(Base):
     package_ref: Mapped["Package"] = relationship(back_populates="schedule_inputs")
 
 
+class PackageCostSheet(Base):
+    __tablename__ = "package_cost_sheets"
+    __table_args__ = (UniqueConstraint("package_id", "sheet_number"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    package_id: Mapped[int] = mapped_column(Integer, ForeignKey("packages.id", ondelete="CASCADE"), nullable=False, index=True)
+    sheet_number: Mapped[str] = mapped_column(String(30), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    sheet_type: Mapped[str] = mapped_column(String(20), nullable=False, default="Original")
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="Draft")
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now())
+
+    package_ref: Mapped["Package"] = relationship(back_populates="cost_sheets")
+    cost_nodes: Mapped[list["PackageCostNode"]] = relationship(
+        back_populates="cost_sheet_ref",
+        cascade="all, delete-orphan",
+        foreign_keys="PackageCostNode.cost_sheet_id",
+    )
+
+
 class PackageCostNode(Base):
     """One row per node in a package's cost breakdown structure.
 
@@ -451,6 +476,9 @@ class PackageCostNode(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     package_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("packages.id", ondelete="CASCADE"), nullable=False
+    )
+    cost_sheet_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("package_cost_sheets.id", ondelete="CASCADE"), nullable=True, index=True
     )
     parent_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("package_cost_nodes.id", ondelete="CASCADE"), nullable=True
@@ -488,6 +516,9 @@ class PackageCostNode(Base):
 
     package_ref: Mapped["Package"] = relationship(
         back_populates="cost_nodes", foreign_keys=[package_id]
+    )
+    cost_sheet_ref: Mapped["PackageCostSheet | None"] = relationship(
+        back_populates="cost_nodes", foreign_keys=[cost_sheet_id]
     )
     parent: Mapped["PackageCostNode | None"] = relationship(
         back_populates="children", remote_side="PackageCostNode.id", foreign_keys=[parent_id]
