@@ -159,19 +159,9 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         )
         session.add(level2)
         session.flush()
-        account = PackageCostNode(
-            package_id=package_id,
-            parent_id=level2.id,
-            code="",
-            description="Bulk earthworks",
-            is_item=False,
-            display_order=0,
-        )
-        session.add(account)
-        session.flush()
         item = PackageCostNode(
             package_id=package_id,
-            parent_id=account.id,
+            parent_id=level2.id,
             code="01.01",
             description="Bulk excavation line",
             is_item=True,
@@ -189,6 +179,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert "Add Cost Grouping" in response.text
         assert "Add Cost Line" in response.text
         assert "Related Control Account" in response.text
+        assert "Worksheet Grouping" in response.text
         assert '<option value="205">205 - Structures</option>' in response.text
         assert '<option value="205">205 - 205 - Structures</option>' not in response.text
         assert "Related Cost Component" in response.text
@@ -219,9 +210,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         end = response.text.index(";\n  const COST_COMPONENT_OPTIONS", start)
         tree_data = json.loads(response.text[start:end])
         assert tree_data[0]["type"] == "Cost Grouping"
-        account_row = tree_data[0]["_children"][0]
-        assert account_row["type"] == "Cost Item Account"
-        leaf = account_row["_children"][0]
+        leaf = tree_data[0]["_children"][0]
         assert leaf["type"] == "Cost Line"
         assert "_children" not in leaf
         assert "Cost Item Lines" not in response.text
@@ -260,34 +249,6 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert item.contract_amount == 1600
 
         response = client.post(
-            "/project/5006/packages/5006-PKG-001/cost/add-item",
-            data={
-                "cost_grouping_id": str(level2.id),
-                "account_mode": "library",
-                "library_account_name": "Installation",
-                "description": "Install anchor bolts",
-                "baseline_amount": "900",
-            },
-            follow_redirects=False,
-        )
-        assert response.status_code == 303
-        new_account = session.query(PackageCostNode).filter_by(
-            package_id=package_id,
-            parent_id=level2.id,
-            description="Installation",
-            is_item=False,
-        ).one()
-        assert new_account.code == "01.2"
-        new_line = session.query(PackageCostNode).filter_by(
-            package_id=package_id,
-            parent_id=new_account.id,
-            description="Install anchor bolts",
-            is_item=True,
-        ).one()
-        assert new_line.code == ""
-        assert new_line.baseline_amount == 900
-
-        response = client.post(
             "/project/5006/packages/5006-PKG-001/cost/add-section",
             data={
                 "code": "SHOULD-NOT-BE-USED",
@@ -303,29 +264,6 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             is_item=False,
         ).one()
         assert new_grouping.code == "2"
-
-        response = client.post(
-            "/project/5006/packages/5006-PKG-001/cost/add-item",
-            data={
-                "cost_account_id": str(account.id),
-                "description": "Cart spoil",
-                "baseline_amount": "300",
-            },
-            follow_redirects=False,
-        )
-        assert response.status_code == 303
-        assert session.query(PackageCostNode).filter_by(parent_id=account.id, description="Cart spoil").one().is_item
-
-        response = client.post(
-            "/project/5006/packages/5006-PKG-001/cost/add-item",
-            data={
-                "parent_id": str(level2.id),
-                "description": "Invalid direct line",
-                "baseline_amount": "100",
-            },
-            follow_redirects=False,
-        )
-        assert response.status_code == 400
 
         scope = ProjectScopeItem(project_number="5006", description="Furnace shell")
         session.add(scope)
@@ -355,37 +293,38 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             "/project/5006/packages/5006-PKG-001/cost/add-item",
             data={
                 "cost_component_id": str(component.id),
+                "cost_grouping_id": str(level2.id),
                 "cc_code": "205",
                 "cost_item_code_id": str(existing_code.id),
                 "account_mode": "existing",
-                "description": "Install furnace shell",
+                "description": "Install anchor bolts",
                 "baseline_amount": "2100",
             },
             follow_redirects=False,
         )
         assert response.status_code == 303
-        component_group = session.query(PackageCostNode).filter_by(
-            package_id=package_id,
-            parent_id=None,
-            description="Shell replacement",
-            is_item=False,
-        ).one()
-        account_node = session.query(PackageCostNode).filter_by(
-            package_id=package_id,
-            parent_id=component_group.id,
-            code="205.01.01",
-            description="Installation",
-            is_item=False,
-        ).one()
         component_line = session.query(PackageCostNode).filter_by(
             package_id=package_id,
-            parent_id=account_node.id,
-            description="Install furnace shell",
+            parent_id=level2.id,
+            description="Install anchor bolts",
             is_item=True,
         ).one()
         assert component_line.code == "205.01.01"
         assert component_line.cc_code == "205"
         assert component_line.baseline_amount == 2100
+        assert session.query(PackageCostNode).filter_by(
+            package_id=package_id,
+            parent_id=None,
+            description="Shell replacement",
+            is_item=False,
+        ).count() == 0
+        assert session.query(PackageCostNode).filter_by(
+            package_id=package_id,
+            parent_id=level2.id,
+            code="205.01.01",
+            description="Installation",
+            is_item=False,
+        ).count() == 0
 
         response = client.post(
             "/project/5006/packages/5006-PKG-001/cost/add-item",
@@ -408,6 +347,14 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             source="custom",
         ).one()
         assert custom_code.code == "205.01.02"
+        custom_line = session.query(PackageCostNode).filter_by(
+            package_id=package_id,
+            parent_id=None,
+            description="Install refractory",
+            is_item=True,
+        ).one()
+        assert custom_line.code == "205.01.02"
+        assert custom_line.cc_code == "205"
 
         response = client.post(
             "/project/5006/packages/5006-PKG-001/cost/add-item",

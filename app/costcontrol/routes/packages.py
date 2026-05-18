@@ -57,10 +57,8 @@ def _cost_node_grid_row(node: PackageCostNode) -> dict:
     is_item = node.is_item
     if is_item:
         node_type = "Cost Line"
-    elif node.parent_id is None:
-        node_type = "Cost Grouping"
     else:
-        node_type = "Cost Item Account"
+        node_type = "Cost Grouping"
     row = {
         "id": node.id,
         "node_id": node.id,
@@ -106,26 +104,6 @@ def _cost_node_options(nodes: list[PackageCostNode]) -> list[PackageCostNode]:
         if not node.is_item:
             walk(node)
     return ordered
-
-
-def _cost_grouping_options(nodes: list[PackageCostNode]) -> list[PackageCostNode]:
-    return sorted([node for node in nodes if node.parent_id is None and not node.is_item], key=lambda n: n.display_order)
-
-
-def _cost_account_options(nodes: list[PackageCostNode]) -> list[PackageCostNode]:
-    return sorted([node for node in nodes if node.parent_id is not None and not node.is_item], key=lambda n: n.display_order)
-
-
-def _cost_account_option_rows(nodes: list[PackageCostNode]) -> list[dict]:
-    return [
-        {
-            "id": node.id,
-            "parent_id": node.parent_id,
-            "code": node.code or "",
-            "description": node.description,
-        }
-        for node in _cost_account_options(nodes)
-    ]
 
 
 def _cost_item_code_option_rows(codes: list[CostItemCode]) -> list[dict]:
@@ -178,7 +156,6 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "contract": sum(row["contract"] for row in cost_node_rows),
         }
         cost_group_options = _cost_node_options(root_nodes)
-        all_cost_nodes = list(pkg.cost_nodes)
         control_accounts = db.query(ControlAccount).order_by(ControlAccount.code).all()
         award_errors = []
         return templates.TemplateResponse("package_wbs.html", {
@@ -197,8 +174,6 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "cost_node_rows": cost_node_rows,
             "cost_node_totals": cost_node_totals,
             "cost_group_options": cost_group_options,
-            "cost_grouping_options": _cost_grouping_options(all_cost_nodes),
-            "cost_account_options": _cost_account_option_rows(all_cost_nodes),
             "control_accounts": control_accounts,
             "award_errors": award_errors,
             "active_tab": "wbs",
@@ -439,88 +414,13 @@ def _resolve_parent_id(db: Session, pkg, parent_id_str: str) -> int | None:
     return parent_int
 
 
-def _resolve_cost_grouping_node(db: Session, pkg, grouping_id: str) -> PackageCostNode:
+def _resolve_cost_line_parent(db: Session, pkg, grouping_id: str) -> int | None:
     if not grouping_id.strip():
-        raise HTTPException(status_code=400, detail="A Cost Grouping is required")
+        return None
     node = db.get(PackageCostNode, int(grouping_id))
-    if node is None or node.package_id != pkg.id or node.parent_id is not None or node.is_item:
-        raise HTTPException(status_code=400, detail="Cost Grouping must belong to the same package")
-    return node
-
-
-def _resolve_cost_account_node(db: Session, pkg, account_id: str) -> PackageCostNode:
-    if not account_id.strip():
-        raise HTTPException(status_code=400, detail="A Level 3 cost item account is required")
-    node = db.get(PackageCostNode, int(account_id))
-    if node is None or node.package_id != pkg.id or node.parent_id is None or node.is_item:
-        raise HTTPException(status_code=400, detail="Cost line must be assigned to a Level 3 cost item account")
-    return node
-
-
-def _create_cost_account_node(
-    db: Session,
-    pkg,
-    *,
-    grouping_node: PackageCostNode,
-    account_name: str,
-    source: str,
-) -> PackageCostNode:
-    name = account_name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Cost item account name is required")
-    node = PackageCostNode(
-        package_id=pkg.id,
-        parent_id=grouping_node.id,
-        code=_next_group_code(pkg, grouping_node.id, db),
-        description=name,
-        is_item=False,
-        display_order=_next_sibling_order(pkg, grouping_node.id),
-    )
-    db.add(node)
-    db.flush()
-    return node
-
-
-def _find_or_create_component_grouping(db: Session, pkg, component: CostComponent) -> PackageCostNode:
-    for node in pkg.cost_nodes:
-        if not node.is_item and node.parent_id is None and node.description == component.description:
-            return node
-    node = PackageCostNode(
-        package_id=pkg.id,
-        parent_id=None,
-        code=_next_group_code(pkg, None, db),
-        description=component.description,
-        is_item=False,
-        display_order=_next_sibling_order(pkg, None),
-    )
-    db.add(node)
-    db.flush()
-    pkg.cost_nodes.append(node)
-    return node
-
-
-def _find_or_create_cost_account_for_code(
-    db: Session,
-    pkg,
-    *,
-    grouping_node: PackageCostNode,
-    cost_code: CostItemCode,
-) -> PackageCostNode:
-    for node in pkg.cost_nodes:
-        if not node.is_item and node.parent_id == grouping_node.id and node.code == cost_code.code:
-            return node
-    node = PackageCostNode(
-        package_id=pkg.id,
-        parent_id=grouping_node.id,
-        code=cost_code.code,
-        description=cost_code.name,
-        is_item=False,
-        display_order=_next_sibling_order(pkg, grouping_node.id),
-    )
-    db.add(node)
-    db.flush()
-    pkg.cost_nodes.append(node)
-    return node
+    if node is None or node.package_id != pkg.id or node.is_item:
+        raise HTTPException(status_code=400, detail="Worksheet Grouping must belong to the same package")
+    return node.id
 
 
 def _resolve_or_create_cost_item_code(
@@ -651,7 +551,6 @@ def cost_add_item(
     cost_component_id: str = Form(""),
     level2_id: str = Form(""),
     account_mode: str = Form("existing"),
-    cost_account_id: str = Form(""),
     cost_item_code_id: str = Form(""),
     library_account_name: str = Form(""),
     custom_account_name: str = Form(""),
@@ -671,53 +570,23 @@ def cost_add_item(
 ):
     pkg = get_package_or_404(db, project_number, package_number)
     selected_component_id = cost_component_id or level2_id
-    if selected_component_id or cost_item_code_id:
-        cost_code = _resolve_or_create_cost_item_code(
-            db,
-            project_number,
-            cost_component_id=selected_component_id,
-            cost_item_code_id=cost_item_code_id,
-            account_mode=account_mode,
-            library_account_name=library_account_name,
-            custom_account_name=custom_account_name,
-        )
-        component = db.get(CostComponent, cost_code.cost_component_id)
-        if component is None:
-            raise HTTPException(status_code=400, detail="Cost Item Account must be linked to a Level 2 Cost Component")
-        if cc_code.strip() and cc_code.strip() != component.commodity_code:
-            raise HTTPException(status_code=400, detail="Related Control Account must match the selected Cost Component")
-        grouping_node = _find_or_create_component_grouping(db, pkg, component)
-        parent_node = _find_or_create_cost_account_for_code(
-            db,
-            pkg,
-            grouping_node=grouping_node,
-            cost_code=cost_code,
-        )
-        code = code.strip() or cost_code.code
-        cc_code = cc_code.strip() or component.commodity_code
-    else:
-        grouping_id = cost_grouping_id
-        if account_mode == "library":
-            grouping_node = _resolve_cost_grouping_node(db, pkg, grouping_id)
-            parent_node = _create_cost_account_node(
-                db,
-                pkg,
-                grouping_node=grouping_node,
-                account_name=library_account_name,
-                source="library",
-            )
-        elif account_mode == "custom":
-            grouping_node = _resolve_cost_grouping_node(db, pkg, grouping_id)
-            parent_node = _create_cost_account_node(
-                db,
-                pkg,
-                grouping_node=grouping_node,
-                account_name=custom_account_name,
-                source="custom",
-            )
-        else:
-            parent_node = _resolve_cost_account_node(db, pkg, cost_account_id or parent_id)
-    parent_int = parent_node.id
+    cost_code = _resolve_or_create_cost_item_code(
+        db,
+        project_number,
+        cost_component_id=selected_component_id,
+        cost_item_code_id=cost_item_code_id,
+        account_mode=account_mode,
+        library_account_name=library_account_name,
+        custom_account_name=custom_account_name,
+    )
+    component = db.get(CostComponent, cost_code.cost_component_id)
+    if component is None:
+        raise HTTPException(status_code=400, detail="Cost Item Account must be linked to a Level 2 Cost Component")
+    if cc_code.strip() and cc_code.strip() != component.commodity_code:
+        raise HTTPException(status_code=400, detail="Related Control Account must match the selected Cost Component")
+    code = cost_code.code
+    cc_code = cc_code.strip() or component.commodity_code
+    parent_int = _resolve_cost_line_parent(db, pkg, cost_grouping_id or parent_id)
     bl_u, bl_q, bl_r, bl_a = process_cost_column(baseline_unit, baseline_qty, baseline_rate, baseline_amount)
     pa_u, pa_q, pa_r, pa_a = process_cost_column(pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount)
     ct_u, ct_q, ct_r, ct_a = process_cost_column(contract_unit, contract_qty, contract_rate, contract_amount)

@@ -168,10 +168,7 @@
   function costDeleteMessage() {
     const type = document.getElementById('costDeleteForm').dataset.nodeType || 'record';
     if (type === 'Cost Grouping') {
-      return 'Delete this Cost Grouping, its cost item accounts, and all cost lines beneath it?';
-    }
-    if (type === 'Cost Item Account') {
-      return 'Delete this cost item account and all cost lines beneath it?';
+      return 'Delete this Cost Grouping and all cost lines beneath it?';
     }
     return 'Delete this cost line?';
   }
@@ -651,6 +648,14 @@
       <label>Cost Item Account
         <select name="cost_item_code_id" id="costLineItemCode" required onchange="handleCostItemAccountSelection()">
           <option value="">Select Related Cost Component first...</option>
+        </select>
+      </label>
+      <label>Worksheet Grouping
+        <select name="cost_grouping_id">
+          <option value="">No grouping</option>
+          {% for node in cost_group_options %}
+          <option value="{{ node.id }}">{% if node.code %}{{ node.code }} - {% endif %}{{ node.description }}</option>
+          {% endfor %}
         </select>
       </label>
       <input type="hidden" name="account_mode" id="costLineAccountMode" value="existing">
