@@ -145,7 +145,6 @@
 
     if (isItem) {
       document.getElementById('costEditItemForm').action = '{{ pkg_base }}/cost/update-item/' + data.node_id;
-      document.getElementById('editItemCode').value = formValue(data.code);
       document.getElementById('editItemDescription').value = formValue(data.description);
       document.getElementById('editItemControlAccount').value = formValue(data.control_account);
       document.getElementById('editItemBaseline').value = formValue(data.baseline_amount);
@@ -588,13 +587,10 @@
       <label>Cost line description *
         <input name="description" id="editItemDescription" required autocomplete="off">
       </label>
-      <label>CBS cost item code
-        <input name="code" id="editItemCode" autocomplete="off">
-      </label>
       <label>Related Control Account
         <select name="cc_code" id="editItemControlAccount">
           <option value="">Select...</option>
-          {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.name }}</option>{% endfor %}
+          {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
         </select>
       </label>
       <label>Baseline estimate
@@ -644,7 +640,7 @@
       <label>Related Control Account
         <select name="cc_code" id="costLineCategory" required onchange="refreshCostComponentOptions()">
           <option value="">Select...</option>
-          {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.name }}</option>{% endfor %}
+          {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
         </select>
       </label>
       <label>Related Cost Component
@@ -662,9 +658,6 @@
       <input type="hidden" name="custom_account_name" id="costLineCustomAccount">
       <label class="span-2">Cost line description *
         <input name="description" id="itemDescription" required autocomplete="off">
-      </label>
-      <label>CBS cost item code
-        <input name="code" autocomplete="off">
       </label>
       <label>Baseline estimate
         <input name="baseline_amount" type="number" min="0" step="0.01">

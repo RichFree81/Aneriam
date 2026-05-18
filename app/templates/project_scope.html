@@ -313,7 +313,7 @@
       </label>
       <label>Cost Category
         <select name="commodity_code" id="editCostComponentCommodity" required>
-          {% for ca in commodities %}<option value="{{ ca.code }}">{{ ca.name }}</option>{% endfor %}
+          {% for ca in commodities %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
         </select>
       </label>
       <label>Facility Group
@@ -428,7 +428,7 @@
       </label>
       <label>Cost Category
         <select name="commodity_code" required>
-          {% for ca in commodities %}<option value="{{ ca.code }}">{{ ca.name }}</option>{% endfor %}
+          {% for ca in commodities %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
         </select>
       </label>
       <label>Facility Group

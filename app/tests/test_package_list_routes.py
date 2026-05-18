@@ -189,13 +189,13 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert "Add Cost Grouping" in response.text
         assert "Add Cost Line" in response.text
         assert "Related Control Account" in response.text
-        assert '<option value="205">Structures</option>' in response.text
-        assert '<option value="205">205 - Structures</option>' not in response.text
+        assert '<option value="205">205 - Structures</option>' in response.text
+        assert '<option value="205">205 - 205 - Structures</option>' not in response.text
         assert "Related Cost Component" in response.text
         assert "Cost Item Account" in response.text
         assert "Cost Item Account (CBS Level 3)" not in response.text
         assert "Cost Category (CBS Level 1)" not in response.text
-        assert "CBS cost item code" in response.text
+        assert "CBS cost item code" not in response.text
         assert "Cost line description" in response.text
         assert "Standard library" in response.text
         assert "Custom account" in response.text
@@ -240,7 +240,6 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         response = client.post(
             f"/project/5006/packages/5006-PKG-001/cost/update-item/{item.id}",
             data={
-                "code": "02.01",
                 "description": "Bulk earthworks",
                 "cc_code": "206",
                 "baseline_amount": "1400",
@@ -251,7 +250,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         )
         assert response.status_code == 303
         session.refresh(item)
-        assert item.code == "02.01"
+        assert item.code == "01.01"
         assert item.description == "Bulk earthworks"
         assert item.cc_code == "206"
         assert item.baseline_amount == 1400

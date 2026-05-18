@@ -354,9 +354,6 @@
     <form id="itemForm" method="post">
       <div class="fm-fields">
         <div style="display:flex;gap:10px;">
-          <label style="width:110px;">Code
-            <input type="text" name="code" id="itemCode" placeholder="e.g. A.1" maxlength="30">
-          </label>
           <label style="flex:1;">Description *
             <input type="text" name="description" id="itemDesc" required placeholder="Item description">
           </label>
@@ -366,7 +363,7 @@
             <select name="cc_code" id="itemCCCode">
               <option value="">— None —</option>
               {% for ca in control_accounts %}
-              <option value="{{ ca.code }}">{{ ca.name }}</option>
+              <option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>
               {% endfor %}
             </select>
           </label>
@@ -666,7 +663,6 @@
     document.getElementById('itemForm').action = isEdit
       ? PKG_BASE + '/cost/update-item/' + nodeId
       : PKG_BASE + '/cost/add-item';
-    document.getElementById('itemCode').value = code || '';
     document.getElementById('itemDesc').value = description || '';
     document.getElementById('itemCCCode').value = ccCode || '';
     document.getElementById('itemParentRow').style.display = isEdit ? 'none' : '';

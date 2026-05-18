@@ -746,7 +746,7 @@ def cost_update_item(
     package_number: str,
     node_id: int,
     db: DbDep,
-    code: str = Form(""),
+    code: str | None = Form(None),
     description: str = Form(...),
     cc_code: str = Form(""),
     baseline_unit: str = Form("Sum"),
@@ -771,7 +771,8 @@ def cost_update_item(
     bl_u, bl_q, bl_r, bl_a = process_cost_column(baseline_unit, baseline_qty, baseline_rate, baseline_amount)
     pa_u, pa_q, pa_r, pa_a = process_cost_column(pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount)
     ct_u, ct_q, ct_r, ct_a = process_cost_column(contract_unit, contract_qty, contract_rate, contract_amount)
-    node.code = code.strip()
+    if code is not None:
+        node.code = code.strip()
     node.description = description.strip()
     node.cc_code = cc_code.strip() or None
     node.unit = bl_u
