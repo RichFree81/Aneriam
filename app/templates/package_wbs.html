@@ -10,7 +10,7 @@
 {% block actions_items %}
 <a href="#" onclick="openCostGroupModal(); return false;">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zM9 2.5A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zM1 10.5A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zM9 10.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3z"/></svg>
-  Add Cost Component
+  Add Cost Grouping
 </a>
 <a href="#" onclick="openCostItemModal(); return false;">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a.5.5 0 0 1 .5.5v5.5H14a.5.5 0 0 1 0 1H8.5V14a.5.5 0 0 1-1 0V8.5H2a.5.5 0 0 1 0-1h5.5V2a.5.5 0 0 1 .5-.5z"/></svg>
@@ -56,7 +56,7 @@
   }
 
   function typeFormatter(cell) {
-    const type = cell.getValue() || 'Cost Component';
+    const type = cell.getValue() || 'Cost Grouping';
     const cls = type === 'Cost Line' ? 'cost-type-item' : 'cost-type-group';
     return '<span class="cost-type ' + cls + '">' + escapeHtml(type) + '</span>';
   }
@@ -148,8 +148,8 @@
 
   function costDeleteMessage() {
     const type = document.getElementById('costDeleteForm').dataset.nodeType || 'record';
-    if (type === 'Cost Component') {
-      return 'Delete this Cost Component, its cost item accounts, and all cost lines beneath it?';
+    if (type === 'Cost Grouping') {
+      return 'Delete this Cost Grouping, its cost item accounts, and all cost lines beneath it?';
     }
     if (type === 'Cost Item Account') {
       return 'Delete this cost item account and all cost lines beneath it?';
@@ -158,14 +158,14 @@
   }
 
   function refreshCostAccountOptions() {
-    const componentId = document.getElementById('costLineComponent').value;
+    const groupingId = document.getElementById('costLineGrouping').value;
     const accountSelect = document.getElementById('costLineAccount');
     const modeSelect = document.getElementById('costLineAccountMode');
     accountSelect.innerHTML = '';
 
-    const matching = COST_ACCOUNT_OPTIONS.filter(account => String(account.parent_id) === String(componentId));
-    if (!componentId) {
-      accountSelect.appendChild(new Option('Select Cost Component first...', ''));
+    const matching = COST_ACCOUNT_OPTIONS.filter(account => String(account.parent_id) === String(groupingId));
+    if (!groupingId) {
+      accountSelect.appendChild(new Option('Select Cost Grouping first...', ''));
       accountSelect.disabled = true;
       modeSelect.value = 'existing';
       modeSelect.disabled = true;
@@ -527,7 +527,7 @@
 <div class="filter-overlay" id="costGroupOverlay" onclick="closeCostGroupModal()"></div>
 <div class="filter-modal" id="costGroupModal" style="width:560px;">
   <div class="fm-header">
-    <span>Add Cost Component</span>
+    <span>Add Cost Grouping</span>
     <button class="fm-close" onclick="closeCostGroupModal()" aria-label="Close">&times;</button>
   </div>
   <form method="post" action="{{ pkg_base }}/cost/add-section">
@@ -541,7 +541,7 @@
     </div>
     <div class="fm-footer">
       <button type="button" class="btn btn-sm btn-ghost" onclick="closeCostGroupModal()">Cancel</button>
-      <button type="submit" class="btn btn-sm">Add Cost Component</button>
+      <button type="submit" class="btn btn-sm">Add Cost Grouping</button>
     </div>
   </form>
 </div>
@@ -554,15 +554,15 @@
   </div>
   <form method="post" action="{{ pkg_base }}/cost/add-item">
     <div class="fm-fields package-modal-grid">
-      <label>Cost Component *
-        <select name="cost_component_id" id="costLineComponent" required onchange="refreshCostAccountOptions()">
+      <label>Cost Grouping *
+        <select name="cost_grouping_id" id="costLineGrouping" required onchange="refreshCostAccountOptions()">
           <option value="">Select...</option>
-          {% for node in cost_component_options %}<option value="{{ node.id }}">{% if node.code %}{{ node.code }} - {% endif %}{{ node.description }}</option>{% endfor %}
+          {% for node in cost_grouping_options %}<option value="{{ node.id }}">{% if node.code %}{{ node.code }} - {% endif %}{{ node.description }}</option>{% endfor %}
         </select>
       </label>
       <label>Level 3 cost item account *
         <select name="cost_account_id" id="costLineAccount" required onchange="refreshCostAccountCreateFields()">
-          <option value="">Select Cost Component first...</option>
+          <option value="">Select Cost Grouping first...</option>
         </select>
       </label>
       <div id="costAccountCreateFields" class="span-2 package-modal-grid" style="display:none;">
