@@ -558,6 +558,9 @@
     gap: 12px;
     margin: 0 0 10px;
   }
+  .cost-sheet-header .back-link {
+    margin-left: auto;
+  }
   .cost-sheet-heading {
     font-size: 16px;
     font-weight: 700;
@@ -679,11 +682,8 @@
 
   <div class="cost-sheet-main">
     <div class="cost-sheet-header">
-      <a href="{{ pkg_base }}/cost" class="btn btn-sm btn-ghost">Back to Cost Sheets</a>
       <div class="cost-sheet-heading">{{ active_cost_sheet.title }}</div>
-      <span class="cost-sheet-badge">{{ active_cost_sheet.sheet_number }}</span>
-      <span class="cost-sheet-badge">{{ active_cost_sheet.sheet_type }}</span>
-      <span class="cost-sheet-badge">{{ active_cost_sheet.status }}</span>
+      <a href="{{ pkg_base }}/cost" class="btn btn-sm btn-ghost back-link">Back to Cost Sheets</a>
     </div>
     <div class="card">
       <div id="costNodeGrid"></div>
