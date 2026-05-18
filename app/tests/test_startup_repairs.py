@@ -4,7 +4,11 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from costcontrol.startup import migrate_cost_component_schema, repair_package_cost_nodes_workstream_fk
+from costcontrol.startup import (
+    migrate_cost_component_schema,
+    repair_auto_cbs_cost_node_hierarchy,
+    repair_package_cost_nodes_workstream_fk,
+)
 
 
 def test_migrate_cost_component_schema_renames_legacy_direct_l2_tables():
@@ -142,6 +146,111 @@ def test_repair_package_cost_nodes_removes_stale_workstream_fk():
         session.execute(text("INSERT INTO packages (id, package_number) VALUES (1, 'PKG')"))
         session.execute(text("INSERT INTO package_cost_nodes (package_id, code, description, is_item) VALUES (1, '01', 'Group', 0)"))
         session.commit()
+
+
+def test_repair_auto_cbs_cost_node_hierarchy_flattens_old_generated_rows():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    with Session(engine) as session:
+        session.execute(text("PRAGMA foreign_keys=OFF"))
+        session.execute(text("""
+            CREATE TABLE packages (
+                id INTEGER PRIMARY KEY,
+                package_number TEXT NOT NULL
+            )
+        """))
+        session.execute(text("""
+            CREATE TABLE cost_components (
+                id INTEGER PRIMARY KEY,
+                project_number TEXT NOT NULL,
+                description TEXT NOT NULL
+            )
+        """))
+        session.execute(text("""
+            CREATE TABLE cost_item_codes (
+                id INTEGER PRIMARY KEY,
+                project_number TEXT NOT NULL,
+                cost_component_id INTEGER,
+                code TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                source TEXT NOT NULL
+            )
+        """))
+        session.execute(text("""
+            CREATE TABLE package_cost_nodes (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+                parent_id INTEGER REFERENCES package_cost_nodes(id) ON DELETE CASCADE,
+                code VARCHAR(30) NOT NULL DEFAULT '',
+                description TEXT NOT NULL,
+                is_item BOOLEAN NOT NULL DEFAULT 0,
+                cc_code VARCHAR(3),
+                unit VARCHAR(20) NOT NULL DEFAULT 'Sum',
+                qty NUMERIC(18,4),
+                rate NUMERIC(18,2),
+                baseline_amount NUMERIC(18,2),
+                pre_award_unit VARCHAR(20) NOT NULL DEFAULT 'Sum',
+                pre_award_qty NUMERIC(18,4),
+                pre_award_rate NUMERIC(18,2),
+                pre_award_amount NUMERIC(18,2),
+                contract_unit VARCHAR(20) NOT NULL DEFAULT 'Sum',
+                contract_qty NUMERIC(18,4),
+                contract_rate NUMERIC(18,2),
+                contract_amount NUMERIC(18,2),
+                display_order INTEGER NOT NULL DEFAULT 0
+            )
+        """))
+        session.execute(text("INSERT INTO packages (id, package_number) VALUES (1, 'PKG')"))
+        session.execute(text("""
+            INSERT INTO cost_components (id, project_number, description)
+            VALUES (10, '5009', 'Test Cost Component')
+        """))
+        session.execute(text("""
+            INSERT INTO cost_item_codes (
+                id, project_number, cost_component_id, code, sequence, name, source
+            ) VALUES (20, '5009', 10, '201.01.01', 1, 'Supply', 'library')
+        """))
+        session.execute(text("""
+            INSERT INTO package_cost_nodes (
+                id, package_id, parent_id, code, description, is_item, display_order
+            ) VALUES (100, 1, NULL, '1', 'Test Cost Component', 0, 0)
+        """))
+        session.execute(text("""
+            INSERT INTO package_cost_nodes (
+                id, package_id, parent_id, code, description, is_item, display_order
+            ) VALUES (101, 1, 100, '201.01.01', 'Supply', 0, 0)
+        """))
+        session.execute(text("""
+            INSERT INTO package_cost_nodes (
+                id, package_id, parent_id, code, description, is_item, cc_code,
+                baseline_amount, display_order
+            ) VALUES (102, 1, 101, '201.01.01', 'Pump supply', 1, '201', 123, 0)
+        """))
+        session.commit()
+
+        repair_auto_cbs_cost_node_hierarchy(session)
+
+        line = session.execute(text("""
+            SELECT parent_id, code, description, cc_code, baseline_amount
+            FROM package_cost_nodes
+            WHERE id = 102
+        """)).mappings().one()
+        assert line["parent_id"] is None
+        assert line["code"] == "201.01.01"
+        assert line["description"] == "Pump supply"
+        assert line["cc_code"] == "201"
+        assert line["baseline_amount"] == 123
+
+        remaining_group_count = session.execute(text("""
+            SELECT COUNT(*)
+            FROM package_cost_nodes
+            WHERE id IN (100, 101)
+        """)).scalar_one()
+        assert remaining_group_count == 0
 
         repair_package_cost_nodes_workstream_fk(session)
 

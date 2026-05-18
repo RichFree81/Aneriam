@@ -268,6 +268,77 @@ def repair_package_cost_nodes_workstream_fk(db: Session) -> None:
         db.commit()
 
 
+def repair_auto_cbs_cost_node_hierarchy(db: Session) -> None:
+    """Flatten package cost rows created by the former CBS auto-hierarchy.
+
+    Cost Component and Cost Item Account are CBS metadata on a cost line. They
+    should not be persisted as worksheet grouping rows unless the user creates
+    their own worksheet groupings.
+    """
+    required_tables = ("package_cost_nodes", "cost_item_codes", "cost_components")
+    if not all(_table_exists(db, table) for table in required_tables):
+        return
+
+    rows = db.execute(text("""
+        SELECT
+            account.id AS account_node_id,
+            component.id AS component_node_id
+        FROM package_cost_nodes AS account
+        JOIN package_cost_nodes AS component
+          ON component.id = account.parent_id
+        JOIN cost_item_codes AS cost_code
+          ON cost_code.code = account.code
+         AND cost_code.name = account.description
+        JOIN cost_components AS cost_component
+          ON cost_component.id = cost_code.cost_component_id
+         AND cost_component.description = component.description
+        WHERE account.is_item = 0
+          AND component.is_item = 0
+          AND component.parent_id IS NULL
+          AND EXISTS (
+              SELECT 1
+              FROM package_cost_nodes AS line
+              WHERE line.parent_id = account.id
+                AND line.is_item = 1
+          )
+    """)).mappings().all()
+    if not rows:
+        return
+
+    logger.info("Flattening %s auto-created CBS worksheet hierarchy rows", len(rows))
+    try:
+        for row in rows:
+            db.execute(text("""
+                UPDATE package_cost_nodes
+                SET parent_id = NULL
+                WHERE parent_id = :account_node_id
+                  AND is_item = 1
+            """), {"account_node_id": row["account_node_id"]})
+            db.execute(text("""
+                DELETE FROM package_cost_nodes
+                WHERE id = :account_node_id
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM package_cost_nodes AS child
+                      WHERE child.parent_id = :account_node_id
+                  )
+            """), {"account_node_id": row["account_node_id"]})
+            db.execute(text("""
+                DELETE FROM package_cost_nodes
+                WHERE id = :component_node_id
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM package_cost_nodes AS child
+                      WHERE child.parent_id = :component_node_id
+                  )
+            """), {"component_node_id": row["component_node_id"]})
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to flatten auto-created CBS worksheet hierarchy")
+        raise
+
+
 def initialise_database() -> None:
     db = SessionLocal()
     try:
@@ -280,6 +351,7 @@ def initialise_database() -> None:
     try:
         run_startup_migrations(db)
         repair_package_cost_nodes_workstream_fk(db)
+        repair_auto_cbs_cost_node_hierarchy(db)
         seed_control_accounts(db)
         seed_cost_control_master_data(db)
         seed_projects(db)
