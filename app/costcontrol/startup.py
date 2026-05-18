@@ -76,6 +76,9 @@ STARTUP_MIGRATIONS: tuple[str, ...] = (
         "sheet_type VARCHAR(20) NOT NULL DEFAULT 'Original', "
         "status VARCHAR(30) NOT NULL DEFAULT 'Draft', "
         "description TEXT NOT NULL DEFAULT '', "
+        "created_by TEXT NOT NULL DEFAULT '', "
+        "reviewed_by TEXT NOT NULL DEFAULT '', "
+        "approved_by TEXT NOT NULL DEFAULT '', "
         "source_sheet_id INTEGER REFERENCES package_cost_sheets(id), "
         "locked_at DATETIME, "
         "display_order INTEGER NOT NULL DEFAULT 0, "
@@ -85,6 +88,9 @@ STARTUP_MIGRATIONS: tuple[str, ...] = (
     "ALTER TABLE package_cost_nodes ADD COLUMN cost_sheet_id INTEGER REFERENCES package_cost_sheets(id) ON DELETE CASCADE",
     "ALTER TABLE package_cost_sheets ADD COLUMN source_sheet_id INTEGER REFERENCES package_cost_sheets(id)",
     "ALTER TABLE package_cost_sheets ADD COLUMN locked_at DATETIME",
+    "ALTER TABLE package_cost_sheets ADD COLUMN created_by TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE package_cost_sheets ADD COLUMN reviewed_by TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE package_cost_sheets ADD COLUMN approved_by TEXT NOT NULL DEFAULT ''",
     # Slice E: first linked PO is Original; later links are Variations.
     "ALTER TABLE po_rto_links ADD COLUMN is_original BOOLEAN NOT NULL DEFAULT 0",
     (
@@ -388,7 +394,7 @@ def ensure_package_cost_sheets(db: Session) -> None:
                         description, display_order, created_at
                     )
                     VALUES (
-                        :package_id, 'ORIGINAL', 'Package Base Cost', 'Working Estimate',
+                        :package_id, '1', 'Package Base Cost', 'Working Estimate',
                         'Working', '', 0, CURRENT_TIMESTAMP
                     )
                 """), {"package_id": package_id})
@@ -413,6 +419,26 @@ def ensure_package_cost_sheets(db: Session) -> None:
                 WHERE package_id = :package_id
                   AND cost_sheet_id IS NULL
             """), {"original_id": original_id, "package_id": package_id})
+            sheet_ids = [
+                row.id for row in db.execute(text("""
+                    SELECT id
+                    FROM package_cost_sheets
+                    WHERE package_id = :package_id
+                    ORDER BY display_order, id
+                """), {"package_id": package_id}).fetchall()
+            ]
+            for sheet_id in sheet_ids:
+                db.execute(text("""
+                    UPDATE package_cost_sheets
+                    SET sheet_number = :sheet_number
+                    WHERE id = :sheet_id
+                """), {"sheet_number": f"__renumber_{sheet_id}", "sheet_id": sheet_id})
+            for index, sheet_id in enumerate(sheet_ids, start=1):
+                db.execute(text("""
+                    UPDATE package_cost_sheets
+                    SET sheet_number = :sheet_number
+                    WHERE id = :sheet_id
+                """), {"sheet_number": str(index), "sheet_id": sheet_id})
         db.commit()
     except Exception:
         db.rollback()

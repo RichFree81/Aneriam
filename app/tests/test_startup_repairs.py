@@ -277,6 +277,9 @@ def test_ensure_package_cost_sheets_creates_original_and_assigns_legacy_nodes():
                 sheet_type VARCHAR(20) NOT NULL DEFAULT 'Original',
                 status VARCHAR(30) NOT NULL DEFAULT 'Draft',
                 description TEXT NOT NULL DEFAULT '',
+                created_by TEXT NOT NULL DEFAULT '',
+                reviewed_by TEXT NOT NULL DEFAULT '',
+                approved_by TEXT NOT NULL DEFAULT '',
                 display_order INTEGER NOT NULL DEFAULT 0,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(package_id, sheet_number)
@@ -327,7 +330,7 @@ def test_ensure_package_cost_sheets_creates_original_and_assigns_legacy_nodes():
             FROM package_cost_sheets
             WHERE package_id = 1
         """)).mappings().one()
-        assert sheet["sheet_number"] == "ORIGINAL"
+        assert sheet["sheet_number"] == "1"
         assert sheet["title"] == "Package Base Cost"
         assert sheet["sheet_type"] == "Working Estimate"
 

@@ -30,6 +30,12 @@
 </a>
 {% endif %}
 {% else %}
+{% if baseline_sheets and not package.is_contracted %}
+<a href="#" onclick="openWorkingEstimateModal(); return false;">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2.5A1.5 1.5 0 0 1 4.5 1h7A1.5 1.5 0 0 1 13 2.5v11a.5.5 0 0 1-.8.4L8 10.75 3.8 13.9a.5.5 0 0 1-.8-.4v-11zM4.5 2a.5.5 0 0 0-.5.5v10L7.7 9.7a.5.5 0 0 1 .6 0L12 12.5v-10a.5.5 0 0 0-.5-.5h-7z"/></svg>
+  Create Working Estimate
+</a>
+{% endif %}
 <a href="#" onclick="openCostSheetModal(); return false;">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h6A1.5 1.5 0 0 1 11 2.5V4h1.5A1.5 1.5 0 0 1 14 5.5v8a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5v-11zM3.5 2a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-8a.5.5 0 0 0-.5-.5H11v7.5a.5.5 0 0 1-.8.4L8 11.25 5.8 12.9a.5.5 0 0 1-.8-.4V2H3.5z"/></svg>
   Add Variation Cost Sheet
@@ -97,6 +103,11 @@
       '</svg></button>';
   }
 
+  function sheetNumberFormatter(cell) {
+    const data = cell.getRow().getData();
+    return '<a class="sheet-number-link" href="' + escapeHtml(data.open_url) + '">' + escapeHtml(cell.getValue()) + '</a>';
+  }
+
   function formValue(value) {
     return value === null || value === undefined ? '' : value;
   }
@@ -162,6 +173,20 @@
     document.getElementById('baselineModal')?.classList.remove('open');
   }
 
+  function openWorkingEstimateModal() {
+    closeActions();
+    const overlay = document.getElementById('workingEstimateOverlay');
+    const modal = document.getElementById('workingEstimateModal');
+    if (!overlay || !modal) return;
+    overlay.classList.add('open');
+    modal.classList.add('open');
+  }
+
+  function closeWorkingEstimateModal() {
+    document.getElementById('workingEstimateOverlay')?.classList.remove('open');
+    document.getElementById('workingEstimateModal')?.classList.remove('open');
+  }
+
   function openCostAccountModal() {
     document.getElementById('costAccountOverlay').classList.add('open');
     document.getElementById('costAccountModal').classList.add('open');
@@ -222,6 +247,26 @@
   function closeCostEditDrawer() {
     document.getElementById('costEditOverlay')?.classList.remove('open');
     document.getElementById('costEditDrawer')?.classList.remove('open');
+  }
+
+  function openSheetEditDrawer(data) {
+    document.getElementById('sheetEditTitle').textContent = 'Edit Cost Sheet ' + data.sheet_number;
+    document.getElementById('sheetEditForm').action = '{{ pkg_base }}/cost/update-sheet/' + data.id;
+    document.getElementById('editSheetNumber').value = formValue(data.sheet_number);
+    document.getElementById('editSheetTitle').value = formValue(data.title);
+    document.getElementById('editSheetType').value = formValue(data.sheet_type);
+    document.getElementById('editSheetStatus').value = formValue(data.status);
+    document.getElementById('editSheetCreatedBy').value = formValue(data.created_by);
+    document.getElementById('editSheetReviewedBy').value = formValue(data.reviewed_by);
+    document.getElementById('editSheetApprovedBy').value = formValue(data.approved_by);
+    document.getElementById('editSheetDescription').value = formValue(data.description);
+    document.getElementById('sheetEditOverlay').classList.add('open');
+    document.getElementById('sheetEditDrawer').classList.add('open');
+  }
+
+  function closeSheetEditDrawer() {
+    document.getElementById('sheetEditOverlay')?.classList.remove('open');
+    document.getElementById('sheetEditDrawer')?.classList.remove('open');
   }
 
   function costDeleteMessage() {
@@ -352,28 +397,27 @@
         layout: 'fitColumns',
         placeholder: 'No cost sheets registered.',
         columns: [
-          {title: 'Sheet number', field: 'sheet_number', width: 150, headerSort: true},
+          {title: 'No.', field: 'sheet_number', width: 90, formatter: sheetNumberFormatter, headerSort: true},
           {title: 'Title', field: 'title', minWidth: 260, widthGrow: 2.2, headerSort: true},
           {title: 'Type', field: 'sheet_type', width: 130, headerSort: true},
           {title: 'Status', field: 'status', width: 120, headerSort: true},
+          {title: 'Created by', field: 'created_by', width: 140, headerSort: true},
+          {title: 'Reviewed by', field: 'reviewed_by', width: 140, headerSort: true},
           {title: 'Assigned cost', field: 'pre_award', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('pre_award'), sorter: 'number', headerSort: true},
           {title: 'Committed cost', field: 'contract', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('contract'), sorter: 'number', headerSort: true},
           {
             title: '',
-            field: 'open_url',
+            field: 'actions',
             width: 52,
             hozAlign: 'center',
             formatter: editFormatter,
             headerSort: false,
             cellClick: function(e, cell) {
               e.stopPropagation();
-              window.location.href = cell.getRow().getData().open_url;
+              openSheetEditDrawer(cell.getRow().getData());
             },
           },
         ],
-        rowClick: function(e, row) {
-          window.location.href = row.getData().open_url;
-        },
       });
     }
 
@@ -422,9 +466,11 @@
       closeCostItemModal();
       closeCostSheetModal();
       closeBaselineModal();
+      closeWorkingEstimateModal();
       closeCostAccountModal(true);
       closeAwardModal();
       closeCostEditDrawer();
+      closeSheetEditDrawer();
     }
   });
 </script>
@@ -504,6 +550,12 @@
     font-family: monospace;
     color: #506070;
     margin-right: 8px;
+  }
+  #costSheetGrid .sheet-number-link {
+    color: #1a6eb0;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
   #costNodeGrid .cost-type {
     display: inline-flex;
@@ -680,12 +732,17 @@
     gap: 5px;
   }
   .cost-drawer-form input,
-  .cost-drawer-form select {
+  .cost-drawer-form select,
+  .cost-drawer-form textarea {
     padding: 6px 8px;
     border: 1px solid #ccc;
     border-radius: 4px;
     font-size: 13px;
     font-family: inherit;
+  }
+  .cost-drawer-form textarea {
+    resize: vertical;
+    min-height: 84px;
   }
   .cost-drawer-form input[readonly] {
     background: #f4f6f8;
@@ -749,6 +806,46 @@
 </div>
 
 {% endif %}
+
+<div class="cost-drawer-overlay" id="sheetEditOverlay" onclick="closeSheetEditDrawer()"></div>
+<aside class="cost-drawer" id="sheetEditDrawer" aria-label="Edit cost sheet">
+  <div class="cost-drawer-header">
+    <div class="cost-drawer-title" id="sheetEditTitle">Edit Cost Sheet</div>
+    <button class="fm-close" onclick="closeSheetEditDrawer()" aria-label="Close">&times;</button>
+  </div>
+  <div class="cost-drawer-body">
+    <form id="sheetEditForm" class="cost-drawer-form" method="post">
+      <label>Sheet number
+        <input id="editSheetNumber" readonly autocomplete="off">
+      </label>
+      <label>Name *
+        <input name="title" id="editSheetTitle" required autocomplete="off">
+      </label>
+      <label>Type
+        <input id="editSheetType" readonly autocomplete="off">
+      </label>
+      <label>Status
+        <input name="status" id="editSheetStatus" autocomplete="off">
+      </label>
+      <label>Created by
+        <input name="created_by" id="editSheetCreatedBy" autocomplete="off">
+      </label>
+      <label>Reviewed by
+        <input name="reviewed_by" id="editSheetReviewedBy" autocomplete="off">
+      </label>
+      <label>Approved by
+        <input name="approved_by" id="editSheetApprovedBy" autocomplete="off">
+      </label>
+      <label>Description / notes
+        <textarea name="description" id="editSheetDescription" rows="5"></textarea>
+      </label>
+      <div class="cost-drawer-footer">
+        <button type="button" class="btn btn-sm btn-ghost" onclick="closeSheetEditDrawer()">Cancel</button>
+        <button type="submit" class="btn btn-sm">Save</button>
+      </div>
+    </form>
+  </div>
+</aside>
 
 {% if cost_sheet_open and not active_cost_sheet_locked %}
 <div class="cost-drawer-overlay" id="costEditOverlay" onclick="closeCostEditDrawer()"></div>
@@ -926,6 +1023,31 @@
 </div>
 {% endif %}
 
+{% if baseline_sheets and not package.is_contracted %}
+<div class="filter-overlay" id="workingEstimateOverlay" onclick="closeWorkingEstimateModal()"></div>
+<div class="filter-modal" id="workingEstimateModal" style="width:560px;">
+  <div class="fm-header">
+    <span>Create Working Estimate</span>
+    <button class="fm-close" onclick="closeWorkingEstimateModal()" aria-label="Close">&times;</button>
+  </div>
+  <form method="post" action="{{ pkg_base }}/cost/create-working-estimate">
+    <div class="fm-fields package-modal-grid">
+      <label class="span-2">Create from baseline *
+        <select name="baseline_sheet_id" required>
+          {% for sheet in baseline_sheets %}
+          <option value="{{ sheet.id }}">{{ sheet.sheet_number }} - {{ sheet.title }}{% if sheet.status == 'Award Baseline' %} (Award Baseline){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="fm-footer">
+      <button type="button" class="btn btn-sm btn-ghost" onclick="closeWorkingEstimateModal()">Cancel</button>
+      <button type="submit" class="btn btn-sm">Create Working Estimate</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
 <div class="filter-overlay" id="costAccountOverlay" onclick="closeCostAccountModal(true)"></div>
 <div class="filter-modal" id="costAccountModal" style="width:560px;">
   <div class="fm-header">
@@ -962,11 +1084,22 @@
   </div>
   <form method="post" action="{{ pkg_base }}/cost/award" onsubmit="return confirm('Award this package? Award validation will block missing Scope/Plant metadata.')">
     <div class="fm-fields">
-      <p style="margin:0;color:#556;line-height:1.5;">Awarding the package moves assigned cost into committed cost and locks the relevant package values.</p>
+      {% if baseline_sheets %}
+      <label>Baseline being awarded *
+        <select name="baseline_sheet_id" required>
+          {% for sheet in baseline_sheets %}
+          <option value="{{ sheet.id }}">{{ sheet.sheet_number }} - {{ sheet.title }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <p style="margin:0;color:#556;line-height:1.5;">Awarding the package removes open working estimates and marks the selected baseline as the award baseline.</p>
+      {% else %}
+      <p style="margin:0;color:#8b1a10;line-height:1.5;">Create and lock an estimate baseline before awarding this package.</p>
+      {% endif %}
     </div>
     <div class="fm-footer">
       <button type="button" class="btn btn-sm btn-ghost" onclick="closeAwardModal()">Cancel</button>
-      <button type="submit" class="btn btn-sm">Award Package</button>
+      <button type="submit" class="btn btn-sm" {% if not baseline_sheets %}disabled{% endif %}>Award Package</button>
     </div>
   </form>
 </div>

@@ -23,7 +23,7 @@ _hash_dir = ROOT / "build"
 _hash_dir.mkdir(exist_ok=True)
 _hash_file = _hash_dir / "source_hash.txt"
 _hash_file.write_text(_compute_source_hash(ROOT))
-_runtime_tmp = ROOT / "runtime_tmp"
+_runtime_tmp = Path(r"C:\Users\RICHAR~1\AppData\Local\CostControlRuntime")
 _runtime_tmp.mkdir(exist_ok=True)
 
 a = Analysis(

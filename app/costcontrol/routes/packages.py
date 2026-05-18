@@ -39,18 +39,18 @@ def _sheet_redirect(project_number: str, package_number: str, sheet_id: int | No
     )
 
 
-def _next_cost_sheet_number(db: Session, package_id: int) -> str:
-    count = db.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Variation").count()
-    return f"VAR-{count + 1:03d}"
-
-
-def _next_baseline_sheet_number(db: Session, package_id: int) -> str:
-    count = db.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Baseline").count()
-    return f"BL-{count + 1:03d}"
+def _next_numeric_sheet_number(db: Session, package_id: int) -> str:
+    sheets = db.query(PackageCostSheet).filter_by(package_id=package_id).all()
+    numeric = [int(sheet.sheet_number) for sheet in sheets if str(sheet.sheet_number).isdigit()]
+    return str(max(numeric, default=0) + 1)
 
 
 def _is_working_sheet(sheet: PackageCostSheet) -> bool:
-    return sheet.sheet_type in {"Original", "Working Estimate", "Variation"} and sheet.status != "Locked"
+    return sheet.sheet_type in {"Original", "Working Estimate"} and sheet.status != "Locked"
+
+
+def _is_editable_sheet(sheet: PackageCostSheet) -> bool:
+    return _is_working_sheet(sheet) or (sheet.sheet_type == "Variation" and sheet.status != "Locked")
 
 
 def _is_locked_sheet(sheet: PackageCostSheet) -> bool:
@@ -58,8 +58,22 @@ def _is_locked_sheet(sheet: PackageCostSheet) -> bool:
 
 
 def _assert_cost_sheet_editable(sheet: PackageCostSheet) -> None:
-    if _is_locked_sheet(sheet):
+    if not _is_editable_sheet(sheet):
         raise HTTPException(status_code=400, detail="Locked baselines are read-only")
+
+
+def _renumber_cost_sheets(db: Session, pkg) -> None:
+    sheets = (
+        db.query(PackageCostSheet)
+        .filter_by(package_id=pkg.id)
+        .order_by(PackageCostSheet.display_order, PackageCostSheet.id)
+        .all()
+    )
+    for sheet in sheets:
+        sheet.sheet_number = f"__renumber_{sheet.id}"
+    db.flush()
+    for index, sheet in enumerate(sheets, start=1):
+        sheet.sheet_number = str(index)
 
 
 def _ensure_cost_sheets(db: Session, pkg) -> list[PackageCostSheet]:
@@ -70,10 +84,10 @@ def _ensure_cost_sheets(db: Session, pkg) -> list[PackageCostSheet]:
         .all()
     )
     original = next((sheet for sheet in sheets if sheet.sheet_type in {"Original", "Working Estimate"}), None)
-    if original is None:
+    if original is None and not sheets:
         original = PackageCostSheet(
             package_id=pkg.id,
-            sheet_number="ORIGINAL",
+            sheet_number="1",
             title="Package Base Cost",
             sheet_type="Working Estimate",
             status="Working",
@@ -83,7 +97,7 @@ def _ensure_cost_sheets(db: Session, pkg) -> list[PackageCostSheet]:
         db.add(original)
         db.flush()
         sheets.insert(0, original)
-    else:
+    elif original is not None:
         if original.title == "Original Cost Sheet":
             original.title = "Package Base Cost"
         if original.sheet_type == "Original":
@@ -91,8 +105,9 @@ def _ensure_cost_sheets(db: Session, pkg) -> list[PackageCostSheet]:
         if original.status == "Draft":
             original.status = "Working"
     for node in pkg.cost_nodes:
-        if node.cost_sheet_id is None:
+        if original is not None and node.cost_sheet_id is None:
             node.cost_sheet_id = original.id
+    _renumber_cost_sheets(db, pkg)
     db.commit()
     return (
         db.query(PackageCostSheet)
@@ -239,6 +254,9 @@ def _cost_sheet_row(pkg, sheet: PackageCostSheet) -> dict:
         "status": sheet.status,
         "locked": _is_locked_sheet(sheet),
         "description": sheet.description or "",
+        "created_by": sheet.created_by or "",
+        "reviewed_by": sheet.reviewed_by or "",
+        "approved_by": sheet.approved_by or "",
         "baseline": totals["baseline"],
         "baseline_display": fmt_zar(totals["baseline"]) if totals["baseline"] else "R 0.00",
         "pre_award": totals["pre_award"],
@@ -286,6 +304,17 @@ def _clone_cost_node_tree(
     return cloned
 
 
+def _delete_working_estimates(db: Session, pkg, *, exclude_sheet_id: int | None = None) -> None:
+    working_sheets = [
+        sheet for sheet in list(pkg.cost_sheets)
+        if _is_working_sheet(sheet) and sheet.id != exclude_sheet_id
+    ]
+    for sheet in working_sheets:
+        db.delete(sheet)
+    if working_sheets:
+        db.flush()
+
+
 def _cost_component_option_rows(components: list[CostComponent]) -> list[dict]:
     return [
         {
@@ -331,6 +360,7 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
         }
         cost_group_options = _cost_node_options(root_nodes)
         cost_sheet_rows = [_cost_sheet_row(pkg, sheet) for sheet in cost_sheets]
+        baseline_sheets = [sheet for sheet in cost_sheets if sheet.sheet_type == "Baseline"]
         control_accounts = db.query(ControlAccount).order_by(ControlAccount.code).all()
         award_errors = []
         return templates.TemplateResponse("package_wbs.html", {
@@ -355,6 +385,7 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "cost_sheet_open": cost_sheet_open,
             "active_cost_sheet_locked": _is_locked_sheet(active_cost_sheet),
             "active_cost_sheet_working": _is_working_sheet(active_cost_sheet),
+            "baseline_sheets": baseline_sheets,
             "control_accounts": control_accounts,
             "award_errors": award_errors,
             "active_tab": "wbs",
@@ -736,7 +767,7 @@ def cost_add_sheet(
 ):
     pkg = get_package_or_404(db, project_number, package_number)
     _ensure_cost_sheets(db, pkg)
-    sheet_number = _next_cost_sheet_number(db, pkg.id)
+    sheet_number = _next_numeric_sheet_number(db, pkg.id)
     display_order = db.query(PackageCostSheet).filter_by(package_id=pkg.id).count()
     sheet = PackageCostSheet(
         package_id=pkg.id,
@@ -749,9 +780,38 @@ def cost_add_sheet(
         created_at=datetime.now(),
     )
     db.add(sheet)
+    _renumber_cost_sheets(db, pkg)
     db.commit()
     db.refresh(sheet)
     return _cost_redirect(project_number, package_number, sheet.id)
+
+
+@router.post("/project/{project_number}/packages/{package_number}/cost/update-sheet/{sheet_id}")
+def cost_update_sheet(
+    project_number: str,
+    package_number: str,
+    sheet_id: int,
+    db: DbDep,
+    title: str = Form(...),
+    description: str = Form(""),
+    status: str = Form(""),
+    created_by: str = Form(""),
+    reviewed_by: str = Form(""),
+    approved_by: str = Form(""),
+):
+    pkg = get_package_or_404(db, project_number, package_number)
+    sheet = db.get(PackageCostSheet, sheet_id)
+    if sheet is None or sheet.package_id != pkg.id:
+        raise HTTPException(status_code=404, detail="Cost sheet not found")
+    sheet.title = title.strip()
+    sheet.description = description.strip()
+    sheet.created_by = created_by.strip()
+    sheet.reviewed_by = reviewed_by.strip()
+    sheet.approved_by = approved_by.strip()
+    if status.strip() and sheet.status != "Award Baseline":
+        sheet.status = status.strip()
+    db.commit()
+    return _cost_redirect(project_number, package_number)
 
 
 @router.post("/project/{project_number}/packages/{package_number}/cost/create-baseline")
@@ -769,7 +829,7 @@ def cost_create_baseline(
     source_sheet = _resolve_cost_sheet(db, pkg, sheet_id)
     if _is_locked_sheet(source_sheet):
         raise HTTPException(status_code=400, detail="Create a new baseline from an editable working estimate")
-    sheet_number = _next_baseline_sheet_number(db, pkg.id)
+    sheet_number = _next_numeric_sheet_number(db, pkg.id)
     display_order = db.query(PackageCostSheet).filter_by(package_id=pkg.id).count()
     baseline = PackageCostSheet(
         package_id=pkg.id,
@@ -777,8 +837,12 @@ def cost_create_baseline(
         title=title.strip(),
         sheet_type="Baseline",
         status="Locked",
-        description=description.strip(),
-        source_sheet_id=source_sheet.id,
+        description=(
+            f"Baselined from {source_sheet.sheet_number} - {source_sheet.title}."
+            if not description.strip()
+            else f"Baselined from {source_sheet.sheet_number} - {source_sheet.title}.\n{description.strip()}"
+        ),
+        source_sheet_id=None,
         locked_at=datetime.now(),
         display_order=display_order,
         created_at=datetime.now(),
@@ -791,9 +855,51 @@ def cost_create_baseline(
     ]
     for node in sorted(roots, key=lambda n: n.display_order):
         _clone_cost_node_tree(db, node, package_id=pkg.id, cost_sheet_id=baseline.id, parent_id=None)
+    db.delete(source_sheet)
+    _renumber_cost_sheets(db, pkg)
     db.commit()
     db.refresh(baseline)
     return _cost_redirect(project_number, package_number, baseline.id)
+
+
+@router.post("/project/{project_number}/packages/{package_number}/cost/create-working-estimate")
+def cost_create_working_estimate(
+    project_number: str,
+    package_number: str,
+    db: DbDep,
+    baseline_sheet_id: str = Form(...),
+):
+    pkg = get_package_or_404(db, project_number, package_number)
+    if pkg.is_contracted:
+        raise HTTPException(status_code=400, detail="Working estimates cannot be created after package award")
+    baseline = _resolve_cost_sheet(db, pkg, baseline_sheet_id)
+    if baseline.sheet_type != "Baseline":
+        raise HTTPException(status_code=400, detail="Select a locked baseline to create a working estimate")
+    _delete_working_estimates(db, pkg)
+    display_order = db.query(PackageCostSheet).filter_by(package_id=pkg.id).count()
+    working = PackageCostSheet(
+        package_id=pkg.id,
+        sheet_number=_next_numeric_sheet_number(db, pkg.id),
+        title=f"Working Estimate - {baseline.title}",
+        sheet_type="Working Estimate",
+        status="Working",
+        description=f"Created from {baseline.sheet_number} - {baseline.title}",
+        source_sheet_id=baseline.id,
+        display_order=display_order,
+        created_at=datetime.now(),
+    )
+    db.add(working)
+    db.flush()
+    roots = [
+        node for node in pkg.cost_nodes
+        if node.parent_id is None and node.cost_sheet_id == baseline.id
+    ]
+    for node in sorted(roots, key=lambda n: n.display_order):
+        _clone_cost_node_tree(db, node, package_id=pkg.id, cost_sheet_id=working.id, parent_id=None)
+    _renumber_cost_sheets(db, pkg)
+    db.commit()
+    db.refresh(working)
+    return _cost_redirect(project_number, package_number, working.id)
 
 
 @router.post("/project/{project_number}/packages/{package_number}/cost/add-item")
@@ -945,15 +1051,31 @@ def cost_set_contract(
 
 
 @router.post("/project/{project_number}/packages/{package_number}/cost/award")
-def cost_award(project_number: str, package_number: str, db: DbDep):
+def cost_award(
+    project_number: str,
+    package_number: str,
+    db: DbDep,
+    baseline_sheet_id: str = Form(...),
+):
     pkg = get_package_or_404(db, project_number, package_number)
+    baseline = _resolve_cost_sheet(db, pkg, baseline_sheet_id)
+    if baseline.sheet_type != "Baseline":
+        raise HTTPException(status_code=400, detail="Select the locked baseline being awarded")
     try:
         award_package(db, pkg)
+        _delete_working_estimates(db, pkg)
+        baseline.status = "Award Baseline"
+        baseline.display_order = -100
+        marker = f"Used for package award on {datetime.now().date().isoformat()}."
+        baseline.description = (
+            marker if not baseline.description else f"{marker}\n{baseline.description}"
+        )
+        _renumber_cost_sheets(db, pkg)
         db.commit()
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _cost_redirect(project_number, package_number)
+    return _cost_redirect(project_number, package_number, baseline.id)
 
 
 @router.post("/project/{project_number}/packages/{package_number}/cost/delete-node/{node_id}")
