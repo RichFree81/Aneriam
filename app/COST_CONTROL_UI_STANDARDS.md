@@ -21,6 +21,6 @@ Page-specific creation actions belong in the header three-dot actions menu, not 
 
 Hierarchical project controls data must use Tabulator tree grids where practical.
 
-- Scope uses parent Scope Items with nested Deliverables.
+- Scope uses parent Scope Items with nested Cost Components.
 - Package cost items use the three-level cost hierarchy: Cost Component -> Cost Item Account -> Cost Line.
 - Cost Component and Cost Item Account rows must roll up child values so component, account, and grand totals can be read from the tree.

@@ -12,9 +12,9 @@
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 4a.5.5 0 0 1 .5.5V7.5h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3V4.5A.5.5 0 0 1 8 4z"/><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 2v12h12V2H2z"/></svg>
   Add Scope Item
 </a>
-<a href="#" onclick="event.preventDefault(); closeActions(); openDeliverableModal();">
+<a href="#" onclick="event.preventDefault(); closeActions(); openCostComponentModal();">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h4A1.5 1.5 0 0 1 9 2.5v1A1.5 1.5 0 0 1 7.5 5h-4A1.5 1.5 0 0 1 2 3.5v-1zM3.5 2a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-4zM7 8.5A1.5 1.5 0 0 1 8.5 7h4A1.5 1.5 0 0 1 14 8.5v1a1.5 1.5 0 0 1-1.5 1.5h-4A1.5 1.5 0 0 1 7 9.5v-1zM8.5 8a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-4z"/><path d="M5.5 5.5a.5.5 0 0 1 .5.5v2h1.5a.5.5 0 0 1 0 1H6a1 1 0 0 1-1-1V6a.5.5 0 0 1 .5-.5z"/></svg>
-  Add Deliverable
+  Add Cost Component
 </a>
 {% endblock %}
 
@@ -302,33 +302,33 @@
       </div>
     </form>
 
-    <form id="scopeEditDeliverableForm" class="scope-drawer-form" method="post">
+    <form id="scopeEditCostComponentForm" class="scope-drawer-form" method="post">
       <label>Scope Item
-        <select name="scope_item_id" id="editDeliverableScopeItem" required>
+        <select name="scope_item_id" id="editCostComponentScopeItem" required>
           {% for row in rows %}<option value="{{ row.item.id }}">{{ row.item.description }}</option>{% endfor %}
         </select>
       </label>
       <label>Description *
-        <input name="description" id="editDeliverableDescription" required autocomplete="off">
+        <input name="description" id="editCostComponentDescription" required autocomplete="off">
       </label>
       <label>Cost Category
-        <select name="commodity_code" id="editDeliverableCommodity" required>
+        <select name="commodity_code" id="editCostComponentCommodity" required>
           {% for ca in commodities %}<option value="{{ ca.code }}">{{ ca.name }}</option>{% endfor %}
         </select>
       </label>
       <label>Facility Group
-        <select id="editDeliverableFacilityGroup" onchange="refreshAreaCascade('editDeliverable')">
+        <select id="editCostComponentFacilityGroup" onchange="refreshAreaCascade('editCostComponent')">
           <option value="">Select...</option>
           {% for group in facility_groups %}<option value="{{ group.code }}">{{ group.code }} - {{ group.name }}</option>{% endfor %}
         </select>
       </label>
       <label>Plant Unit
-        <select id="editDeliverablePlantUnit" onchange="refreshAreaCascade('editDeliverable')">
+        <select id="editCostComponentPlantUnit" onchange="refreshAreaCascade('editCostComponent')">
           <option value="">Select Facility Group first</option>
         </select>
       </label>
       <label>Area
-        <select name="plant_area_id" id="editDeliverablePlantArea" required>
+        <select name="plant_area_id" id="editCostComponentPlantArea" required>
           {% for area in plant_areas %}<option value="{{ area.id }}">{{ area.code }} - {{ area.name }}</option>{% endfor %}
         </select>
       </label>
@@ -409,14 +409,14 @@
   </form>
 </div>
 
-{# Add Deliverable modal #}
-<div class="filter-overlay" id="deliverableOverlay" onclick="closeDeliverableModal()"></div>
-<div class="filter-modal" id="deliverableModal" style="width:760px;">
+{# Add Cost Component modal #}
+<div class="filter-overlay" id="costComponentOverlay" onclick="closeCostComponentModal()"></div>
+<div class="filter-modal" id="costComponentModal" style="width:760px;">
   <div class="fm-header">
-    <span>Add Deliverable</span>
-    <button class="fm-close" onclick="closeDeliverableModal()" aria-label="Close">&times;</button>
+    <span>Add Cost Component</span>
+    <button class="fm-close" onclick="closeCostComponentModal()" aria-label="Close">&times;</button>
   </div>
-  <form method="post" action="/project/{{ project.project_number }}/scope/add-deliverable">
+  <form method="post" action="/project/{{ project.project_number }}/scope/add-cost-component">
     <div class="fm-fields scope-modal-grid">
       <label class="span-2">Scope Item
         <select name="scope_item_id" required>
@@ -432,25 +432,25 @@
         </select>
       </label>
       <label>Facility Group
-        <select id="addDeliverableFacilityGroup" onchange="refreshAreaCascade('addDeliverable')">
+        <select id="addCostComponentFacilityGroup" onchange="refreshAreaCascade('addCostComponent')">
           <option value="">Select...</option>
           {% for group in facility_groups %}<option value="{{ group.code }}">{{ group.code }} - {{ group.name }}</option>{% endfor %}
         </select>
       </label>
       <label>Plant Unit
-        <select id="addDeliverablePlantUnit" onchange="refreshAreaCascade('addDeliverable')">
+        <select id="addCostComponentPlantUnit" onchange="refreshAreaCascade('addCostComponent')">
           <option value="">Select Facility Group first</option>
         </select>
       </label>
       <label>Area
-        <select name="plant_area_id" id="addDeliverablePlantArea" required>
+        <select name="plant_area_id" id="addCostComponentPlantArea" required>
           {% for area in plant_areas %}<option value="{{ area.id }}">{{ area.code }} - {{ area.name }}</option>{% endfor %}
         </select>
       </label>
     </div>
     <div class="fm-footer">
-      <button type="button" class="btn btn-sm btn-ghost" onclick="closeDeliverableModal()">Cancel</button>
-      <button type="submit" class="btn btn-sm">Add Deliverable</button>
+      <button type="button" class="btn btn-sm btn-ghost" onclick="closeCostComponentModal()">Cancel</button>
+      <button type="submit" class="btn btn-sm">Add Cost Component</button>
     </div>
   </form>
 </div>
@@ -660,27 +660,27 @@
     document.getElementById('scopeItemModal').classList.remove('open');
   }
 
-  function openDeliverableModal() {
-    refreshAreaCascade('addDeliverable');
-    document.getElementById('deliverableOverlay').classList.add('open');
-    document.getElementById('deliverableModal').classList.add('open');
-    setTimeout(() => document.querySelector('#deliverableModal input[name="description"]').focus(), 60);
+  function openCostComponentModal() {
+    refreshAreaCascade('addCostComponent');
+    document.getElementById('costComponentOverlay').classList.add('open');
+    document.getElementById('costComponentModal').classList.add('open');
+    setTimeout(() => document.querySelector('#costComponentModal input[name="description"]').focus(), 60);
   }
 
-  function closeDeliverableModal() {
-    document.getElementById('deliverableOverlay').classList.remove('open');
-    document.getElementById('deliverableModal').classList.remove('open');
+  function closeCostComponentModal() {
+    document.getElementById('costComponentOverlay').classList.remove('open');
+    document.getElementById('costComponentModal').classList.remove('open');
   }
 
   function openScopeEditDrawer(data) {
     const isScope = data.type === 'Scope Item';
-    document.getElementById('scopeEditTitle').textContent = isScope ? 'Edit Scope Item' : 'Edit Deliverable';
+    document.getElementById('scopeEditTitle').textContent = isScope ? 'Edit Scope Item' : 'Edit Cost Component';
     document.getElementById('scopeDeleteForm').action = isScope
       ? '/project/{{ project.project_number }}/scope/delete-item/' + data.record_id
-      : '/project/{{ project.project_number }}/scope/delete-deliverable/' + data.record_id;
+      : '/project/{{ project.project_number }}/scope/delete-cost-component/' + data.record_id;
     document.getElementById('scopeDeleteForm').dataset.recordType = data.type;
     document.getElementById('scopeEditItemForm').style.display = isScope ? 'flex' : 'none';
-    document.getElementById('scopeEditDeliverableForm').style.display = isScope ? 'none' : 'flex';
+    document.getElementById('scopeEditCostComponentForm').style.display = isScope ? 'none' : 'flex';
 
     if (isScope) {
       document.getElementById('scopeEditItemForm').action =
@@ -688,17 +688,17 @@
       document.getElementById('editScopeDescription').value = data.description || '';
       document.getElementById('editScopeWorkType').value = data.work_type_code || '';
     } else {
-      document.getElementById('scopeEditDeliverableForm').action =
-        '/project/{{ project.project_number }}/scope/update-deliverable/' + data.record_id;
-      document.getElementById('editDeliverableScopeItem').value = data.scope_item_id || '';
-      document.getElementById('editDeliverableDescription').value = data.description || '';
-      document.getElementById('editDeliverableCommodity').value = data.commodity_code || '';
-      document.getElementById('editDeliverableFacilityGroup').value =
+      document.getElementById('scopeEditCostComponentForm').action =
+        '/project/{{ project.project_number }}/scope/update-cost-component/' + data.record_id;
+      document.getElementById('editCostComponentScopeItem').value = data.scope_item_id || '';
+      document.getElementById('editCostComponentDescription').value = data.description || '';
+      document.getElementById('editCostComponentCommodity').value = data.commodity_code || '';
+      document.getElementById('editCostComponentFacilityGroup').value =
         (data.facility_group_codes || []).length === 1 ? data.facility_group_codes[0] : '';
-      refreshAreaCascade('editDeliverable');
-      document.getElementById('editDeliverablePlantUnit').value =
+      refreshAreaCascade('editCostComponent');
+      document.getElementById('editCostComponentPlantUnit').value =
         (data.plant_unit_codes || []).length === 1 ? data.plant_unit_codes[0] : '';
-      refreshAreaCascade('editDeliverable', (data.plant_area_ids || [])[0] || '');
+      refreshAreaCascade('editCostComponent', (data.plant_area_ids || [])[0] || '');
     }
 
     document.getElementById('scopeEditOverlay').classList.add('open');
@@ -713,9 +713,9 @@
   function scopeDeleteMessage() {
     const type = document.getElementById('scopeDeleteForm').dataset.recordType || 'record';
     if (type === 'Scope Item') {
-      return 'Delete this Scope Item and any Deliverables beneath it?';
+      return 'Delete this Scope Item and any Cost Components beneath it?';
     }
-    return 'Delete this Deliverable?';
+    return 'Delete this Cost Component?';
   }
 
   function escapeHtml(value) {
@@ -723,8 +723,8 @@
   }
 
   document.addEventListener('DOMContentLoaded', function() {
-    refreshAreaCascade('addDeliverable');
-    refreshAreaCascade('editDeliverable');
+    refreshAreaCascade('addCostComponent');
+    refreshAreaCascade('editCostComponent');
     refreshScopeFilterCascade(false);
 
     scopeTable = new Tabulator('#scopeTreeGrid', {
@@ -765,7 +765,7 @@
     if (e.key === 'Escape') {
       closeScopeFilterModal();
       closeScopeItemModal();
-      closeDeliverableModal();
+      closeCostComponentModal();
       closeScopeEditDrawer();
     }
   });

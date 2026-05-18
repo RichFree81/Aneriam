@@ -8,8 +8,8 @@ from sqlalchemy.pool import StaticPool
 from costcontrol.app import app
 from costcontrol.database import Base, get_db
 from costcontrol.models import (
-    Deliverable,
-    DeliverablePlantArea,
+    CostComponent,
+    CostComponentPlantArea,
     PlantArea,
     Project,
     ProjectScopeItem,
@@ -39,17 +39,17 @@ def _client_with_db():
     )
     session.add(scope)
     session.flush()
-    deliverable = Deliverable(
+    cost_component = CostComponent(
         project_number="5006",
         scope_item_id=scope.id,
-        description="Original deliverable",
+        description="Original cost component",
         commodity_code="205",
         cbs_l2_code="205.01",
         sequence=1,
     )
-    session.add(deliverable)
+    session.add(cost_component)
     session.flush()
-    session.add(DeliverablePlantArea(deliverable_id=deliverable.id, plant_area_id=area_a.id))
+    session.add(CostComponentPlantArea(cost_component_id=cost_component.id, plant_area_id=area_a.id))
     session.commit()
 
     def override_get_db():
@@ -59,11 +59,11 @@ def _client_with_db():
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    return TestClient(app), session, scope.id, deliverable.id, area_b.id
+    return TestClient(app), session, scope.id, cost_component.id, area_b.id
 
 
 def test_scope_edit_drawer_routes_update_and_delete_records():
-    client, session, scope_id, deliverable_id, area_b_id = _client_with_db()
+    client, session, scope_id, cost_component_id, area_b_id = _client_with_db()
     try:
         response = client.post(
             f"/project/5006/scope/update-item/{scope_id}",
@@ -80,27 +80,27 @@ def test_scope_edit_drawer_routes_update_and_delete_records():
         assert scope.modifies_ppe_reference == "Existing PPE"
 
         response = client.post(
-            f"/project/5006/scope/update-deliverable/{deliverable_id}",
+            f"/project/5006/scope/update-cost-component/{cost_component_id}",
             data={
                 "scope_item_id": str(scope_id),
-                "description": "Updated deliverable",
+                "description": "Updated cost component",
                 "commodity_code": "206",
                 "plant_area_id": str(area_b_id),
             },
             follow_redirects=False,
         )
         assert response.status_code == 303
-        deliverable = session.get(Deliverable, deliverable_id)
-        assert deliverable.description == "Updated deliverable"
-        assert deliverable.commodity_code == "206"
-        assert [link.plant_area_id for link in deliverable.plant_area_links] == [area_b_id]
+        cost_component = session.get(CostComponent, cost_component_id)
+        assert cost_component.description == "Updated cost component"
+        assert cost_component.commodity_code == "206"
+        assert [link.plant_area_id for link in cost_component.plant_area_links] == [area_b_id]
 
         response = client.post(
-            f"/project/5006/scope/delete-deliverable/{deliverable_id}",
+            f"/project/5006/scope/delete-cost-component/{cost_component_id}",
             follow_redirects=False,
         )
         assert response.status_code == 303
-        assert session.get(Deliverable, deliverable_id) is None
+        assert session.get(CostComponent, cost_component_id) is None
 
         response = client.post(
             f"/project/5006/scope/delete-item/{scope_id}",

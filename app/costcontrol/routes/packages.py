@@ -17,7 +17,7 @@ from ..models import (
     ControlAccount,
     CostItemCode,
     CostNodeAuditLog,
-    Deliverable,
+    CostComponent,
     IndirectL2Account,
     PackageCostItem,
     PackageCostNode,
@@ -134,10 +134,10 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
     totals = project_totals(db, project_number)
 
     if active_pkg_tab == "cost":
-        deliverables = (
-            db.query(Deliverable)
+        cost_components = (
+            db.query(CostComponent)
             .filter_by(project_number=project_number)
-            .order_by(Deliverable.cbs_l2_code)
+            .order_by(CostComponent.cbs_l2_code)
             .all()
         )
         indirect_l2 = db.query(IndirectL2Account).order_by(IndirectL2Account.code).all()
@@ -161,7 +161,7 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "project": project,
             "totals": totals,
             "package": pkg,
-            "deliverables": deliverables,
+            "cost_components": cost_components,
             "indirect_l2": indirect_l2,
             "cost_codes": cost_codes,
             "direct_library": COST_ITEM_LIBRARY_DIRECT,
@@ -232,14 +232,14 @@ def package_cost(project_number: str, package_number: str, request: Request, db:
     return _package_detail_response(request, db, project_number, package_number, "cost")
 
 
-@router.get("/project/{project_number}/packages/{package_number}/deliverables")
-def package_deliverables(project_number: str, package_number: str, request: Request, db: DbDep):
-    return _package_detail_response(request, db, project_number, package_number, "deliverables")
+@router.get("/project/{project_number}/packages/{package_number}/cost_components")
+def package_cost_components(project_number: str, package_number: str, request: Request, db: DbDep):
+    return _package_detail_response(request, db, project_number, package_number, "cost_components")
 
 
 @router.get("/project/{project_number}/packages/{package_number}")
 def package_detail(project_number: str, package_number: str, request: Request, db: DbDep):
-    # Default tab is Cost — Scope/Schedule/Deliverables are hidden from the UI
+    # Default tab is Cost — Scope/Schedule/Cost Components are hidden from the UI
     # for the cost-control-focused MVP. Their routes still exist but are
     # unreachable without typing the URL by hand.
     return _package_detail_response(request, db, project_number, package_number, "cost")
@@ -294,17 +294,17 @@ def cost_create_code(
     package_number: str,
     db: DbDep,
     l2_kind: str = Form(...),
-    deliverable_id: str = Form(""),
+    cost_component_id: str = Form(""),
     indirect_l2_code: str = Form(""),
     name: str = Form(...),
     source: str = Form("custom"),
 ):
     get_package_or_404(db, project_number, package_number)
-    deliverable = None
+    cost_component = None
     indirect_code = None
-    if l2_kind == "deliverable":
-        deliverable = db.get(Deliverable, int(deliverable_id))
-        if deliverable is None or deliverable.project_number != project_number:
+    if l2_kind == "cost_component":
+        cost_component = db.get(CostComponent, int(cost_component_id))
+        if cost_component is None or cost_component.project_number != project_number:
             raise HTTPException(status_code=404, detail="Cost Component not found")
     elif l2_kind == "indirect":
         if db.get(IndirectL2Account, indirect_l2_code) is None:
@@ -315,12 +315,12 @@ def cost_create_code(
     code, seq, _ = next_cost_item_code(
         db,
         project_number,
-        deliverable=deliverable,
+        cost_component=cost_component,
         indirect_l2_code=indirect_code,
     )
     db.add(CostItemCode(
         project_number=project_number,
-        deliverable_id=deliverable.id if deliverable else None,
+        cost_component_id=cost_component.id if cost_component else None,
         indirect_l2_code=indirect_code,
         code=code,
         sequence=seq,

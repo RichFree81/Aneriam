@@ -110,7 +110,7 @@ Notable ones:
 1. `python run.py` starts the server cleanly and the home page (`GET /`) returns 200.
 2. If schema changed: existing DBs upgrade cleanly (i.e., the `ALTER TABLE` string survives `IF NOT EXISTS` / column-already-exists conditions).
 3. If ingest changed: a re-run of `run_import` against the canonical NetSuite files in `Collab/Inputs/Cost Control Data/Data/` completes without error and the totals on the home page look sane.
-4. If the exe is the deliverable, `rebuild_exe.bat` produces a working `cost_control.exe` and double-clicking it opens the browser.
+4. If the exe is the requested artefact, `rebuild_exe.bat` produces a working `cost_control.exe` and double-clicking it opens the browser.
 
 ## How to start a session in `app/`
 

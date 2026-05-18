@@ -9,7 +9,7 @@ from costcontrol.cbs import (
     create_cost_item_line,
     funding_identity,
     next_cost_item_code,
-    next_deliverable_code,
+    next_cost_component_code,
     normalise_cbs_code,
     plan_package,
     validate_package_award,
@@ -18,8 +18,8 @@ from costcontrol.database import Base
 from costcontrol.models import (
     BudgetReserveBalance,
     CostItemCode,
-    Deliverable,
-    DeliverablePlantArea,
+    CostComponent,
+    CostComponentPlantArea,
     Package,
     PlantArea,
     Project,
@@ -62,7 +62,7 @@ def _package(db) -> Package:
     return pkg
 
 
-def _deliverable_with_code(db, *, complete_metadata: bool = True) -> tuple[Deliverable, CostItemCode]:
+def _cost_component_with_code(db, *, complete_metadata: bool = True) -> tuple[CostComponent, CostItemCode]:
     scope = ProjectScopeItem(
         project_number="5006",
         description="Maintenance Workshop Addition",
@@ -71,7 +71,7 @@ def _deliverable_with_code(db, *, complete_metadata: bool = True) -> tuple[Deliv
     )
     db.add(scope)
     db.flush()
-    deliverable = Deliverable(
+    cost_component = CostComponent(
         project_number="5006",
         scope_item_id=scope.id,
         description="Maintenance Workshop",
@@ -79,14 +79,14 @@ def _deliverable_with_code(db, *, complete_metadata: bool = True) -> tuple[Deliv
         cbs_l2_code="205.01",
         sequence=1,
     )
-    db.add(deliverable)
+    db.add(cost_component)
     db.flush()
     if complete_metadata:
         area = db.query(PlantArea).filter_by(code="3101").one()
-        db.add(DeliverablePlantArea(deliverable_id=deliverable.id, plant_area_id=area.id))
+        db.add(CostComponentPlantArea(cost_component_id=cost_component.id, plant_area_id=area.id))
     code = CostItemCode(
         project_number="5006",
-        deliverable_id=deliverable.id,
+        cost_component_id=cost_component.id,
         code="205.01.01",
         sequence=1,
         name="Civil works",
@@ -94,7 +94,7 @@ def _deliverable_with_code(db, *, complete_metadata: bool = True) -> tuple[Deliv
     )
     db.add(code)
     db.commit()
-    return deliverable, code
+    return cost_component, code
 
 
 def test_normalise_existing_netsuite_l3_widths():
@@ -104,15 +104,15 @@ def test_normalise_existing_netsuite_l3_widths():
 
 
 def test_l2_and_l3_sequences_are_zero_padded_and_not_reused(db):
-    assert next_deliverable_code(db, "5006", "205") == ("205.01", 1)
-    deliverable, _ = _deliverable_with_code(db)
-    assert next_deliverable_code(db, "5006", "205") == ("205.02", 2)
-    assert next_cost_item_code(db, "5006", deliverable=deliverable) == ("205.01.02", 2, "205.01")
+    assert next_cost_component_code(db, "5006", "205") == ("205.01", 1)
+    cost_component, _ = _cost_component_with_code(db)
+    assert next_cost_component_code(db, "5006", "205") == ("205.02", 2)
+    assert next_cost_item_code(db, "5006", cost_component=cost_component) == ("205.01.02", 2, "205.01")
 
 
 def test_provisional_sum_supersedes_only_same_package_cost_item_intersection(db):
     pkg = _package(db)
-    _, code = _deliverable_with_code(db)
+    _, code = _cost_component_with_code(db)
     ps = create_cost_item_line(db, pkg, code, "Civil works PS", 1000, True)
     with pytest.raises(ValueError):
         create_cost_item_line(db, pkg, code, "Civil works firm", 900, False)
@@ -124,23 +124,23 @@ def test_provisional_sum_supersedes_only_same_package_cost_item_intersection(db)
 
 def test_award_validation_blocks_missing_pbs_capitalisation_metadata(db):
     pkg = _package(db)
-    _, code = _deliverable_with_code(db, complete_metadata=False)
+    _, code = _cost_component_with_code(db, complete_metadata=False)
     create_cost_item_line(db, pkg, code, "Civil works", 1000, False)
     errors = validate_package_award(db, pkg)
     assert any("Plant Area is required" in error for error in errors)
     assert any("Work Type is required" in error for error in errors)
 
 
-def test_award_moves_reserve_and_commits_deliverable(db):
+def test_award_moves_reserve_and_commits_cost_component(db):
     pkg = _package(db)
-    deliverable, code = _deliverable_with_code(db)
+    cost_component, code = _cost_component_with_code(db)
     plan_package(db, pkg, 1200)
     create_cost_item_line(db, pkg, code, "Civil works", 1000, False)
     award_package(db, pkg)
     db.commit()
     assert pkg.is_contracted is True
     assert pkg.awarded_amount == 1000
-    assert deliverable.state == "Committed"
+    assert cost_component.state == "Committed"
     balances = {row.reserve_code: row.balance for row in db.query(BudgetReserveBalance).all()}
     assert balances["101.02"] == 0
     assert balances["101.01"] == 999_000

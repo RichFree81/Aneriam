@@ -9,15 +9,15 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..capitalisation import IS_CAP_SQL, NOT_CAP_SQL
-from ..cbs import cbs_rows, next_deliverable_code, plan_package, po_package_suggestions, scope_item_state
+from ..cbs import cbs_rows, next_cost_component_code, plan_package, po_package_suggestions, scope_item_state
 from ..dependencies import DbDep
 from ..formatting import fmt_zar
 from ..hierarchy import build_hierarchy
 from ..lookups import get_project_or_404
 from ..models import (
     ControlAccount,
-    Deliverable,
-    DeliverablePlantArea,
+    CostComponent,
+    CostComponentPlantArea,
     ImportBatch,
     Package,
     PlantArea,
@@ -68,10 +68,10 @@ def _plant_area_tree(plant_areas: list[PlantArea]) -> list[dict[str, str | int]]
     return tree
 
 
-def _get_deliverable_area_or_400(db: Session, plant_area_id: int) -> PlantArea:
+def _get_cost_component_area_or_400(db: Session, plant_area_id: int) -> PlantArea:
     plant_area_ref = db.get(PlantArea, plant_area_id)
     if plant_area_ref is None or plant_area_ref.level != 3:
-        raise HTTPException(status_code=400, detail="Deliverable area must be a level-3 Area")
+        raise HTTPException(status_code=400, detail="Cost Component area must be a level-3 Area")
     return plant_area_ref
 
 
@@ -294,12 +294,12 @@ def project_scope_page(
     scope_grid_rows = []
     for item in scope_items:
         item_state = scope_item_state(item)
-        deliverables = []
+        cost_components = []
         child_rows = []
-        for deliverable in item.deliverables:
+        for cost_component in item.cost_components:
             area_contexts = [
                 _plant_area_context(link.plant_area_ref, areas_by_id)
-                for link in deliverable.plant_area_links
+                for link in cost_component.plant_area_links
             ]
             area_labels = [f"{context['area_code']} {context['area_name']}" for context in area_contexts]
             area_codes = [context["area_code"] for context in area_contexts]
@@ -309,27 +309,27 @@ def project_scope_page(
                 for context in area_contexts
                 if context["facility_group_code"]
             })
-            deliverables.append(deliverable)
+            cost_components.append(cost_component)
             child_rows.append({
-                "id": f"deliverable-{deliverable.id}",
-                "record_id": deliverable.id,
+                "id": f"cost_component-{cost_component.id}",
+                "record_id": cost_component.id,
                 "parent_id": item.id,
-                "description": deliverable.description,
-                "type": "Deliverable",
+                "description": cost_component.description,
+                "type": "Cost Component",
                 "scope_item_id": item.id,
                 "work_type": item.work_type_ref.label if item.work_type_ref else "Not set",
                 "work_type_code": item.work_type_code or "",
-                "state": deliverable.state,
-                "cbs_l2": deliverable.cbs_l2_code,
-                "commodity_code": deliverable.commodity_code,
+                "state": cost_component.state,
+                "cbs_l2": cost_component.cbs_l2_code,
+                "commodity_code": cost_component.commodity_code,
                 "plant_areas": ", ".join(area_labels),
                 "plant_area_codes": area_codes,
                 "plant_unit_codes": plant_unit_codes,
                 "facility_group_codes": facility_group_codes,
-                "plant_area_ids": [link.plant_area_id for link in deliverable.plant_area_links],
+                "plant_area_ids": [link.plant_area_id for link in cost_component.plant_area_links],
                 "actions": "",
             })
-        rows.append({"item": item, "state": item_state, "deliverables": deliverables})
+        rows.append({"item": item, "state": item_state, "cost_components": cost_components})
         scope_grid_rows.append({
             "id": f"scope-{item.id}",
             "record_id": item.id,
@@ -414,8 +414,8 @@ def project_scope_delete_item(project_number: str, scope_item_id: int, db: DbDep
     return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
 
 
-@router.post("/project/{project_number}/scope/add-deliverable")
-def project_scope_add_deliverable(
+@router.post("/project/{project_number}/scope/add-cost-component")
+def project_scope_add_cost_component(
     project_number: str,
     db: DbDep,
     scope_item_id: int = Form(...),
@@ -428,10 +428,10 @@ def project_scope_add_deliverable(
     if scope_item is None or scope_item.project_number != project_number:
         raise HTTPException(status_code=404, detail="Scope Item not found")
     if commodity_code not in ("201", "202", "203", "204", "205", "206"):
-        raise HTTPException(status_code=400, detail="Deliverable commodity must be a direct Cost Category")
-    plant_area_ref = _get_deliverable_area_or_400(db, plant_area_id)
-    code, seq = next_deliverable_code(db, project_number, commodity_code)
-    deliverable = Deliverable(
+        raise HTTPException(status_code=400, detail="Cost Component commodity must be a direct Cost Category")
+    plant_area_ref = _get_cost_component_area_or_400(db, plant_area_id)
+    code, seq = next_cost_component_code(db, project_number, commodity_code)
+    cost_component = CostComponent(
         project_number=project_number,
         scope_item_id=scope_item.id,
         description=description.strip(),
@@ -439,47 +439,47 @@ def project_scope_add_deliverable(
         cbs_l2_code=code,
         sequence=seq,
     )
-    db.add(deliverable)
+    db.add(cost_component)
     db.flush()
-    db.add(DeliverablePlantArea(deliverable_id=deliverable.id, plant_area_id=plant_area_ref.id))
+    db.add(CostComponentPlantArea(cost_component_id=cost_component.id, plant_area_id=plant_area_ref.id))
     db.commit()
     return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
 
 
-@router.post("/project/{project_number}/scope/update-deliverable/{deliverable_id}")
-def project_scope_update_deliverable(
+@router.post("/project/{project_number}/scope/update-cost-component/{cost_component_id}")
+def project_scope_update_cost_component(
     project_number: str,
-    deliverable_id: int,
+    cost_component_id: int,
     db: DbDep,
     scope_item_id: int = Form(...),
     description: str = Form(...),
     commodity_code: str = Form(...),
     plant_area_id: int = Form(...),
 ):
-    deliverable = db.get(Deliverable, deliverable_id)
-    if deliverable is None or deliverable.project_number != project_number:
-        raise HTTPException(status_code=404, detail="Deliverable not found")
+    cost_component = db.get(CostComponent, cost_component_id)
+    if cost_component is None or cost_component.project_number != project_number:
+        raise HTTPException(status_code=404, detail="Cost Component not found")
     scope_item = db.get(ProjectScopeItem, scope_item_id)
     if scope_item is None or scope_item.project_number != project_number:
         raise HTTPException(status_code=404, detail="Scope Item not found")
     if commodity_code not in ("201", "202", "203", "204", "205", "206"):
-        raise HTTPException(status_code=400, detail="Deliverable commodity must be a direct Cost Category")
-    plant_area_ref = _get_deliverable_area_or_400(db, plant_area_id)
-    deliverable.scope_item_id = scope_item.id
-    deliverable.description = description.strip()
-    deliverable.commodity_code = commodity_code
-    db.query(DeliverablePlantArea).filter_by(deliverable_id=deliverable.id).delete()
-    db.add(DeliverablePlantArea(deliverable_id=deliverable.id, plant_area_id=plant_area_ref.id))
+        raise HTTPException(status_code=400, detail="Cost Component commodity must be a direct Cost Category")
+    plant_area_ref = _get_cost_component_area_or_400(db, plant_area_id)
+    cost_component.scope_item_id = scope_item.id
+    cost_component.description = description.strip()
+    cost_component.commodity_code = commodity_code
+    db.query(CostComponentPlantArea).filter_by(cost_component_id=cost_component.id).delete()
+    db.add(CostComponentPlantArea(cost_component_id=cost_component.id, plant_area_id=plant_area_ref.id))
     db.commit()
     return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
 
 
-@router.post("/project/{project_number}/scope/delete-deliverable/{deliverable_id}")
-def project_scope_delete_deliverable(project_number: str, deliverable_id: int, db: DbDep):
-    deliverable = db.get(Deliverable, deliverable_id)
-    if deliverable is None or deliverable.project_number != project_number:
-        raise HTTPException(status_code=404, detail="Deliverable not found")
-    db.delete(deliverable)
+@router.post("/project/{project_number}/scope/delete-cost-component/{cost_component_id}")
+def project_scope_delete_cost_component(project_number: str, cost_component_id: int, db: DbDep):
+    cost_component = db.get(CostComponent, cost_component_id)
+    if cost_component is None or cost_component.project_number != project_number:
+        raise HTTPException(status_code=404, detail="Cost Component not found")
+    db.delete(cost_component)
     db.commit()
     return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
 

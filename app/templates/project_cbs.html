@@ -55,7 +55,7 @@
       <tr class="hier-l1"><td>{{ l1 }}</td><td>Cost Category</td><td>Cost Category</td><td></td></tr>
       {% for d in direct_components if d.commodity_code == l1 %}
       <tr class="hier-l2"><td>{{ d.cbs_l2_code }}</td><td class="hier-indent-1">{{ d.description }}</td><td>Cost Component</td><td></td></tr>
-      {% for code in codes if code.deliverable_id == d.id %}
+      {% for code in codes if code.cost_component_id == d.id %}
       <tr class="hier-l3">
         <td>{{ code.code }}</td>
         <td class="hier-indent-2">{{ code.name }}{% if code.source == 'custom' %} <span class="badge">(custom)</span>{% endif %}{% if code.code in ps_codes %} <span class="chip">PS</span>{% endif %}</td>

@@ -4,7 +4,94 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from costcontrol.startup import repair_package_cost_nodes_workstream_fk
+from costcontrol.startup import migrate_cost_component_schema, repair_package_cost_nodes_workstream_fk
+
+
+def test_migrate_cost_component_schema_renames_legacy_direct_l2_tables():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    with Session(engine) as session:
+        session.execute(text("PRAGMA foreign_keys=OFF"))
+        session.execute(text("""
+            CREATE TABLE deliverables (
+                id INTEGER PRIMARY KEY,
+                project_number TEXT NOT NULL,
+                scope_item_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                commodity_code TEXT NOT NULL,
+                cbs_l2_code TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                state TEXT NOT NULL,
+                type_discriminator TEXT NOT NULL
+            )
+        """))
+        session.execute(text("""
+            CREATE TABLE deliverable_plant_areas (
+                id INTEGER PRIMARY KEY,
+                deliverable_id INTEGER NOT NULL,
+                plant_area_id INTEGER NOT NULL
+            )
+        """))
+        session.execute(text("""
+            CREATE TABLE cost_item_codes (
+                id INTEGER PRIMARY KEY,
+                project_number TEXT NOT NULL,
+                deliverable_id INTEGER,
+                indirect_l2_code TEXT,
+                code TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                source TEXT NOT NULL
+            )
+        """))
+        session.execute(text("""
+            INSERT INTO deliverables (
+                id, project_number, scope_item_id, description, commodity_code,
+                cbs_l2_code, sequence, state, type_discriminator
+            ) VALUES (1, '5006', 10, 'Foundation', '205', '205.01', 1, 'Provisional', 'Asset')
+        """))
+        session.execute(text("""
+            INSERT INTO deliverable_plant_areas (id, deliverable_id, plant_area_id)
+            VALUES (1, 1, 99)
+        """))
+        session.execute(text("""
+            INSERT INTO cost_item_codes (
+                id, project_number, deliverable_id, indirect_l2_code, code, sequence, name, source
+            ) VALUES (1, '5006', 1, NULL, '205.01.01', 1, 'Civil works', 'library')
+        """))
+        session.commit()
+
+        migrate_cost_component_schema(session)
+
+        tables = {
+            row[0]
+            for row in session.execute(text("SELECT name FROM sqlite_master WHERE type = 'table'")).fetchall()
+        }
+        assert "cost_components" in tables
+        assert "cost_component_plant_areas" in tables
+        assert "deliverables" not in tables
+        assert "deliverable_plant_areas" not in tables
+
+        component_area_columns = [
+            row[1]
+            for row in session.execute(text("PRAGMA table_info(cost_component_plant_areas)")).fetchall()
+        ]
+        cost_code_columns = [
+            row[1]
+            for row in session.execute(text("PRAGMA table_info(cost_item_codes)")).fetchall()
+        ]
+        assert "cost_component_id" in component_area_columns
+        assert "cost_component_id" in cost_code_columns
+        assert "deliverable_id" not in component_area_columns
+        assert "deliverable_id" not in cost_code_columns
+
+        migrated_component = session.execute(text("SELECT description FROM cost_components WHERE id = 1")).scalar_one()
+        migrated_code_parent = session.execute(text("SELECT cost_component_id FROM cost_item_codes WHERE id = 1")).scalar_one()
+        assert migrated_component == "Foundation"
+        assert migrated_code_parent == 1
 
 
 def test_repair_package_cost_nodes_removes_stale_workstream_fk():

@@ -97,13 +97,13 @@ class ProjectScopeItem(Base):
 
     project_ref: Mapped["Project"] = relationship(back_populates="scope_items")
     work_type_ref: Mapped["WorkType | None"] = relationship()
-    deliverables: Mapped[list["Deliverable"]] = relationship(
-        back_populates="scope_item_ref", cascade="all, delete-orphan", order_by="Deliverable.cbs_l2_code"
+    cost_components: Mapped[list["CostComponent"]] = relationship(
+        back_populates="scope_item_ref", cascade="all, delete-orphan", order_by="CostComponent.cbs_l2_code"
     )
 
 
-class Deliverable(Base):
-    __tablename__ = "deliverables"
+class CostComponent(Base):
+    __tablename__ = "cost_components"
     __table_args__ = (UniqueConstraint("project_number", "cbs_l2_code"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -116,25 +116,25 @@ class Deliverable(Base):
     state: Mapped[str] = mapped_column(String(20), nullable=False, default="Provisional")
     type_discriminator: Mapped[str] = mapped_column(String(20), nullable=False, default="Asset")
 
-    scope_item_ref: Mapped["ProjectScopeItem"] = relationship(back_populates="deliverables")
+    scope_item_ref: Mapped["ProjectScopeItem"] = relationship(back_populates="cost_components")
     commodity_ref: Mapped["ControlAccount"] = relationship()
-    plant_area_links: Mapped[list["DeliverablePlantArea"]] = relationship(
-        back_populates="deliverable_ref", cascade="all, delete-orphan"
+    plant_area_links: Mapped[list["CostComponentPlantArea"]] = relationship(
+        back_populates="cost_component_ref", cascade="all, delete-orphan"
     )
     cost_item_codes: Mapped[list["CostItemCode"]] = relationship(
-        back_populates="deliverable_ref", cascade="all, delete-orphan", order_by="CostItemCode.code"
+        back_populates="cost_component_ref", cascade="all, delete-orphan", order_by="CostItemCode.code"
     )
 
 
-class DeliverablePlantArea(Base):
-    __tablename__ = "deliverable_plant_areas"
-    __table_args__ = (UniqueConstraint("deliverable_id", "plant_area_id"),)
+class CostComponentPlantArea(Base):
+    __tablename__ = "cost_component_plant_areas"
+    __table_args__ = (UniqueConstraint("cost_component_id", "plant_area_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    deliverable_id: Mapped[int] = mapped_column(Integer, ForeignKey("deliverables.id", ondelete="CASCADE"), nullable=False)
+    cost_component_id: Mapped[int] = mapped_column(Integer, ForeignKey("cost_components.id", ondelete="CASCADE"), nullable=False)
     plant_area_id: Mapped[int] = mapped_column(Integer, ForeignKey("plant_areas.id"), nullable=False)
 
-    deliverable_ref: Mapped["Deliverable"] = relationship(back_populates="plant_area_links")
+    cost_component_ref: Mapped["CostComponent"] = relationship(back_populates="plant_area_links")
     plant_area_ref: Mapped["PlantArea"] = relationship()
 
 
@@ -142,20 +142,20 @@ class CostItemCode(Base):
     __tablename__ = "cost_item_codes"
     __table_args__ = (
         UniqueConstraint("project_number", "code"),
-        UniqueConstraint("deliverable_id", "sequence"),
+        UniqueConstraint("cost_component_id", "sequence"),
         UniqueConstraint("indirect_l2_code", "sequence"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_number: Mapped[str] = mapped_column(String(20), ForeignKey("projects.project_number"), nullable=False, index=True)
-    deliverable_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("deliverables.id", ondelete="CASCADE"), nullable=True)
+    cost_component_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("cost_components.id", ondelete="CASCADE"), nullable=True)
     indirect_l2_code: Mapped[str | None] = mapped_column(String(7), ForeignKey("indirect_l2_accounts.code"), nullable=True)
     code: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="custom")
 
-    deliverable_ref: Mapped["Deliverable | None"] = relationship(back_populates="cost_item_codes")
+    cost_component_ref: Mapped["CostComponent | None"] = relationship(back_populates="cost_item_codes")
     indirect_l2_ref: Mapped["IndirectL2Account | None"] = relationship()
 
 

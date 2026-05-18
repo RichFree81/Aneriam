@@ -7,9 +7,9 @@ This register records intentional differences between database names and user-fa
 | `control_accounts` | Cost Categories | Retained for ingest compatibility; users work with CBS L1 Cost Categories. |
 | `project_tasks` level-2 rows | Cost Components | NetSuite mirror of the CBS L2 tier when surfaced in CBS views. Applies to both direct scope components and indirect components. |
 | `project_tasks` level-3 rows | Cost Item Codes | NetSuite mirror of the CBS L3 tier when surfaced in CBS views. |
-| `deliverables` | Direct Cost Components | Database name retained for compatibility; UI should use Cost Component when the row is part of the three-level cost hierarchy. |
+| `cost_components` | Direct Cost Components | Direct Level 2 cost components linked to scope and area metadata. |
 | `indirect_l2_accounts` | Indirect Cost Components | Indirect Level 2 components under EPCM and Preliminaries. |
-| `package_documents` | Documents / Issue Register | Former `package_deliverables`; renamed so package documents are not confused with Cost Components. |
+| `package_documents` | Documents / Issue Register | Package document and issue records, separate from Cost Components. |
 | `packages.package_type` | Package category | Disambiguates from pricing basis. |
 | `packages.pricing_basis` | Pricing basis | NEC4/commercial pricing form for the package. |
 | `packages.planned_value` | Provisional Allocation | Package-level provisional reservation before award. |

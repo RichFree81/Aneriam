@@ -132,6 +132,71 @@ def run_startup_migrations(db: Session) -> None:
                 )
 
 
+def _table_exists(db: Session, table_name: str) -> bool:
+    return db.execute(
+        text("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = :name"),
+        {"name": table_name},
+    ).first() is not None
+
+
+def _column_exists(db: Session, table_name: str, column_name: str) -> bool:
+    if not _table_exists(db, table_name):
+        return False
+    return column_name in [row[1] for row in db.execute(text(f"PRAGMA table_info({table_name})")).fetchall()]
+
+
+def migrate_cost_component_schema(db: Session) -> None:
+    """Rename the old direct Level 2 schema to Cost Component terminology.
+
+    This runs before SQLAlchemy creates missing tables. Existing user databases
+    therefore keep their data while moving from the old table/column names onto
+    the new Cost Component names.
+    """
+    if not any(
+        _table_exists(db, table)
+        for table in ("deliverables", "deliverable_plant_areas", "cost_item_codes")
+    ):
+        return
+
+    logger.info("Migrating direct Level 2 schema to Cost Component naming")
+    db.commit()
+    db.execute(text("PRAGMA foreign_keys=OFF"))
+    try:
+        if _table_exists(db, "deliverables") and not _table_exists(db, "cost_components"):
+            db.execute(text("ALTER TABLE deliverables RENAME TO cost_components"))
+
+        if _table_exists(db, "deliverable_plant_areas") and not _table_exists(db, "cost_component_plant_areas"):
+            db.execute(text("ALTER TABLE deliverable_plant_areas RENAME TO cost_component_plant_areas"))
+
+        if _column_exists(db, "cost_component_plant_areas", "deliverable_id"):
+            db.execute(text(
+                "ALTER TABLE cost_component_plant_areas "
+                "RENAME COLUMN deliverable_id TO cost_component_id"
+            ))
+
+        if _column_exists(db, "cost_item_codes", "deliverable_id"):
+            db.execute(text(
+                "ALTER TABLE cost_item_codes "
+                "RENAME COLUMN deliverable_id TO cost_component_id"
+            ))
+
+        if _table_exists(db, "cost_components"):
+            db.execute(text("""
+                UPDATE cost_components
+                SET description = replace(replace(description, 'Deliverable', 'Cost Component'), 'deliverable', 'cost component')
+                WHERE description LIKE '%Deliverable%' OR description LIKE '%deliverable%'
+            """))
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to migrate Cost Component schema")
+        raise
+    finally:
+        db.execute(text("PRAGMA foreign_keys=ON"))
+        db.commit()
+
+
 def repair_package_cost_nodes_workstream_fk(db: Session) -> None:
     """Remove stale workstream_id/FK left by older SQLite schemas.
 
@@ -204,6 +269,12 @@ def repair_package_cost_nodes_workstream_fk(db: Session) -> None:
 
 
 def initialise_database() -> None:
+    db = SessionLocal()
+    try:
+        migrate_cost_component_schema(db)
+    finally:
+        db.close()
+
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:

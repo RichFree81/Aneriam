@@ -12,7 +12,7 @@ from .models import (
     BudgetReserveSubAccount,
     CostControlAuditLog,
     CostItemCode,
-    Deliverable,
+    CostComponent,
     IndirectL2Account,
     Package,
     PackageCostItem,
@@ -39,9 +39,9 @@ def normalise_cbs_code(code: str) -> str:
     return f"{l1}.{l2:02d}.{int(l3):02d}"
 
 
-def next_deliverable_code(db: Session, project_number: str, commodity_code: str) -> tuple[str, int]:
+def next_cost_component_code(db: Session, project_number: str, commodity_code: str) -> tuple[str, int]:
     seq = (
-        db.query(func.max(Deliverable.sequence))
+        db.query(func.max(CostComponent.sequence))
         .filter_by(project_number=project_number, commodity_code=commodity_code)
         .scalar()
         or 0
@@ -53,19 +53,19 @@ def next_cost_item_code(
     db: Session,
     project_number: str,
     *,
-    deliverable: Deliverable | None = None,
+    cost_component: CostComponent | None = None,
     indirect_l2_code: str | None = None,
 ) -> tuple[str, int, str]:
-    if deliverable is None and not indirect_l2_code:
-        raise ValueError("Either deliverable or indirect_l2_code is required")
-    if deliverable is not None:
+    if cost_component is None and not indirect_l2_code:
+        raise ValueError("Either cost_component or indirect_l2_code is required")
+    if cost_component is not None:
         seq = (
             db.query(func.max(CostItemCode.sequence))
-            .filter_by(deliverable_id=deliverable.id)
+            .filter_by(cost_component_id=cost_component.id)
             .scalar()
             or 0
         ) + 1
-        parent_code = deliverable.cbs_l2_code
+        parent_code = cost_component.cbs_l2_code
     else:
         seq = (
             db.query(func.max(CostItemCode.sequence))
@@ -78,7 +78,7 @@ def next_cost_item_code(
 
 
 def scope_item_state(scope_item: ProjectScopeItem) -> str:
-    states = [d.state for d in scope_item.deliverables]
+    states = [d.state for d in scope_item.cost_components]
     if not states:
         return "Provisional"
     if all(state == "Final" for state in states):
@@ -153,18 +153,18 @@ def active_package_line_items(pkg: Package) -> list[PackageCostItem]:
 
 def validate_package_award(db: Session, pkg: Package) -> list[str]:
     errors: list[str] = []
-    deliverable_ids = {
-        item.cost_item_code_ref.deliverable_id
+    cost_component_ids = {
+        item.cost_item_code_ref.cost_component_id
         for item in active_package_line_items(pkg)
-        if item.cost_item_code_ref.deliverable_id is not None
+        if item.cost_item_code_ref.cost_component_id is not None
     }
-    if not deliverable_ids:
+    if not cost_component_ids:
         return errors
-    deliverables = db.query(Deliverable).filter(Deliverable.id.in_(deliverable_ids)).all()
-    for deliverable in deliverables:
-        if not deliverable.plant_area_links:
-            errors.append(f"Deliverable {deliverable.cbs_l2_code} {deliverable.description}: Plant Area is required")
-        scope_item = deliverable.scope_item_ref
+    cost_components = db.query(CostComponent).filter(CostComponent.id.in_(cost_component_ids)).all()
+    for cost_component in cost_components:
+        if not cost_component.plant_area_links:
+            errors.append(f"Cost Component {cost_component.cbs_l2_code} {cost_component.description}: Plant Area is required")
+        scope_item = cost_component.scope_item_ref
         if not scope_item.work_type_code:
             errors.append(f"Scope Item {scope_item.description}: Work Type is required")
             continue
@@ -192,8 +192,8 @@ def award_package(db: Session, pkg: Package) -> None:
     for item in active_package_line_items(pkg):
         item.status = "Awarded"
         code = item.cost_item_code_ref
-        if code.deliverable_ref is not None and code.deliverable_ref.state == "Provisional":
-            code.deliverable_ref.state = "Committed"
+        if code.cost_component_ref is not None and code.cost_component_ref.state == "Provisional":
+            code.cost_component_ref.state = "Committed"
 
     pkg.is_contracted = True
     pkg.awarded_amount = awarded
@@ -233,8 +233,8 @@ def create_cost_item_line(
     line = PackageCostItem(
         package_id=pkg.id,
         cost_item_code_id=cost_item_code.id,
-        cbs_l2_code=cost_item_code.deliverable_ref.cbs_l2_code
-        if cost_item_code.deliverable_ref is not None else (cost_item_code.indirect_l2_code or ""),
+        cbs_l2_code=cost_item_code.cost_component_ref.cbs_l2_code
+        if cost_item_code.cost_component_ref is not None else (cost_item_code.indirect_l2_code or ""),
         description=description,
         value=value,
         provisional=provisional,
@@ -330,7 +330,7 @@ def cbs_rows(db: Session, project_number: str) -> list[dict]:
         for balance, subaccount in reserve_rows
     ]
     indirect_l2 = db.query(IndirectL2Account).order_by(IndirectL2Account.code).all()
-    direct_components = db.query(Deliverable).filter_by(project_number=project_number).order_by(Deliverable.cbs_l2_code).all()
+    direct_components = db.query(CostComponent).filter_by(project_number=project_number).order_by(CostComponent.cbs_l2_code).all()
     codes = db.query(CostItemCode).filter_by(project_number=project_number).order_by(CostItemCode.code).all()
     totals = dict(
         db.execute(text("""
@@ -357,6 +357,6 @@ def cbs_rows(db: Session, project_number: str) -> list[dict]:
     return [
         {"reserve": reserve},
         {"indirect_l2": indirect_l2},
-        {"direct_components": direct_components, "deliverables": direct_components},
+        {"direct_components": direct_components, "cost_components": direct_components},
         {"codes": codes, "totals": totals, "ps_codes": ps_codes},
     ]
