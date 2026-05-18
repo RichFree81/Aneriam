@@ -189,6 +189,8 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert "Add Cost Grouping" in response.text
         assert "Add Cost Line" in response.text
         assert "Related Control Account" in response.text
+        assert '<option value="205">Structures</option>' in response.text
+        assert '<option value="205">205 - Structures</option>' not in response.text
         assert "Related Cost Component" in response.text
         assert "Cost Item Account" in response.text
         assert "Cost Item Account (CBS Level 3)" not in response.text

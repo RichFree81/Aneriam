@@ -366,7 +366,7 @@
             <select name="cc_code" id="itemCCCode">
               <option value="">— None —</option>
               {% for ca in control_accounts %}
-              <option value="{{ ca.code }}">{{ ca.code }} — {{ ca.name }}</option>
+              <option value="{{ ca.code }}">{{ ca.name }}</option>
               {% endfor %}
             </select>
           </label>

@@ -140,17 +140,17 @@ COST_ITEM_LIBRARY_INDIRECT = (
 # because they may still be valid CC codes for tagging purposes; the
 # `excluded_from_capex` column is no longer driving any zeroing logic.
 CONTROL_ACCOUNTS = [
-    ("101", "101 - Budget Reserves",              False),
-    ("102", "102 - EPCM",                         False),
-    ("103", "103 - Preliminaries",                False),
-    ("201", "201 - Equipment",                    False),
-    ("202", "202 - Process Piping",               False),
-    ("203", "203 - Electrical Reticulation",      False),
-    ("204", "204 - Process Automation",           False),
-    ("205", "205 - Structures",                   False),
-    ("206", "206 - Yard Improvements",            False),
-    ("901", "901 - Project Capitalisation",       False),
-    ("902", "902 - Project Expensing",            False),
+    ("101", "Budget Reserves",              False),
+    ("102", "EPCM",                         False),
+    ("103", "Preliminaries",                False),
+    ("201", "Equipment",                    False),
+    ("202", "Process Piping",               False),
+    ("203", "Electrical Reticulation",      False),
+    ("204", "Process Automation",           False),
+    ("205", "Structures",                   False),
+    ("206", "Yard Improvements",            False),
+    ("901", "Project Capitalisation",       False),
+    ("902", "Project Expensing",            False),
 ]
 
 # Source: `.Collab/Inputs/RST Area Clasifications/RST Area Clasifications.pptx`.

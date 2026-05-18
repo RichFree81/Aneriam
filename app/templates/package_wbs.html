@@ -594,7 +594,7 @@
       <label>Related Control Account
         <select name="cc_code" id="editItemControlAccount">
           <option value="">Select...</option>
-          {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
+          {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.name }}</option>{% endfor %}
         </select>
       </label>
       <label>Baseline estimate
@@ -644,7 +644,7 @@
       <label>Related Control Account
         <select name="cc_code" id="costLineCategory" required onchange="refreshCostComponentOptions()">
           <option value="">Select...</option>
-          {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
+          {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.name }}</option>{% endfor %}
         </select>
       </label>
       <label>Related Cost Component
