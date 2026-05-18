@@ -329,7 +329,7 @@ def test_ensure_package_cost_sheets_creates_original_and_assigns_legacy_nodes():
         """)).mappings().one()
         assert sheet["sheet_number"] == "ORIGINAL"
         assert sheet["title"] == "Package Base Cost"
-        assert sheet["sheet_type"] == "Original"
+        assert sheet["sheet_type"] == "Working Estimate"
 
         node_sheet_id = session.execute(text("""
             SELECT cost_sheet_id

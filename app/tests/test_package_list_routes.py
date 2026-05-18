@@ -176,9 +176,10 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
 
         response = client.get("/project/5006/packages/5006-PKG-001/cost")
         assert response.status_code == 200
-        original_sheet = session.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Original").one()
+        original_sheet = session.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Working Estimate").one()
         session.refresh(level2)
         assert level2.cost_sheet_id == original_sheet.id
+        assert original_sheet.status == "Working"
         assert "Package Base Cost" in response.text
         assert "Add Variation Cost Sheet" in response.text
         assert 'id="costSheetGrid"' in response.text
@@ -188,10 +189,12 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert "Add Cost Line" not in response.text
         assert f"/cost?sheet_id={original_sheet.id}" in response.text
         start = response.text.index("const COST_SHEET_ROWS = ") + len("const COST_SHEET_ROWS = ")
-        end = response.text.index(";\n  const COST_COMPONENT_OPTIONS", start)
+        end = response.text.index(";\n  const ACTIVE_COST_SHEET_LOCKED", start)
         sheet_data = json.loads(response.text[start:end])
         assert sheet_data[0]["sheet_number"] == "ORIGINAL"
         assert sheet_data[0]["title"] == "Package Base Cost"
+        assert sheet_data[0]["sheet_type"] == "Working Estimate"
+        assert sheet_data[0]["status"] == "Working"
         assert sheet_data[0]["baseline"] == 1000
 
         response = client.get(f"/project/5006/packages/5006-PKG-001/cost?sheet_id={original_sheet.id}")
@@ -199,6 +202,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert 'id="costNodeGrid"' in response.text
         assert 'id="costSheetGrid"' not in response.text
         assert "Back to Cost Sheets" in response.text
+        assert "Create Baseline" in response.text
         assert f'name="sheet_id" value="{original_sheet.id}"' in response.text
         assert "Add Cost Grouping" in response.text
         assert "Add Cost Line" in response.text
@@ -245,6 +249,44 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert "Create Cost Item Code" not in response.text
         assert "Add Cost Item Line" not in response.text
         assert '<span class="chip">{{ package.package_source }}</span>' not in response.text
+
+        response = client.post(
+            "/project/5006/packages/5006-PKG-001/cost/create-baseline",
+            data={
+                "sheet_id": str(original_sheet.id),
+                "title": "Baseline 1 - Feasibility",
+                "description": "Feasibility estimate approval",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        baseline_sheet = session.query(PackageCostSheet).filter_by(
+            package_id=package_id,
+            sheet_type="Baseline",
+            title="Baseline 1 - Feasibility",
+        ).one()
+        assert baseline_sheet.sheet_number == "BL-001"
+        assert baseline_sheet.status == "Locked"
+        assert baseline_sheet.source_sheet_id == original_sheet.id
+        assert baseline_sheet.locked_at is not None
+        assert response.headers["location"].endswith(f"/cost?sheet_id={baseline_sheet.id}")
+        baseline_nodes = session.query(PackageCostNode).filter_by(package_id=package_id, cost_sheet_id=baseline_sheet.id).all()
+        assert len(baseline_nodes) == 2
+
+        response = client.get(f"/project/5006/packages/5006-PKG-001/cost?sheet_id={baseline_sheet.id}")
+        assert response.status_code == 200
+        assert "This baseline is locked and read-only." in response.text
+        assert "Add Cost Grouping" not in response.text
+        assert "Add Cost Line" not in response.text
+        assert "Create Baseline" not in response.text
+        assert "const ACTIVE_COST_SHEET_LOCKED = true" in response.text
+
+        response = client.post(
+            f"/project/5006/packages/5006-PKG-001/cost/update-section/{baseline_nodes[0].id}",
+            data={"description": "Should not edit"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
 
         response = client.post(
             "/project/5006/packages/5006-PKG-001/cost/add-sheet",
@@ -426,6 +468,18 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             follow_redirects=False,
         )
         assert response.status_code == 400
+
+        package = session.get(Package, package_id)
+        package.is_contracted = True
+        session.commit()
+        response = client.post(
+            "/project/5006/packages/5006-PKG-001/cost/create-baseline",
+            data={"sheet_id": str(original_sheet.id), "title": "Baseline after award"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
+        package.is_contracted = False
+        session.commit()
 
         response = client.post(
             f"/project/5006/packages/5006-PKG-001/cost/delete-node/{item.id}",

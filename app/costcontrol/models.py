@@ -447,6 +447,8 @@ class PackageCostSheet(Base):
     sheet_type: Mapped[str] = mapped_column(String(20), nullable=False, default="Original")
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="Draft")
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source_sheet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("package_cost_sheets.id"), nullable=True)
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now())
 

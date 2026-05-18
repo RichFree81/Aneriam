@@ -44,6 +44,24 @@ def _next_cost_sheet_number(db: Session, package_id: int) -> str:
     return f"VAR-{count + 1:03d}"
 
 
+def _next_baseline_sheet_number(db: Session, package_id: int) -> str:
+    count = db.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Baseline").count()
+    return f"BL-{count + 1:03d}"
+
+
+def _is_working_sheet(sheet: PackageCostSheet) -> bool:
+    return sheet.sheet_type in {"Original", "Working Estimate", "Variation"} and sheet.status != "Locked"
+
+
+def _is_locked_sheet(sheet: PackageCostSheet) -> bool:
+    return sheet.sheet_type == "Baseline" or sheet.status == "Locked"
+
+
+def _assert_cost_sheet_editable(sheet: PackageCostSheet) -> None:
+    if _is_locked_sheet(sheet):
+        raise HTTPException(status_code=400, detail="Locked baselines are read-only")
+
+
 def _ensure_cost_sheets(db: Session, pkg) -> list[PackageCostSheet]:
     sheets = (
         db.query(PackageCostSheet)
@@ -51,20 +69,27 @@ def _ensure_cost_sheets(db: Session, pkg) -> list[PackageCostSheet]:
         .order_by(PackageCostSheet.display_order, PackageCostSheet.id)
         .all()
     )
-    original = next((sheet for sheet in sheets if sheet.sheet_type == "Original"), None)
+    original = next((sheet for sheet in sheets if sheet.sheet_type in {"Original", "Working Estimate"}), None)
     if original is None:
         original = PackageCostSheet(
             package_id=pkg.id,
             sheet_number="ORIGINAL",
             title="Package Base Cost",
-            sheet_type="Original",
-            status="Draft",
+            sheet_type="Working Estimate",
+            status="Working",
             display_order=0,
             created_at=datetime.now(),
         )
         db.add(original)
         db.flush()
         sheets.insert(0, original)
+    else:
+        if original.title == "Original Cost Sheet":
+            original.title = "Package Base Cost"
+        if original.sheet_type == "Original":
+            original.sheet_type = "Working Estimate"
+        if original.status == "Draft":
+            original.status = "Working"
     for node in pkg.cost_nodes:
         if node.cost_sheet_id is None:
             node.cost_sheet_id = original.id
@@ -83,7 +108,7 @@ def _active_cost_sheet(request: Request, sheets: list[PackageCostSheet]) -> Pack
         for sheet in sheets:
             if str(sheet.id) == requested:
                 return sheet
-    return next((sheet for sheet in sheets if sheet.sheet_type == "Original"), sheets[0])
+    return next((sheet for sheet in sheets if sheet.sheet_type in {"Original", "Working Estimate"}), sheets[0])
 
 
 def _is_cost_sheet_open(request: Request) -> bool:
@@ -212,6 +237,7 @@ def _cost_sheet_row(pkg, sheet: PackageCostSheet) -> dict:
         "title": sheet.title,
         "sheet_type": sheet.sheet_type,
         "status": sheet.status,
+        "locked": _is_locked_sheet(sheet),
         "description": sheet.description or "",
         "baseline": totals["baseline"],
         "baseline_display": fmt_zar(totals["baseline"]) if totals["baseline"] else "R 0.00",
@@ -221,6 +247,43 @@ def _cost_sheet_row(pkg, sheet: PackageCostSheet) -> dict:
         "contract_display": fmt_zar(totals["contract"]) if totals["contract"] else "R 0.00",
         "open_url": f"/project/{pkg.project_number}/packages/{pkg.package_number}/cost?sheet_id={sheet.id}",
     }
+
+
+def _clone_cost_node_tree(
+    db: Session,
+    node: PackageCostNode,
+    *,
+    package_id: int,
+    cost_sheet_id: int,
+    parent_id: int | None,
+) -> PackageCostNode:
+    cloned = PackageCostNode(
+        package_id=package_id,
+        cost_sheet_id=cost_sheet_id,
+        parent_id=parent_id,
+        code=node.code,
+        description=node.description,
+        is_item=node.is_item,
+        cc_code=node.cc_code,
+        unit=node.unit,
+        qty=node.qty,
+        rate=node.rate,
+        baseline_amount=node.baseline_amount,
+        pre_award_unit=node.pre_award_unit,
+        pre_award_qty=node.pre_award_qty,
+        pre_award_rate=node.pre_award_rate,
+        pre_award_amount=node.pre_award_amount,
+        contract_unit=node.contract_unit,
+        contract_qty=node.contract_qty,
+        contract_rate=node.contract_rate,
+        contract_amount=node.contract_amount,
+        display_order=node.display_order,
+    )
+    db.add(cloned)
+    db.flush()
+    for child in sorted(node.children, key=lambda n: n.display_order):
+        _clone_cost_node_tree(db, child, package_id=package_id, cost_sheet_id=cost_sheet_id, parent_id=cloned.id)
+    return cloned
 
 
 def _cost_component_option_rows(components: list[CostComponent]) -> list[dict]:
@@ -290,6 +353,8 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "cost_sheet_rows": cost_sheet_rows,
             "active_cost_sheet": active_cost_sheet,
             "cost_sheet_open": cost_sheet_open,
+            "active_cost_sheet_locked": _is_locked_sheet(active_cost_sheet),
+            "active_cost_sheet_working": _is_working_sheet(active_cost_sheet),
             "control_accounts": control_accounts,
             "award_errors": award_errors,
             "active_tab": "wbs",
@@ -604,6 +669,7 @@ def cost_add_section(
 ):
     pkg = get_package_or_404(db, project_number, package_number)
     sheet = _resolve_cost_sheet(db, pkg, sheet_id)
+    _assert_cost_sheet_editable(sheet)
     parent_int = _resolve_parent_id(db, pkg, parent_id, sheet.id)
     if parent_int is not None:
         parent = db.get(PackageCostNode, parent_int)
@@ -636,6 +702,8 @@ def cost_update_section(
     node = db.get(PackageCostNode, node_id)
     if node is None or node.package_id != pkg.id:
         raise HTTPException(status_code=404, detail="Cost node not found")
+    if node.cost_sheet_ref is not None:
+        _assert_cost_sheet_editable(node.cost_sheet_ref)
     if node.is_item:
         raise HTTPException(status_code=400, detail="Use the cost line editor for cost lines")
     node.description = description.strip()
@@ -686,6 +754,48 @@ def cost_add_sheet(
     return _cost_redirect(project_number, package_number, sheet.id)
 
 
+@router.post("/project/{project_number}/packages/{package_number}/cost/create-baseline")
+def cost_create_baseline(
+    project_number: str,
+    package_number: str,
+    db: DbDep,
+    sheet_id: str = Form(...),
+    title: str = Form(...),
+    description: str = Form(""),
+):
+    pkg = get_package_or_404(db, project_number, package_number)
+    if pkg.is_contracted:
+        raise HTTPException(status_code=400, detail="Estimate baselines cannot be created after package award")
+    source_sheet = _resolve_cost_sheet(db, pkg, sheet_id)
+    if _is_locked_sheet(source_sheet):
+        raise HTTPException(status_code=400, detail="Create a new baseline from an editable working estimate")
+    sheet_number = _next_baseline_sheet_number(db, pkg.id)
+    display_order = db.query(PackageCostSheet).filter_by(package_id=pkg.id).count()
+    baseline = PackageCostSheet(
+        package_id=pkg.id,
+        sheet_number=sheet_number,
+        title=title.strip(),
+        sheet_type="Baseline",
+        status="Locked",
+        description=description.strip(),
+        source_sheet_id=source_sheet.id,
+        locked_at=datetime.now(),
+        display_order=display_order,
+        created_at=datetime.now(),
+    )
+    db.add(baseline)
+    db.flush()
+    roots = [
+        node for node in pkg.cost_nodes
+        if node.parent_id is None and node.cost_sheet_id == source_sheet.id
+    ]
+    for node in sorted(roots, key=lambda n: n.display_order):
+        _clone_cost_node_tree(db, node, package_id=pkg.id, cost_sheet_id=baseline.id, parent_id=None)
+    db.commit()
+    db.refresh(baseline)
+    return _cost_redirect(project_number, package_number, baseline.id)
+
+
 @router.post("/project/{project_number}/packages/{package_number}/cost/add-item")
 def cost_add_item(
     project_number: str,
@@ -718,6 +828,7 @@ def cost_add_item(
 ):
     pkg = get_package_or_404(db, project_number, package_number)
     sheet = _resolve_cost_sheet(db, pkg, sheet_id)
+    _assert_cost_sheet_editable(sheet)
     selected_component_id = cost_component_id or level2_id
     cost_code = _resolve_or_create_cost_item_code(
         db,
@@ -785,6 +896,8 @@ def cost_update_item(
     node = db.get(PackageCostNode, node_id)
     if node is None or node.package_id != pkg.id:
         raise HTTPException(status_code=404, detail="Cost node not found")
+    if node.cost_sheet_ref is not None:
+        _assert_cost_sheet_editable(node.cost_sheet_ref)
     if not node.is_item:
         raise HTTPException(status_code=400, detail="Use the group editor for Cost Groupings and cost item accounts")
     bl_u, bl_q, bl_r, bl_a = process_cost_column(baseline_unit, baseline_qty, baseline_rate, baseline_amount)
@@ -823,6 +936,8 @@ def cost_set_contract(
     node = db.get(PackageCostNode, node_id)
     if node is None or node.package_id != pkg.id:
         raise HTTPException(status_code=404, detail="Cost node not found")
+    if node.cost_sheet_ref is not None:
+        _assert_cost_sheet_editable(node.cost_sheet_ref)
     node.contract_amount = parse_float(contract_amount)
     db.commit()
     _write_audit_log(db, node, "Updated")
@@ -847,6 +962,8 @@ def cost_delete_node(project_number: str, package_number: str, node_id: int, db:
     node = db.get(PackageCostNode, node_id)
     if node is None or node.package_id != pkg.id:
         raise HTTPException(status_code=404, detail="Cost node not found")
+    if node.cost_sheet_ref is not None:
+        _assert_cost_sheet_editable(node.cost_sheet_ref)
     sheet_id = node.cost_sheet_id
     db.delete(node)
     db.commit()

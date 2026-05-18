@@ -76,11 +76,15 @@ STARTUP_MIGRATIONS: tuple[str, ...] = (
         "sheet_type VARCHAR(20) NOT NULL DEFAULT 'Original', "
         "status VARCHAR(30) NOT NULL DEFAULT 'Draft', "
         "description TEXT NOT NULL DEFAULT '', "
+        "source_sheet_id INTEGER REFERENCES package_cost_sheets(id), "
+        "locked_at DATETIME, "
         "display_order INTEGER NOT NULL DEFAULT 0, "
         "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "
         "UNIQUE(package_id, sheet_number))"
     ),
     "ALTER TABLE package_cost_nodes ADD COLUMN cost_sheet_id INTEGER REFERENCES package_cost_sheets(id) ON DELETE CASCADE",
+    "ALTER TABLE package_cost_sheets ADD COLUMN source_sheet_id INTEGER REFERENCES package_cost_sheets(id)",
+    "ALTER TABLE package_cost_sheets ADD COLUMN locked_at DATETIME",
     # Slice E: first linked PO is Original; later links are Variations.
     "ALTER TABLE po_rto_links ADD COLUMN is_original BOOLEAN NOT NULL DEFAULT 0",
     (
@@ -373,7 +377,7 @@ def ensure_package_cost_sheets(db: Session) -> None:
             original = db.execute(text("""
                 SELECT id
                 FROM package_cost_sheets
-                WHERE package_id = :package_id AND sheet_type = 'Original'
+                WHERE package_id = :package_id AND sheet_type IN ('Original', 'Working Estimate')
                 ORDER BY display_order, id
                 LIMIT 1
             """), {"package_id": package_id}).first()
@@ -384,8 +388,8 @@ def ensure_package_cost_sheets(db: Session) -> None:
                         description, display_order, created_at
                     )
                     VALUES (
-                        :package_id, 'ORIGINAL', 'Package Base Cost', 'Original',
-                        'Draft', '', 0, CURRENT_TIMESTAMP
+                        :package_id, 'ORIGINAL', 'Package Base Cost', 'Working Estimate',
+                        'Working', '', 0, CURRENT_TIMESTAMP
                     )
                 """), {"package_id": package_id})
                 original_id = db.execute(text("SELECT last_insert_rowid()")).scalar_one()
@@ -393,9 +397,15 @@ def ensure_package_cost_sheets(db: Session) -> None:
                 original_id = original.id
                 db.execute(text("""
                     UPDATE package_cost_sheets
-                    SET title = 'Package Base Cost'
+                    SET title = 'Package Base Cost',
+                        sheet_type = CASE WHEN sheet_type = 'Original' THEN 'Working Estimate' ELSE sheet_type END,
+                        status = CASE WHEN status = 'Draft' THEN 'Working' ELSE status END
                     WHERE id = :original_id
-                      AND title = 'Original Cost Sheet'
+                      AND (
+                        title = 'Original Cost Sheet'
+                        OR sheet_type = 'Original'
+                        OR status = 'Draft'
+                      )
                 """), {"original_id": original_id})
             db.execute(text("""
                 UPDATE package_cost_nodes
