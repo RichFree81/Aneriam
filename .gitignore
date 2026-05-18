@@ -53,6 +53,7 @@ coverage/
 # Cost control app — build artefacts and binaries (regenerable from source)
 app/build/
 app/dist/
+app/runtime_tmp/
 *.exe
 *.exe.old
 

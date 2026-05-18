@@ -23,6 +23,8 @@ _hash_dir = ROOT / "build"
 _hash_dir.mkdir(exist_ok=True)
 _hash_file = _hash_dir / "source_hash.txt"
 _hash_file.write_text(_compute_source_hash(ROOT))
+_runtime_tmp = ROOT / "runtime_tmp"
+_runtime_tmp.mkdir(exist_ok=True)
 
 a = Analysis(
     [str(ROOT / "run.py")],
@@ -87,7 +89,7 @@ exe = EXE(
     strip=False,
     upx=False,
     upx_exclude=[],
-    runtime_tmpdir=None,
+    runtime_tmpdir=str(_runtime_tmp),
     console=True,          # keep console so the user can see server logs
     disable_windowed_traceback=False,
     argv_emulation=False,
