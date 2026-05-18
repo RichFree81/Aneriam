@@ -51,14 +51,23 @@ def _cost_node_subtotals(node: PackageCostNode) -> dict[str, float]:
     }
 
 
-def _cost_node_grid_row(node: PackageCostNode) -> dict:
+def _cost_node_grid_row(node: PackageCostNode, cost_item_account_names: dict[str, str] | None = None) -> dict:
+    cost_item_account_names = cost_item_account_names or {}
     totals = _cost_node_subtotals(node)
-    children = [_cost_node_grid_row(child) for child in sorted(node.children, key=lambda n: n.display_order)]
+    children = [
+        _cost_node_grid_row(child, cost_item_account_names)
+        for child in sorted(node.children, key=lambda n: n.display_order)
+    ]
     is_item = node.is_item
     if is_item:
         node_type = "Cost Line"
     else:
         node_type = "Cost Grouping"
+    cost_item_account = ""
+    if is_item and node.code:
+        account_name = cost_item_account_names.get(node.code, "")
+        cost_item_account = f"{node.code} - {account_name}" if account_name else node.code
+
     row = {
         "id": node.id,
         "node_id": node.id,
@@ -67,6 +76,7 @@ def _cost_node_grid_row(node: PackageCostNode) -> dict:
         "description": node.description,
         "type": node_type,
         "control_account": node.cc_code or "",
+        "cost_item_account": cost_item_account,
         "baseline": totals["baseline"],
         "baseline_display": fmt_zar(totals["baseline"]) if totals["baseline"] else "",
         "pre_award": totals["pre_award"],
@@ -145,9 +155,10 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
         )
         indirect_l2 = db.query(IndirectL2Account).order_by(IndirectL2Account.code).all()
         cost_codes = db.query(CostItemCode).filter_by(project_number=project_number).order_by(CostItemCode.code).all()
+        cost_item_account_names = {code.code: code.name for code in cost_codes}
         root_nodes = [n for n in pkg.cost_nodes if n.parent_id is None]
         cost_node_rows = [
-            _cost_node_grid_row(node)
+            _cost_node_grid_row(node, cost_item_account_names)
             for node in sorted(root_nodes, key=lambda n: n.display_order)
         ]
         cost_node_totals = {

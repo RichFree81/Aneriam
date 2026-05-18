@@ -64,7 +64,7 @@
 
   function descriptionFormatter(cell) {
     const data = cell.getRow().getData();
-    const code = data.code ? '<span class="cost-code">' + escapeHtml(data.code) + '</span>' : '';
+    const code = data.type !== 'Cost Line' && data.code ? '<span class="cost-code">' + escapeHtml(data.code) + '</span>' : '';
     return code + '<span>' + escapeHtml(data.description || '') + '</span>';
   }
 
@@ -300,7 +300,7 @@
       columns: [
         {title: 'Description', field: 'description', minWidth: 340, widthGrow: 3, formatter: descriptionFormatter, headerSort: true},
         {title: 'Type', field: 'type', width: 150, formatter: typeFormatter, headerSort: true},
-        {title: 'Related Control Account', field: 'control_account', width: 160, headerSort: true},
+        {title: 'Related Cost Item Account', field: 'cost_item_account', minWidth: 190, widthGrow: 1.2, headerSort: true},
         {title: 'Baseline estimate', field: 'baseline', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('baseline'), sorter: 'number', headerSort: true},
         {title: 'Assigned cost', field: 'pre_award', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('pre_award'), sorter: 'number', headerSort: true},
         {title: 'Committed cost', field: 'contract', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('contract'), sorter: 'number', headerSort: true},

@@ -179,6 +179,8 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert "Add Cost Grouping" in response.text
         assert "Add Cost Line" in response.text
         assert "Related Control Account" in response.text
+        assert "Related Cost Item Account" in response.text
+        assert "title: 'Related Control Account'" not in response.text
         assert "Worksheet Grouping" in response.text
         assert '<option value="205">205 - Structures</option>' in response.text
         assert '<option value="205">205 - 205 - Structures</option>' not in response.text
@@ -212,6 +214,8 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert tree_data[0]["type"] == "Cost Grouping"
         leaf = tree_data[0]["_children"][0]
         assert leaf["type"] == "Cost Line"
+        assert leaf["description"] == "Bulk excavation line"
+        assert leaf["cost_item_account"] == "01.01"
         assert "_children" not in leaf
         assert "Cost Item Lines" not in response.text
         assert "Create Cost Item Code" not in response.text
