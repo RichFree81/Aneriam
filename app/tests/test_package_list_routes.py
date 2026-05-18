@@ -181,6 +181,24 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert level2.cost_sheet_id == original_sheet.id
         assert "Original Cost Sheet" in response.text
         assert "Add Variation Cost Sheet" in response.text
+        assert 'id="costSheetGrid"' in response.text
+        assert 'id="costNodeGrid"' not in response.text
+        assert "Back to Cost Sheets" not in response.text
+        assert "Add Cost Grouping" not in response.text
+        assert "Add Cost Line" not in response.text
+        assert f"/cost?sheet_id={original_sheet.id}" in response.text
+        start = response.text.index("const COST_SHEET_ROWS = ") + len("const COST_SHEET_ROWS = ")
+        end = response.text.index(";\n  const COST_COMPONENT_OPTIONS", start)
+        sheet_data = json.loads(response.text[start:end])
+        assert sheet_data[0]["sheet_number"] == "ORIGINAL"
+        assert sheet_data[0]["title"] == "Original Cost Sheet"
+        assert sheet_data[0]["baseline"] == 1000
+
+        response = client.get(f"/project/5006/packages/5006-PKG-001/cost?sheet_id={original_sheet.id}")
+        assert response.status_code == 200
+        assert 'id="costNodeGrid"' in response.text
+        assert 'id="costSheetGrid"' not in response.text
+        assert "Back to Cost Sheets" in response.text
         assert f'name="sheet_id" value="{original_sheet.id}"' in response.text
         assert "Add Cost Grouping" in response.text
         assert "Add Cost Line" in response.text
@@ -215,7 +233,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert "Earthworks" in response.text
         assert "Bulk excavation" in response.text
         start = response.text.index("const COST_NODE_ROWS = ") + len("const COST_NODE_ROWS = ")
-        end = response.text.index(";\n  const COST_COMPONENT_OPTIONS", start)
+        end = response.text.index(";\n  const COST_SHEET_ROWS", start)
         tree_data = json.loads(response.text[start:end])
         assert tree_data[0]["type"] == "Cost Grouping"
         leaf = tree_data[0]["_children"][0]
@@ -249,7 +267,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert response.status_code == 200
         assert "Variation 001 - scope change" in response.text
         start = response.text.index("const COST_NODE_ROWS = ") + len("const COST_NODE_ROWS = ")
-        end = response.text.index(";\n  const COST_COMPONENT_OPTIONS", start)
+        end = response.text.index(";\n  const COST_SHEET_ROWS", start)
         assert json.loads(response.text[start:end]) == []
 
         response = client.post(

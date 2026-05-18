@@ -86,6 +86,10 @@ def _active_cost_sheet(request: Request, sheets: list[PackageCostSheet]) -> Pack
     return next((sheet for sheet in sheets if sheet.sheet_type == "Original"), sheets[0])
 
 
+def _is_cost_sheet_open(request: Request) -> bool:
+    return bool(request.query_params.get("sheet_id", "").strip())
+
+
 def _resolve_cost_sheet(db: Session, pkg, sheet_id: str) -> PackageCostSheet:
     if sheet_id.strip():
         sheet = db.get(PackageCostSheet, int(sheet_id))
@@ -194,6 +198,31 @@ def _cost_item_code_option_rows(codes: list[CostItemCode]) -> list[dict]:
     ]
 
 
+def _cost_sheet_row(pkg, sheet: PackageCostSheet) -> dict:
+    roots = [node for node in pkg.cost_nodes if node.parent_id is None and node.cost_sheet_id == sheet.id]
+    totals = {"baseline": 0.0, "pre_award": 0.0, "contract": 0.0}
+    for node in roots:
+        node_totals = _cost_node_subtotals(node)
+        totals["baseline"] += node_totals["baseline"]
+        totals["pre_award"] += node_totals["pre_award"]
+        totals["contract"] += node_totals["contract"]
+    return {
+        "id": sheet.id,
+        "sheet_number": sheet.sheet_number,
+        "title": sheet.title,
+        "sheet_type": sheet.sheet_type,
+        "status": sheet.status,
+        "description": sheet.description or "",
+        "baseline": totals["baseline"],
+        "baseline_display": fmt_zar(totals["baseline"]) if totals["baseline"] else "R 0.00",
+        "pre_award": totals["pre_award"],
+        "pre_award_display": fmt_zar(totals["pre_award"]) if totals["pre_award"] else "R 0.00",
+        "contract": totals["contract"],
+        "contract_display": fmt_zar(totals["contract"]) if totals["contract"] else "R 0.00",
+        "open_url": f"/project/{pkg.project_number}/packages/{pkg.package_number}/cost?sheet_id={sheet.id}",
+    }
+
+
 def _cost_component_option_rows(components: list[CostComponent]) -> list[dict]:
     return [
         {
@@ -214,6 +243,7 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
     if active_pkg_tab == "cost":
         cost_sheets = _ensure_cost_sheets(db, pkg)
         active_cost_sheet = _active_cost_sheet(request, cost_sheets)
+        cost_sheet_open = _is_cost_sheet_open(request)
         cost_components = (
             db.query(CostComponent)
             .filter_by(project_number=project_number)
@@ -237,6 +267,7 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "contract": sum(row["contract"] for row in cost_node_rows),
         }
         cost_group_options = _cost_node_options(root_nodes)
+        cost_sheet_rows = [_cost_sheet_row(pkg, sheet) for sheet in cost_sheets]
         control_accounts = db.query(ControlAccount).order_by(ControlAccount.code).all()
         award_errors = []
         return templates.TemplateResponse("package_wbs.html", {
@@ -256,7 +287,9 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "cost_node_totals": cost_node_totals,
             "cost_group_options": cost_group_options,
             "cost_sheets": cost_sheets,
+            "cost_sheet_rows": cost_sheet_rows,
             "active_cost_sheet": active_cost_sheet,
+            "cost_sheet_open": cost_sheet_open,
             "control_accounts": control_accounts,
             "award_errors": award_errors,
             "active_tab": "wbs",

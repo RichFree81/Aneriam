@@ -8,6 +8,11 @@
 {% endblock %}
 
 {% block actions_items %}
+{% if cost_sheet_open %}
+<a href="{{ pkg_base }}/cost">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M5.854 3.146a.5.5 0 0 1 0 .708L2.707 7H14a.5.5 0 0 1 0 1H2.707l3.147 3.146a.5.5 0 0 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4a.5.5 0 0 1 .708 0z"/></svg>
+  Back to Cost Sheets
+</a>
 <a href="#" onclick="openCostGroupModal(); return false;">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zM9 2.5A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zM1 10.5A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zM9 10.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3z"/></svg>
   Add Cost Grouping
@@ -16,10 +21,12 @@
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a.5.5 0 0 1 .5.5v5.5H14a.5.5 0 0 1 0 1H8.5V14a.5.5 0 0 1-1 0V8.5H2a.5.5 0 0 1 0-1h5.5V2a.5.5 0 0 1 .5-.5z"/></svg>
   Add Cost Line
 </a>
+{% else %}
 <a href="#" onclick="openCostSheetModal(); return false;">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h6A1.5 1.5 0 0 1 11 2.5V4h1.5A1.5 1.5 0 0 1 14 5.5v8a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5v-11zM3.5 2a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-8a.5.5 0 0 0-.5-.5H11v7.5a.5.5 0 0 1-.8.4L8 11.25 5.8 12.9a.5.5 0 0 1-.8-.4V2H3.5z"/></svg>
   Add Variation Cost Sheet
 </a>
+{% endif %}
 {% if not package.is_contracted %}
 <a href="#" onclick="openAwardModal(); return false;">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>
@@ -45,6 +52,7 @@
 <script src="/static/vendor/tabulator/tabulator.min.js"></script>
 <script>
   const COST_NODE_ROWS = {{ cost_node_rows | tojson }};
+  const COST_SHEET_ROWS = {{ cost_sheet_rows | tojson }};
   const COST_COMPONENT_OPTIONS = {{ cost_component_options | tojson }};
   const COST_ITEM_CODE_OPTIONS = {{ cost_item_code_options | tojson }};
   const STANDARD_COST_ACCOUNTS = {{ direct_library | tojson }};
@@ -86,39 +94,48 @@
 
   function openCostGroupModal() {
     closeActions();
-    document.getElementById('costGroupOverlay').classList.add('open');
-    document.getElementById('costGroupModal').classList.add('open');
-    setTimeout(() => document.getElementById('groupDescription').focus(), 60);
+    const overlay = document.getElementById('costGroupOverlay');
+    const modal = document.getElementById('costGroupModal');
+    if (!overlay || !modal) return;
+    overlay.classList.add('open');
+    modal.classList.add('open');
+    setTimeout(() => document.getElementById('groupDescription')?.focus(), 60);
   }
 
   function closeCostGroupModal() {
-    document.getElementById('costGroupOverlay').classList.remove('open');
-    document.getElementById('costGroupModal').classList.remove('open');
+    document.getElementById('costGroupOverlay')?.classList.remove('open');
+    document.getElementById('costGroupModal')?.classList.remove('open');
   }
 
   function openCostItemModal() {
     closeActions();
-    document.getElementById('costItemOverlay').classList.add('open');
-    document.getElementById('costItemModal').classList.add('open');
+    const overlay = document.getElementById('costItemOverlay');
+    const modal = document.getElementById('costItemModal');
+    if (!overlay || !modal) return;
+    overlay.classList.add('open');
+    modal.classList.add('open');
     refreshCostComponentOptions();
-    setTimeout(() => document.getElementById('costLineCategory').focus(), 60);
+    setTimeout(() => document.getElementById('costLineCategory')?.focus(), 60);
   }
 
   function closeCostItemModal() {
-    document.getElementById('costItemOverlay').classList.remove('open');
-    document.getElementById('costItemModal').classList.remove('open');
+    document.getElementById('costItemOverlay')?.classList.remove('open');
+    document.getElementById('costItemModal')?.classList.remove('open');
   }
 
   function openCostSheetModal() {
     closeActions();
-    document.getElementById('costSheetOverlay').classList.add('open');
-    document.getElementById('costSheetModal').classList.add('open');
-    setTimeout(() => document.getElementById('costSheetTitle').focus(), 60);
+    const overlay = document.getElementById('costSheetOverlay');
+    const modal = document.getElementById('costSheetModal');
+    if (!overlay || !modal) return;
+    overlay.classList.add('open');
+    modal.classList.add('open');
+    setTimeout(() => document.getElementById('costSheetTitle')?.focus(), 60);
   }
 
   function closeCostSheetModal() {
-    document.getElementById('costSheetOverlay').classList.remove('open');
-    document.getElementById('costSheetModal').classList.remove('open');
+    document.getElementById('costSheetOverlay')?.classList.remove('open');
+    document.getElementById('costSheetModal')?.classList.remove('open');
   }
 
   function openCostAccountModal() {
@@ -128,10 +145,11 @@
   }
 
   function closeCostAccountModal(resetSelection = false) {
-    document.getElementById('costAccountOverlay').classList.remove('open');
-    document.getElementById('costAccountModal').classList.remove('open');
+    document.getElementById('costAccountOverlay')?.classList.remove('open');
+    document.getElementById('costAccountModal')?.classList.remove('open');
     if (resetSelection) {
       const accountSelect = document.getElementById('costLineItemCode');
+      if (!accountSelect) return;
       const firstReal = Array.from(accountSelect.options).find(option => option.value && option.value !== '__add__');
       accountSelect.value = firstReal ? firstReal.value : '';
       document.getElementById('costLineAccountMode').value = 'existing';
@@ -152,6 +170,7 @@
   }
 
   function openCostEditDrawer(data) {
+    if (!document.getElementById('costEditDrawer')) return;
     const isItem = data.type === 'Cost Line';
     document.getElementById('costEditTitle').textContent = isItem ? 'Edit Cost Line' : 'Edit ' + data.type;
     document.getElementById('costDeleteForm').action = '{{ pkg_base }}/cost/delete-node/' + data.node_id;
@@ -177,8 +196,8 @@
   }
 
   function closeCostEditDrawer() {
-    document.getElementById('costEditOverlay').classList.remove('open');
-    document.getElementById('costEditDrawer').classList.remove('open');
+    document.getElementById('costEditOverlay')?.classList.remove('open');
+    document.getElementById('costEditDrawer')?.classList.remove('open');
   }
 
   function costDeleteMessage() {
@@ -302,7 +321,41 @@
   }
 
   document.addEventListener('DOMContentLoaded', function() {
-    new Tabulator('#costNodeGrid', {
+    const sheetGridEl = document.getElementById('costSheetGrid');
+    if (sheetGridEl) {
+      new Tabulator(sheetGridEl, {
+        data: COST_SHEET_ROWS,
+        layout: 'fitColumns',
+        placeholder: 'No cost sheets registered.',
+        columns: [
+          {title: 'Sheet number', field: 'sheet_number', width: 150, headerSort: true},
+          {title: 'Title', field: 'title', minWidth: 260, widthGrow: 2.2, headerSort: true},
+          {title: 'Type', field: 'sheet_type', width: 130, headerSort: true},
+          {title: 'Status', field: 'status', width: 120, headerSort: true},
+          {title: 'Assigned cost', field: 'pre_award', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('pre_award'), sorter: 'number', headerSort: true},
+          {title: 'Committed cost', field: 'contract', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('contract'), sorter: 'number', headerSort: true},
+          {
+            title: '',
+            field: 'open_url',
+            width: 52,
+            hozAlign: 'center',
+            formatter: editFormatter,
+            headerSort: false,
+            cellClick: function(e, cell) {
+              e.stopPropagation();
+              window.location.href = cell.getRow().getData().open_url;
+            },
+          },
+        ],
+        rowClick: function(e, row) {
+          window.location.href = row.getData().open_url;
+        },
+      });
+    }
+
+    const nodeGridEl = document.getElementById('costNodeGrid');
+    if (!nodeGridEl) return;
+    new Tabulator(nodeGridEl, {
       data: COST_NODE_ROWS,
       layout: 'fitColumns',
       dataTree: true,
@@ -352,7 +405,9 @@
 {% block content %}
 <style>
   #costNodeGrid.tabulator,
-  #costNodeGrid .tabulator {
+  #costNodeGrid .tabulator,
+  #costSheetGrid.tabulator,
+  #costSheetGrid .tabulator {
     border: none;
     background: #fff;
     color: #222;
@@ -361,19 +416,24 @@
     font-variant-numeric: tabular-nums;
   }
   #costNodeGrid .tabulator-header,
-  #costNodeGrid .tabulator .tabulator-header {
+  #costNodeGrid .tabulator .tabulator-header,
+  #costSheetGrid .tabulator-header,
+  #costSheetGrid .tabulator .tabulator-header {
     border-bottom: 2px solid #d0d8e4;
     background: #f0f4f8;
     color: #334;
     font-weight: 600;
   }
   #costNodeGrid .tabulator-header .tabulator-col,
-  #costNodeGrid .tabulator-col {
+  #costNodeGrid .tabulator-col,
+  #costSheetGrid .tabulator-header .tabulator-col,
+  #costSheetGrid .tabulator-col {
     background: #f0f4f8;
     border-right: none;
     min-height: 32px;
   }
-  #costNodeGrid .tabulator-col .tabulator-col-title {
+  #costNodeGrid .tabulator-col .tabulator-col-title,
+  #costSheetGrid .tabulator-col .tabulator-col-title {
     padding: 6px 28px 6px 8px;
     font-size: 12px;
     font-weight: 600;
@@ -383,7 +443,10 @@
   }
   #costNodeGrid .tabulator-row,
   #costNodeGrid .tabulator-row.tabulator-row-even,
-  #costNodeGrid .tabulator-row.tabulator-row-odd {
+  #costNodeGrid .tabulator-row.tabulator-row-odd,
+  #costSheetGrid .tabulator-row,
+  #costSheetGrid .tabulator-row.tabulator-row-even,
+  #costSheetGrid .tabulator-row.tabulator-row-odd {
     background: #fff;
     border-bottom: 1px solid #edf0f4;
     min-height: 32px;
@@ -394,7 +457,9 @@
     font-weight: 600;
   }
   #costNodeGrid .tabulator-row .tabulator-cell,
-  #costNodeGrid .tabulator-cell {
+  #costNodeGrid .tabulator-cell,
+  #costSheetGrid .tabulator-row .tabulator-cell,
+  #costSheetGrid .tabulator-cell {
     border-right: none;
     padding: 6px 8px;
     line-height: 1.3;
@@ -424,7 +489,8 @@
   }
   #costNodeGrid .cost-type-group { background: #eef2f7; color: #334; }
   #costNodeGrid .cost-type-item { background: #e6f0fb; color: #1a4a70; }
-  #costNodeGrid .cost-edit-btn {
+  #costNodeGrid .cost-edit-btn,
+  #costSheetGrid .cost-edit-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -436,7 +502,8 @@
     color: #1a4a80;
     cursor: pointer;
   }
-  #costNodeGrid .cost-edit-btn:hover {
+  #costNodeGrid .cost-edit-btn:hover,
+  #costSheetGrid .cost-edit-btn:hover {
     background: #e6f0fb;
   }
   .package-modal-grid {
@@ -477,52 +544,10 @@
   .cost-total-strip div:last-child { border-right: none; }
   .cost-total-strip .num { text-align: right; white-space: nowrap; }
   .cost-sheet-layout {
-    display: grid;
-    grid-template-columns: 280px minmax(0, 1fr);
-    gap: 14px;
-    align-items: start;
+    display: block;
   }
   .cost-sheet-sidebar {
-    border: 1px solid #dde6ee;
-    border-radius: 6px;
-    background: #fff;
-    overflow: hidden;
-  }
-  .cost-sheet-sidebar-header {
-    padding: 10px 12px;
-    border-bottom: 1px solid #e8edf3;
-    font-size: 12px;
-    font-weight: 700;
-    color: #1a2e4a;
-    background: #f7f9fc;
-  }
-  .cost-sheet-list {
-    display: flex;
-    flex-direction: column;
-  }
-  .cost-sheet-link {
-    padding: 10px 12px;
-    border-bottom: 1px solid #edf0f4;
-    text-decoration: none;
-    color: #334;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .cost-sheet-link:last-child { border-bottom: none; }
-  .cost-sheet-link.active {
-    background: #e6f0fb;
-    border-left: 3px solid #1a6eb0;
-    padding-left: 9px;
-  }
-  .cost-sheet-title {
-    font-size: 13px;
-    font-weight: 700;
-    color: #1a2e4a;
-  }
-  .cost-sheet-meta {
-    font-size: 11px;
-    color: #667;
+    display: none;
   }
   .cost-sheet-main {
     min-width: 0;
@@ -634,6 +659,11 @@
   <div class="summary-card fy"><div class="sc-label">Committed Cost</div><div class="sc-value">{{ (package.awarded_amount or 0) | zar }}</div></div>
 </div>
 
+{% if not cost_sheet_open %}
+<div class="card">
+  <div id="costSheetGrid"></div>
+</div>
+{% else %}
 <div class="cost-sheet-layout">
   <aside class="cost-sheet-sidebar">
     <div class="cost-sheet-sidebar-header">Cost Sheets</div>
@@ -649,7 +679,9 @@
 
   <div class="cost-sheet-main">
     <div class="cost-sheet-header">
+      <a href="{{ pkg_base }}/cost" class="btn btn-sm btn-ghost">Back to Cost Sheets</a>
       <div class="cost-sheet-heading">{{ active_cost_sheet.title }}</div>
+      <span class="cost-sheet-badge">{{ active_cost_sheet.sheet_number }}</span>
       <span class="cost-sheet-badge">{{ active_cost_sheet.sheet_type }}</span>
       <span class="cost-sheet-badge">{{ active_cost_sheet.status }}</span>
     </div>
@@ -665,6 +697,9 @@
   </div>
 </div>
 
+{% endif %}
+
+{% if cost_sheet_open %}
 <div class="cost-drawer-overlay" id="costEditOverlay" onclick="closeCostEditDrawer()"></div>
 <aside class="cost-drawer" id="costEditDrawer" aria-label="Edit cost record">
   <div class="cost-drawer-header">
@@ -790,6 +825,8 @@
     </div>
   </form>
 </div>
+
+{% endif %}
 
 <div class="filter-overlay" id="costSheetOverlay" onclick="closeCostSheetModal()"></div>
 <div class="filter-modal" id="costSheetModal" style="width:560px;">
