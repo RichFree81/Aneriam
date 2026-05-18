@@ -252,6 +252,12 @@
   function openSheetEditDrawer(data) {
     document.getElementById('sheetEditTitle').textContent = 'Edit Cost Sheet ' + data.sheet_number;
     document.getElementById('sheetEditForm').action = '{{ pkg_base }}/cost/update-sheet/' + data.id;
+    document.getElementById('sheetDeleteForm').action = '{{ pkg_base }}/cost/delete-sheet/' + data.id;
+    document.getElementById('sheetDeleteForm').dataset.sheetTitle = data.title || 'this cost sheet';
+    const deleteButton = document.getElementById('sheetDeleteButton');
+    const isAwardBaseline = data.status === 'Award Baseline';
+    deleteButton.disabled = isAwardBaseline;
+    deleteButton.title = isAwardBaseline ? 'The awarded baseline cannot be deleted' : 'Delete cost sheet';
     document.getElementById('editSheetNumber').value = formValue(data.sheet_number);
     document.getElementById('editSheetTitle').value = formValue(data.title);
     document.getElementById('editSheetType').value = formValue(data.sheet_type);
@@ -267,6 +273,11 @@
   function closeSheetEditDrawer() {
     document.getElementById('sheetEditOverlay')?.classList.remove('open');
     document.getElementById('sheetEditDrawer')?.classList.remove('open');
+  }
+
+  function sheetDeleteMessage() {
+    const title = document.getElementById('sheetDeleteForm').dataset.sheetTitle || 'this cost sheet';
+    return 'Delete "' + title + '" and all worksheet rows in it?';
   }
 
   function costDeleteMessage() {
@@ -811,6 +822,9 @@
 <aside class="cost-drawer" id="sheetEditDrawer" aria-label="Edit cost sheet">
   <div class="cost-drawer-header">
     <div class="cost-drawer-title" id="sheetEditTitle">Edit Cost Sheet</div>
+    <form id="sheetDeleteForm" method="post" onsubmit="return sheetDeleteMessage() ? confirm(sheetDeleteMessage()) : false;">
+      <button type="submit" class="btn btn-sm cost-delete-btn" id="sheetDeleteButton">Delete</button>
+    </form>
     <button class="fm-close" onclick="closeSheetEditDrawer()" aria-label="Close">&times;</button>
   </div>
   <div class="cost-drawer-body">

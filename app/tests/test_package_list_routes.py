@@ -147,6 +147,90 @@ def test_package_list_delete_route_deletes_package():
         session.close()
 
 
+def test_package_cost_sheet_edit_drawer_deletes_working_sheet_and_baseline():
+    client, session, package_id = _client_with_package()
+    try:
+        response = client.get("/project/5006/packages/5006-PKG-001/cost")
+        assert response.status_code == 200
+        assert "sheetDeleteForm" in response.text
+        assert "/cost/delete-sheet/" in response.text
+        working_sheet = session.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Working Estimate").one()
+        node = PackageCostNode(
+            package_id=package_id,
+            cost_sheet_id=working_sheet.id,
+            code="1",
+            description="Temporary worksheet row",
+            is_item=False,
+            display_order=0,
+        )
+        session.add(node)
+        session.commit()
+
+        response = client.post(
+            f"/project/5006/packages/5006-PKG-001/cost/delete-sheet/{working_sheet.id}",
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert session.get(PackageCostNode, node.id) is None
+        replacement_sheet = session.query(PackageCostSheet).filter_by(package_id=package_id).one()
+        assert replacement_sheet.sheet_number == "1"
+        assert replacement_sheet.title == "Package Base Cost"
+        assert replacement_sheet.sheet_type == "Working Estimate"
+
+        baseline = PackageCostSheet(
+            package_id=package_id,
+            sheet_number="2",
+            title="Baseline 1 - Feasibility",
+            sheet_type="Baseline",
+            status="Locked",
+            description="Admin removable baseline",
+            display_order=1,
+        )
+        session.add(baseline)
+        session.flush()
+        baseline_node = PackageCostNode(
+            package_id=package_id,
+            cost_sheet_id=baseline.id,
+            code="1",
+            description="Baseline worksheet row",
+            is_item=False,
+            display_order=0,
+        )
+        session.add(baseline_node)
+        session.commit()
+
+        response = client.post(
+            f"/project/5006/packages/5006-PKG-001/cost/delete-sheet/{baseline.id}",
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert session.get(PackageCostSheet, baseline.id) is None
+        assert session.get(PackageCostNode, baseline_node.id) is None
+        session.refresh(replacement_sheet)
+        assert replacement_sheet.sheet_number == "1"
+
+        award_baseline = PackageCostSheet(
+            package_id=package_id,
+            sheet_number="2",
+            title="Award Baseline",
+            sheet_type="Baseline",
+            status="Award Baseline",
+            description="Contractual award reference",
+            display_order=-100,
+        )
+        session.add(award_baseline)
+        session.commit()
+        response = client.post(
+            f"/project/5006/packages/5006-PKG-001/cost/delete-sheet/{award_baseline.id}",
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
+        assert session.get(PackageCostSheet, award_baseline.id) is not None
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+
+
 def test_package_cost_tab_uses_hierarchical_actions_and_table():
     client, session, package_id = _client_with_package()
     try:

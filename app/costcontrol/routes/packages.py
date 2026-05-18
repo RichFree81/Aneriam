@@ -814,6 +814,28 @@ def cost_update_sheet(
     return _cost_redirect(project_number, package_number)
 
 
+@router.post("/project/{project_number}/packages/{package_number}/cost/delete-sheet/{sheet_id}")
+def cost_delete_sheet(project_number: str, package_number: str, sheet_id: int, db: DbDep):
+    pkg = get_package_or_404(db, project_number, package_number)
+    sheet = db.get(PackageCostSheet, sheet_id)
+    if sheet is None or sheet.package_id != pkg.id:
+        raise HTTPException(status_code=404, detail="Cost sheet not found")
+    if sheet.status == "Award Baseline":
+        raise HTTPException(status_code=400, detail="The awarded baseline cannot be deleted")
+
+    for dependent in db.query(PackageCostSheet).filter_by(source_sheet_id=sheet.id).all():
+        dependent.source_sheet_id = None
+    db.delete(sheet)
+    db.flush()
+    remaining = db.query(PackageCostSheet).filter_by(package_id=pkg.id).count()
+    if remaining:
+        _renumber_cost_sheets(db, pkg)
+    else:
+        _ensure_cost_sheets(db, pkg)
+    db.commit()
+    return _cost_redirect(project_number, package_number)
+
+
 @router.post("/project/{project_number}/packages/{package_number}/cost/create-baseline")
 def cost_create_baseline(
     project_number: str,
