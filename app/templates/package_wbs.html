@@ -105,6 +105,25 @@
     document.getElementById('costItemModal').classList.remove('open');
   }
 
+  function openCostAccountModal() {
+    document.getElementById('costAccountOverlay').classList.add('open');
+    document.getElementById('costAccountModal').classList.add('open');
+    refreshNewCostAccountFields();
+  }
+
+  function closeCostAccountModal(resetSelection = false) {
+    document.getElementById('costAccountOverlay').classList.remove('open');
+    document.getElementById('costAccountModal').classList.remove('open');
+    if (resetSelection) {
+      const accountSelect = document.getElementById('costLineItemCode');
+      const firstReal = Array.from(accountSelect.options).find(option => option.value && option.value !== '__add__');
+      accountSelect.value = firstReal ? firstReal.value : '';
+      document.getElementById('costLineAccountMode').value = 'existing';
+      document.getElementById('costLineLibraryAccount').value = '';
+      document.getElementById('costLineCustomAccount').value = '';
+    }
+  }
+
   function openAwardModal() {
     closeActions();
     document.getElementById('awardOverlay').classList.add('open');
@@ -165,13 +184,16 @@
     const categorySelect = document.getElementById('costLineCategory');
     const componentId = componentSelect.value;
     accountSelect.innerHTML = '';
+    document.getElementById('costLineAccountMode').value = 'existing';
+    document.getElementById('costLineLibraryAccount').value = '';
+    document.getElementById('costLineCustomAccount').value = '';
 
     const component = COST_COMPONENT_OPTIONS.find(item => String(item.id) === String(componentId));
     categorySelect.value = component ? component.commodity_code : '';
 
     const matching = COST_ITEM_CODE_OPTIONS.filter(item => String(item.cost_component_id) === String(componentId));
     if (!componentId) {
-      accountSelect.appendChild(new Option('Select Level 2 Cost Component first...', ''));
+      accountSelect.appendChild(new Option('Select Related Cost Component first...', ''));
       accountSelect.disabled = true;
       modeSelect.value = 'existing';
       modeSelect.disabled = true;
@@ -185,28 +207,55 @@
     } else {
       accountSelect.disabled = false;
       modeSelect.disabled = false;
+      accountSelect.appendChild(new Option('No accounts added yet - select Add new', ''));
       accountSelect.appendChild(new Option('+ Add new Cost Item Account', '__add__'));
-      accountSelect.value = '__add__';
     }
-    refreshCostItemCodeCreateFields();
+    handleCostItemAccountSelection(false);
   }
 
-  function refreshCostItemCodeCreateFields() {
+  function handleCostItemAccountSelection(openOnAdd = true) {
     const accountSelect = document.getElementById('costLineItemCode');
-    const modeSelect = document.getElementById('costLineAccountMode');
-    const createFields = document.getElementById('costAccountCreateFields');
+    if (accountSelect.value === '__add__' && openOnAdd) {
+      openCostAccountModal();
+    } else if (accountSelect.value !== '__add__') {
+      document.getElementById('costLineAccountMode').value = 'existing';
+      document.getElementById('costLineLibraryAccount').value = '';
+      document.getElementById('costLineCustomAccount').value = '';
+    }
+  }
+
+  function refreshNewCostAccountFields() {
+    const modeSelect = document.getElementById('newCostAccountMode');
     const libraryField = document.getElementById('standardAccountField');
     const customField = document.getElementById('customAccountField');
-    const addingAccount = accountSelect.value === '__add__';
-    createFields.style.display = addingAccount ? 'grid' : 'none';
-    modeSelect.disabled = !addingAccount;
-    if (!addingAccount) {
-      modeSelect.value = 'existing';
-    } else if (modeSelect.value === 'existing') {
-      modeSelect.value = 'library';
+    libraryField.style.display = modeSelect.value === 'library' ? 'flex' : 'none';
+    customField.style.display = modeSelect.value === 'custom' ? 'flex' : 'none';
+  }
+
+  function applyNewCostAccount() {
+    const mode = document.getElementById('newCostAccountMode').value;
+    const libraryValue = document.getElementById('newLibraryAccount').value;
+    const customValue = document.getElementById('newCustomAccount').value.trim();
+    const selectedName = mode === 'library' ? libraryValue : customValue;
+    if (!selectedName) {
+      alert('Enter a custom Cost Item Account name.');
+      return false;
     }
-    libraryField.style.display = addingAccount && modeSelect.value === 'library' ? 'flex' : 'none';
-    customField.style.display = addingAccount && modeSelect.value === 'custom' ? 'flex' : 'none';
+
+    document.getElementById('costLineAccountMode').value = mode;
+    document.getElementById('costLineLibraryAccount').value = mode === 'library' ? libraryValue : '';
+    document.getElementById('costLineCustomAccount').value = mode === 'custom' ? customValue : '';
+
+    const accountSelect = document.getElementById('costLineItemCode');
+    let addOption = Array.from(accountSelect.options).find(option => option.value === '__add__');
+    if (!addOption) {
+      addOption = new Option('', '__add__');
+      accountSelect.appendChild(addOption);
+    }
+    addOption.text = '+ New: ' + selectedName;
+    accountSelect.value = '__add__';
+    closeCostAccountModal(false);
+    return false;
   }
 
   document.addEventListener('DOMContentLoaded', function() {
@@ -248,6 +297,7 @@
     if (e.key === 'Escape') {
       closeCostGroupModal();
       closeCostItemModal();
+      closeCostAccountModal(true);
       closeAwardModal();
       closeCostEditDrawer();
     }
@@ -560,33 +610,20 @@
   </div>
   <form method="post" action="{{ pkg_base }}/cost/add-item">
     <div class="fm-fields package-modal-grid">
-      <label>Level 2 Cost Component *
+      <label>Related Cost Component
         <select name="cost_component_id" id="costLineComponent" required onchange="refreshCostItemCodeOptions()">
           <option value="">Select...</option>
           {% for component in cost_components %}<option value="{{ component.id }}">{{ component.cbs_l2_code }} - {{ component.description }}</option>{% endfor %}
         </select>
       </label>
-      <label>Cost Item Account (CBS Level 3) *
-        <select name="cost_item_code_id" id="costLineItemCode" required onchange="refreshCostItemCodeCreateFields()">
-          <option value="">Select Level 2 Cost Component first...</option>
+      <label>Cost Item Account
+        <select name="cost_item_code_id" id="costLineItemCode" required onchange="handleCostItemAccountSelection()">
+          <option value="">Select Related Cost Component first...</option>
         </select>
       </label>
-      <div id="costAccountCreateFields" class="span-2 package-modal-grid" style="display:none;">
-        <label>Create Cost Item Account by
-          <select name="account_mode" id="costLineAccountMode" onchange="refreshCostItemCodeCreateFields()">
-            <option value="library">Standard library</option>
-            <option value="custom">Custom account</option>
-          </select>
-        </label>
-        <label id="standardAccountField">Standard Cost Item Account
-          <select name="library_account_name">
-            {% for item in direct_library %}<option value="{{ item }}">{{ item }}</option>{% endfor %}
-          </select>
-        </label>
-        <label id="customAccountField" style="display:none;">Custom Cost Item Account
-          <input name="custom_account_name" autocomplete="off">
-        </label>
-      </div>
+      <input type="hidden" name="account_mode" id="costLineAccountMode" value="existing">
+      <input type="hidden" name="library_account_name" id="costLineLibraryAccount">
+      <input type="hidden" name="custom_account_name" id="costLineCustomAccount">
       <label class="span-2">Cost line description *
         <input name="description" id="itemDescription" required autocomplete="off">
       </label>
@@ -614,6 +651,34 @@
       <button type="submit" class="btn btn-sm">Add Cost Line</button>
     </div>
   </form>
+</div>
+
+<div class="filter-overlay" id="costAccountOverlay" onclick="closeCostAccountModal(true)"></div>
+<div class="filter-modal" id="costAccountModal" style="width:560px;">
+  <div class="fm-header">
+    <span>Add Cost Item Account</span>
+    <button class="fm-close" onclick="closeCostAccountModal(true)" aria-label="Close">&times;</button>
+  </div>
+  <div class="fm-fields package-modal-grid">
+    <label>Add account by
+      <select id="newCostAccountMode" onchange="refreshNewCostAccountFields()">
+        <option value="library">Standard library</option>
+        <option value="custom">Custom account</option>
+      </select>
+    </label>
+    <label id="standardAccountField">Standard Cost Item Account
+      <select id="newLibraryAccount">
+        {% for item in direct_library %}<option value="{{ item }}">{{ item }}</option>{% endfor %}
+      </select>
+    </label>
+    <label id="customAccountField" style="display:none;">Custom Cost Item Account
+      <input id="newCustomAccount" autocomplete="off">
+    </label>
+  </div>
+  <div class="fm-footer">
+    <button type="button" class="btn btn-sm btn-ghost" onclick="closeCostAccountModal(true)">Cancel</button>
+    <button type="button" class="btn btn-sm" onclick="applyNewCostAccount()">Use Account</button>
+  </div>
 </div>
 
 <div class="filter-overlay" id="awardOverlay" onclick="closeAwardModal()"></div>

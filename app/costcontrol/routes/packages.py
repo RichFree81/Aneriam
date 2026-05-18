@@ -536,6 +536,8 @@ def _resolve_or_create_cost_item_code(
     if account_mode == "existing":
         if not cost_item_code_id.strip():
             raise HTTPException(status_code=400, detail="A CBS Level 3 Cost Item Account is required")
+        if cost_item_code_id == "__add__":
+            raise HTTPException(status_code=400, detail="Complete the Add Cost Item Account pop-out before saving")
         cost_code = db.get(CostItemCode, int(cost_item_code_id))
         if cost_code is None or cost_code.project_number != project_number:
             raise HTTPException(status_code=400, detail="Cost Item Account must belong to the same project")
