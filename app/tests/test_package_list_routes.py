@@ -179,7 +179,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         original_sheet = session.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Original").one()
         session.refresh(level2)
         assert level2.cost_sheet_id == original_sheet.id
-        assert "Original Cost Sheet" in response.text
+        assert "Package Base Cost" in response.text
         assert "Add Variation Cost Sheet" in response.text
         assert 'id="costSheetGrid"' in response.text
         assert 'id="costNodeGrid"' not in response.text
@@ -191,7 +191,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         end = response.text.index(";\n  const COST_COMPONENT_OPTIONS", start)
         sheet_data = json.loads(response.text[start:end])
         assert sheet_data[0]["sheet_number"] == "ORIGINAL"
-        assert sheet_data[0]["title"] == "Original Cost Sheet"
+        assert sheet_data[0]["title"] == "Package Base Cost"
         assert sheet_data[0]["baseline"] == 1000
 
         response = client.get(f"/project/5006/packages/5006-PKG-001/cost?sheet_id={original_sheet.id}")

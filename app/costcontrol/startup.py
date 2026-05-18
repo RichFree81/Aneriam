@@ -384,13 +384,19 @@ def ensure_package_cost_sheets(db: Session) -> None:
                         description, display_order, created_at
                     )
                     VALUES (
-                        :package_id, 'ORIGINAL', 'Original Cost Sheet', 'Original',
+                        :package_id, 'ORIGINAL', 'Package Base Cost', 'Original',
                         'Draft', '', 0, CURRENT_TIMESTAMP
                     )
                 """), {"package_id": package_id})
                 original_id = db.execute(text("SELECT last_insert_rowid()")).scalar_one()
             else:
                 original_id = original.id
+                db.execute(text("""
+                    UPDATE package_cost_sheets
+                    SET title = 'Package Base Cost'
+                    WHERE id = :original_id
+                      AND title = 'Original Cost Sheet'
+                """), {"original_id": original_id})
             db.execute(text("""
                 UPDATE package_cost_nodes
                 SET cost_sheet_id = :original_id

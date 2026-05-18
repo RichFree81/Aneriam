@@ -56,7 +56,7 @@ def _ensure_cost_sheets(db: Session, pkg) -> list[PackageCostSheet]:
         original = PackageCostSheet(
             package_id=pkg.id,
             sheet_number="ORIGINAL",
-            title="Original Cost Sheet",
+            title="Package Base Cost",
             sheet_type="Original",
             status="Draft",
             display_order=0,

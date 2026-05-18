@@ -309,6 +309,12 @@ def test_ensure_package_cost_sheets_creates_original_and_assigns_legacy_nodes():
         """))
         session.execute(text("INSERT INTO packages (id, package_number) VALUES (1, 'PKG')"))
         session.execute(text("""
+            INSERT INTO package_cost_sheets (
+                package_id, sheet_number, title, sheet_type, status, description, display_order
+            )
+            VALUES (1, 'ORIGINAL', 'Original Cost Sheet', 'Original', 'Draft', '', 0)
+        """))
+        session.execute(text("""
             INSERT INTO package_cost_nodes (id, package_id, description, is_item)
             VALUES (10, 1, 'Legacy line', 1)
         """))
@@ -322,7 +328,7 @@ def test_ensure_package_cost_sheets_creates_original_and_assigns_legacy_nodes():
             WHERE package_id = 1
         """)).mappings().one()
         assert sheet["sheet_number"] == "ORIGINAL"
-        assert sheet["title"] == "Original Cost Sheet"
+        assert sheet["title"] == "Package Base Cost"
         assert sheet["sheet_type"] == "Original"
 
         node_sheet_id = session.execute(text("""
