@@ -25,3 +25,4 @@ Hierarchical project controls data must use Tabulator tree grids where practical
 - Package cost items use the package-local three-level hierarchy: Cost Grouping -> Cost Item Account -> Cost Line.
 - Cost Grouping and Cost Item Account rows must roll up child values so grouping, account, and grand totals can be read from the tree.
 - Package Cost Groupings are not Scope Cost Components. They are BOQ-style grouping buckets inside one package cost build-up.
+- Cost Grouping and Cost Item Account codes are generated numeric outline codes such as `1`, `1.1`, and `1.2`. Cost Lines keep their cost item code field and do not inherit the grouping outline number.

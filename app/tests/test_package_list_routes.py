@@ -222,7 +222,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         )
         assert response.status_code == 303
         session.refresh(level2)
-        assert level2.code == "02"
+        assert level2.code == "01"
         assert level2.description == "Civils"
 
         response = client.post(
@@ -264,13 +264,32 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             description="Installation",
             is_item=False,
         ).one()
+        assert new_account.code == "01.2"
         new_line = session.query(PackageCostNode).filter_by(
             package_id=package_id,
             parent_id=new_account.id,
             description="Install anchor bolts",
             is_item=True,
         ).one()
+        assert new_line.code == ""
         assert new_line.baseline_amount == 900
+
+        response = client.post(
+            "/project/5006/packages/5006-PKG-001/cost/add-section",
+            data={
+                "code": "SHOULD-NOT-BE-USED",
+                "description": "Steelwork",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        new_grouping = session.query(PackageCostNode).filter_by(
+            package_id=package_id,
+            parent_id=None,
+            description="Steelwork",
+            is_item=False,
+        ).one()
+        assert new_grouping.code == "2"
 
         response = client.post(
             "/project/5006/packages/5006-PKG-001/cost/add-item",

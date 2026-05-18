@@ -444,6 +444,10 @@
     font-size: 13px;
     font-family: inherit;
   }
+  .cost-drawer-form input[readonly] {
+    background: #f4f6f8;
+    color: #556;
+  }
   .cost-drawer-footer {
     padding: 12px 16px;
     border-top: 1px solid #e8edf3;
@@ -483,7 +487,7 @@
   <div class="cost-drawer-body">
     <form id="costEditGroupForm" class="cost-drawer-form" method="post">
       <label>Code
-        <input name="code" id="editGroupCode" autocomplete="off">
+        <input id="editGroupCode" readonly autocomplete="off">
       </label>
       <label>Description *
         <input name="description" id="editGroupDescription" required autocomplete="off">
@@ -495,7 +499,7 @@
     </form>
 
     <form id="costEditItemForm" class="cost-drawer-form" method="post">
-      <label>Code
+      <label>Cost item code
         <input name="code" id="editItemCode" autocomplete="off">
       </label>
       <label>Description *
@@ -532,9 +536,6 @@
   </div>
   <form method="post" action="{{ pkg_base }}/cost/add-section">
     <div class="fm-fields package-modal-grid">
-      <label>Code
-        <input name="code" autocomplete="off">
-      </label>
       <label class="span-2">Description *
         <input name="description" id="groupDescription" required autocomplete="off">
       </label>
@@ -587,7 +588,7 @@
           {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
         </select>
       </label>
-      <label>Code
+      <label>Cost item code
         <input name="code" autocomplete="off">
       </label>
       <label>Description *

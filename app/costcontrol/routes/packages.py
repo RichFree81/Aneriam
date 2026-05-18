@@ -382,6 +382,19 @@ def _next_sibling_order(pkg, parent_id: int | None) -> int:
     return max((n.display_order for n in siblings), default=-1) + 1
 
 
+def _next_group_code(pkg, parent_id: int | None, db: Session) -> str:
+    siblings = [
+        n for n in pkg.cost_nodes
+        if n.parent_id == parent_id and not n.is_item
+    ]
+    sequence = len(siblings) + 1
+    if parent_id is None:
+        return str(sequence)
+    parent = db.get(PackageCostNode, parent_id)
+    parent_code = parent.code if parent and parent.code else str(sequence)
+    return f"{parent_code}.{sequence}"
+
+
 def _resolve_parent_id(db: Session, pkg, parent_id_str: str) -> int | None:
     """Parse a form-supplied parent_id and verify it belongs to *pkg*.
 
@@ -431,7 +444,7 @@ def _create_cost_account_node(
     node = PackageCostNode(
         package_id=pkg.id,
         parent_id=grouping_node.id,
-        code="",
+        code=_next_group_code(pkg, grouping_node.id, db),
         description=name,
         is_item=False,
         display_order=_next_sibling_order(pkg, grouping_node.id),
@@ -459,7 +472,7 @@ def cost_add_section(
     node = PackageCostNode(
         package_id=pkg.id,
         parent_id=parent_int,
-        code=code.strip(),
+        code=_next_group_code(pkg, parent_int, db),
         description=description.strip(),
         is_item=False,
         display_order=_next_sibling_order(pkg, parent_int),
@@ -484,7 +497,6 @@ def cost_update_section(
         raise HTTPException(status_code=404, detail="Cost node not found")
     if node.is_item:
         raise HTTPException(status_code=400, detail="Use the cost line editor for cost lines")
-    node.code = code.strip()
     node.description = description.strip()
     db.commit()
     return _cost_redirect(project_number, package_number)

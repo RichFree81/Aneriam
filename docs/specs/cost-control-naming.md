@@ -17,6 +17,6 @@ This register records intentional differences between database names and user-fa
 | `packages.package_source` | Package source | Three-value source classification: External / Internal / Client. |
 | `packages.is_contracted` | Award status | Boolean projected as Planned / Awarded in the UI. |
 | `package_cost_items` | Cost Items / Cost Item Lines | Flat WBS line items at the Package x Cost Item Code intersection. |
-| `package_cost_nodes` root group rows | Cost Groupings | Package-local grouping buckets for BOQ-style cost build-ups. These are not Scope Cost Components. |
-| `package_cost_nodes` child group rows | Cost Item Accounts | Package cost Level 3 account buckets such as Supply, Installation, Earthworks, or Reinforced Concrete Works. |
-| `package_cost_nodes` item rows | Cost Lines | Detailed build-up lines assigned beneath a Cost Item Account. Cost lines are not a CBS level. |
+| `package_cost_nodes` root group rows | Cost Groupings | Package-local grouping buckets for BOQ-style cost build-ups. These are not Scope Cost Components. Codes are generated as numeric outline values such as `1`, `2`, `3`. |
+| `package_cost_nodes` child group rows | Cost Item Accounts | Package cost Level 3 account buckets such as Supply, Installation, Earthworks, or Reinforced Concrete Works. Codes are generated beneath the parent Cost Grouping, for example `1.1` or `1.2`. |
+| `package_cost_nodes` item rows | Cost Lines | Detailed build-up lines assigned beneath a Cost Item Account. Cost lines are not a CBS level and do not inherit package grouping outline numbers; their code field remains the cost item code. |
