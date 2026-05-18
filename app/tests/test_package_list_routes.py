@@ -188,10 +188,11 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert response.status_code == 200
         assert "Add Cost Grouping" in response.text
         assert "Add Cost Line" in response.text
+        assert "Related Control Account" in response.text
         assert "Related Cost Component" in response.text
         assert "Cost Item Account" in response.text
         assert "Cost Item Account (CBS Level 3)" not in response.text
-        assert "Cost Category (CBS Level 1)" in response.text
+        assert "Cost Category (CBS Level 1)" not in response.text
         assert "CBS cost item code" in response.text
         assert "Cost line description" in response.text
         assert "Standard library" in response.text
@@ -351,6 +352,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             "/project/5006/packages/5006-PKG-001/cost/add-item",
             data={
                 "cost_component_id": str(component.id),
+                "cc_code": "205",
                 "cost_item_code_id": str(existing_code.id),
                 "account_mode": "existing",
                 "description": "Install furnace shell",
@@ -386,6 +388,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             "/project/5006/packages/5006-PKG-001/cost/add-item",
             data={
                 "cost_component_id": str(component.id),
+                "cc_code": "205",
                 "cost_item_code_id": "__add__",
                 "account_mode": "custom",
                 "custom_account_name": "Refractory works",
@@ -402,6 +405,20 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             source="custom",
         ).one()
         assert custom_code.code == "205.01.02"
+
+        response = client.post(
+            "/project/5006/packages/5006-PKG-001/cost/add-item",
+            data={
+                "cost_component_id": str(component.id),
+                "cc_code": "206",
+                "cost_item_code_id": str(existing_code.id),
+                "account_mode": "existing",
+                "description": "Mismatched control account",
+                "baseline_amount": "1",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
 
         response = client.post(
             f"/project/5006/packages/5006-PKG-001/cost/delete-node/{item.id}",

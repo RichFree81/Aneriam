@@ -684,6 +684,8 @@ def cost_add_item(
         component = db.get(CostComponent, cost_code.cost_component_id)
         if component is None:
             raise HTTPException(status_code=400, detail="Cost Item Account must be linked to a Level 2 Cost Component")
+        if cc_code.strip() and cc_code.strip() != component.commodity_code:
+            raise HTTPException(status_code=400, detail="Related Control Account must match the selected Cost Component")
         grouping_node = _find_or_create_component_grouping(db, pkg, component)
         parent_node = _find_or_create_cost_account_for_code(
             db,

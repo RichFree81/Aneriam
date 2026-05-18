@@ -96,8 +96,8 @@
     closeActions();
     document.getElementById('costItemOverlay').classList.add('open');
     document.getElementById('costItemModal').classList.add('open');
-    refreshCostItemCodeOptions();
-    setTimeout(() => document.getElementById('itemDescription').focus(), 60);
+    refreshCostComponentOptions();
+    setTimeout(() => document.getElementById('costLineCategory').focus(), 60);
   }
 
   function closeCostItemModal() {
@@ -177,19 +177,50 @@
     return 'Delete this cost line?';
   }
 
+  function resetCostItemAccountOptions(message) {
+    const accountSelect = document.getElementById('costLineItemCode');
+    accountSelect.innerHTML = '';
+    accountSelect.appendChild(new Option(message, ''));
+    accountSelect.disabled = true;
+    document.getElementById('costLineAccountMode').value = 'existing';
+    document.getElementById('costLineLibraryAccount').value = '';
+    document.getElementById('costLineCustomAccount').value = '';
+  }
+
+  function refreshCostComponentOptions() {
+    const categorySelect = document.getElementById('costLineCategory');
+    const componentSelect = document.getElementById('costLineComponent');
+    const categoryCode = categorySelect.value;
+    componentSelect.innerHTML = '';
+    resetCostItemAccountOptions('Select Related Cost Component first...');
+
+    if (!categoryCode) {
+      componentSelect.appendChild(new Option('Select Related Control Account first...', ''));
+      componentSelect.disabled = true;
+      return;
+    }
+
+    const matching = COST_COMPONENT_OPTIONS.filter(item => item.commodity_code === categoryCode);
+    componentSelect.disabled = false;
+    componentSelect.appendChild(new Option('Select...', ''));
+    if (matching.length) {
+      matching.forEach(item => {
+        componentSelect.appendChild(new Option(item.code + ' - ' + item.description, item.id));
+      });
+    } else {
+      componentSelect.appendChild(new Option('No Cost Components for this Control Account', ''));
+    }
+  }
+
   function refreshCostItemCodeOptions() {
     const componentSelect = document.getElementById('costLineComponent');
     const accountSelect = document.getElementById('costLineItemCode');
     const modeSelect = document.getElementById('costLineAccountMode');
-    const categorySelect = document.getElementById('costLineCategory');
     const componentId = componentSelect.value;
     accountSelect.innerHTML = '';
     document.getElementById('costLineAccountMode').value = 'existing';
     document.getElementById('costLineLibraryAccount').value = '';
     document.getElementById('costLineCustomAccount').value = '';
-
-    const component = COST_COMPONENT_OPTIONS.find(item => String(item.id) === String(componentId));
-    categorySelect.value = component ? component.commodity_code : '';
 
     const matching = COST_ITEM_CODE_OPTIONS.filter(item => String(item.cost_component_id) === String(componentId));
     if (!componentId) {
@@ -273,7 +304,7 @@
       columns: [
         {title: 'Description', field: 'description', minWidth: 340, widthGrow: 3, formatter: descriptionFormatter, headerSort: true},
         {title: 'Type', field: 'type', width: 150, formatter: typeFormatter, headerSort: true},
-        {title: 'Cost Category', field: 'control_account', width: 130, headerSort: true},
+        {title: 'Related Control Account', field: 'control_account', width: 160, headerSort: true},
         {title: 'Baseline estimate', field: 'baseline', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('baseline'), sorter: 'number', headerSort: true},
         {title: 'Assigned cost', field: 'pre_award', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('pre_award'), sorter: 'number', headerSort: true},
         {title: 'Committed cost', field: 'contract', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('contract'), sorter: 'number', headerSort: true},
@@ -560,7 +591,7 @@
       <label>CBS cost item code
         <input name="code" id="editItemCode" autocomplete="off">
       </label>
-      <label>Cost Category (CBS Level 1)
+      <label>Related Control Account
         <select name="cc_code" id="editItemControlAccount">
           <option value="">Select...</option>
           {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
@@ -610,10 +641,15 @@
   </div>
   <form method="post" action="{{ pkg_base }}/cost/add-item">
     <div class="fm-fields package-modal-grid">
+      <label>Related Control Account
+        <select name="cc_code" id="costLineCategory" required onchange="refreshCostComponentOptions()">
+          <option value="">Select...</option>
+          {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
+        </select>
+      </label>
       <label>Related Cost Component
         <select name="cost_component_id" id="costLineComponent" required onchange="refreshCostItemCodeOptions()">
-          <option value="">Select...</option>
-          {% for component in cost_components %}<option value="{{ component.id }}">{{ component.cbs_l2_code }} - {{ component.description }}</option>{% endfor %}
+          <option value="">Select Related Control Account first...</option>
         </select>
       </label>
       <label>Cost Item Account
@@ -629,12 +665,6 @@
       </label>
       <label>CBS cost item code
         <input name="code" autocomplete="off">
-      </label>
-      <label>Cost Category (CBS Level 1)
-        <select name="cc_code" id="costLineCategory">
-          <option value="">Select...</option>
-          {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
-        </select>
       </label>
       <label>Baseline estimate
         <input name="baseline_amount" type="number" min="0" step="0.01">
