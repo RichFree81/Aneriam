@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from costcontrol.app import app
 from costcontrol.database import Base, get_db
-from costcontrol.models import Package, PackageCostNode, Project
+from costcontrol.models import CostComponent, CostItemCode, Package, PackageCostNode, Project, ProjectScopeItem
 from costcontrol.seed import seed_control_accounts, seed_cost_control_master_data
 
 
@@ -188,12 +188,15 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert response.status_code == 200
         assert "Add Cost Grouping" in response.text
         assert "Add Cost Line" in response.text
+        assert "Level 2 Cost Component" in response.text
         assert "Cost Item Account (CBS Level 3)" in response.text
         assert "Cost Category (CBS Level 1)" in response.text
         assert "CBS cost item code" in response.text
         assert "Cost line description" in response.text
         assert "Standard library" in response.text
         assert "Custom account" in response.text
+        assert "COST_COMPONENT_OPTIONS" in response.text
+        assert "COST_ITEM_CODE_OPTIONS" in response.text
         assert "COST_NODE_ROWS" in response.text
         assert "dataTree: true" in response.text
         assert "Grand Total" in response.text
@@ -205,7 +208,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert "Earthworks" in response.text
         assert "Bulk excavation" in response.text
         start = response.text.index("const COST_NODE_ROWS = ") + len("const COST_NODE_ROWS = ")
-        end = response.text.index(";\n  const COST_ACCOUNT_OPTIONS", start)
+        end = response.text.index(";\n  const COST_COMPONENT_OPTIONS", start)
         tree_data = json.loads(response.text[start:end])
         assert tree_data[0]["type"] == "Cost Grouping"
         account_row = tree_data[0]["_children"][0]
@@ -316,6 +319,86 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             follow_redirects=False,
         )
         assert response.status_code == 400
+
+        scope = ProjectScopeItem(project_number="5006", description="Furnace shell")
+        session.add(scope)
+        session.flush()
+        component = CostComponent(
+            project_number="5006",
+            scope_item_id=scope.id,
+            description="Shell replacement",
+            commodity_code="205",
+            cbs_l2_code="205.01",
+            sequence=1,
+        )
+        session.add(component)
+        session.flush()
+        existing_code = CostItemCode(
+            project_number="5006",
+            cost_component_id=component.id,
+            code="205.01.01",
+            sequence=1,
+            name="Installation",
+            source="library",
+        )
+        session.add(existing_code)
+        session.commit()
+
+        response = client.post(
+            "/project/5006/packages/5006-PKG-001/cost/add-item",
+            data={
+                "cost_component_id": str(component.id),
+                "cost_item_code_id": str(existing_code.id),
+                "account_mode": "existing",
+                "description": "Install furnace shell",
+                "baseline_amount": "2100",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        component_group = session.query(PackageCostNode).filter_by(
+            package_id=package_id,
+            parent_id=None,
+            description="Shell replacement",
+            is_item=False,
+        ).one()
+        account_node = session.query(PackageCostNode).filter_by(
+            package_id=package_id,
+            parent_id=component_group.id,
+            code="205.01.01",
+            description="Installation",
+            is_item=False,
+        ).one()
+        component_line = session.query(PackageCostNode).filter_by(
+            package_id=package_id,
+            parent_id=account_node.id,
+            description="Install furnace shell",
+            is_item=True,
+        ).one()
+        assert component_line.code == "205.01.01"
+        assert component_line.cc_code == "205"
+        assert component_line.baseline_amount == 2100
+
+        response = client.post(
+            "/project/5006/packages/5006-PKG-001/cost/add-item",
+            data={
+                "cost_component_id": str(component.id),
+                "cost_item_code_id": "__add__",
+                "account_mode": "custom",
+                "custom_account_name": "Refractory works",
+                "description": "Install refractory",
+                "baseline_amount": "700",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        custom_code = session.query(CostItemCode).filter_by(
+            project_number="5006",
+            cost_component_id=component.id,
+            name="Refractory works",
+            source="custom",
+        ).one()
+        assert custom_code.code == "205.01.02"
 
         response = client.post(
             f"/project/5006/packages/5006-PKG-001/cost/delete-node/{item.id}",

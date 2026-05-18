@@ -41,7 +41,8 @@
 <script src="/static/vendor/tabulator/tabulator.min.js"></script>
 <script>
   const COST_NODE_ROWS = {{ cost_node_rows | tojson }};
-  const COST_ACCOUNT_OPTIONS = {{ cost_account_options | tojson }};
+  const COST_COMPONENT_OPTIONS = {{ cost_component_options | tojson }};
+  const COST_ITEM_CODE_OPTIONS = {{ cost_item_code_options | tojson }};
   const STANDARD_COST_ACCOUNTS = {{ direct_library | tojson }};
 
   function escapeHtml(value) {
@@ -95,7 +96,7 @@
     closeActions();
     document.getElementById('costItemOverlay').classList.add('open');
     document.getElementById('costItemModal').classList.add('open');
-    refreshCostAccountOptions();
+    refreshCostItemCodeOptions();
     setTimeout(() => document.getElementById('itemDescription').focus(), 60);
   }
 
@@ -157,37 +158,41 @@
     return 'Delete this cost line?';
   }
 
-  function refreshCostAccountOptions() {
-    const groupingId = document.getElementById('costLineGrouping').value;
-    const accountSelect = document.getElementById('costLineAccount');
+  function refreshCostItemCodeOptions() {
+    const componentSelect = document.getElementById('costLineComponent');
+    const accountSelect = document.getElementById('costLineItemCode');
     const modeSelect = document.getElementById('costLineAccountMode');
+    const categorySelect = document.getElementById('costLineCategory');
+    const componentId = componentSelect.value;
     accountSelect.innerHTML = '';
 
-    const matching = COST_ACCOUNT_OPTIONS.filter(account => String(account.parent_id) === String(groupingId));
-    if (!groupingId) {
-      accountSelect.appendChild(new Option('Select Cost Grouping first...', ''));
+    const component = COST_COMPONENT_OPTIONS.find(item => String(item.id) === String(componentId));
+    categorySelect.value = component ? component.commodity_code : '';
+
+    const matching = COST_ITEM_CODE_OPTIONS.filter(item => String(item.cost_component_id) === String(componentId));
+    if (!componentId) {
+      accountSelect.appendChild(new Option('Select Level 2 Cost Component first...', ''));
       accountSelect.disabled = true;
       modeSelect.value = 'existing';
       modeSelect.disabled = true;
     } else if (matching.length) {
       accountSelect.disabled = false;
       modeSelect.disabled = false;
-      matching.forEach(account => {
-        const label = (account.code ? account.code + ' - ' : '') + account.description;
-        accountSelect.appendChild(new Option(label, account.id));
+      matching.forEach(item => {
+        accountSelect.appendChild(new Option(item.code + ' - ' + item.name, item.id));
       });
-      accountSelect.appendChild(new Option('+ Add cost item account', '__add__'));
+      accountSelect.appendChild(new Option('+ Add new Cost Item Account', '__add__'));
     } else {
       accountSelect.disabled = false;
       modeSelect.disabled = false;
-      accountSelect.appendChild(new Option('+ Add cost item account', '__add__'));
+      accountSelect.appendChild(new Option('+ Add new Cost Item Account', '__add__'));
       accountSelect.value = '__add__';
     }
-    refreshCostAccountCreateFields();
+    refreshCostItemCodeCreateFields();
   }
 
-  function refreshCostAccountCreateFields() {
-    const accountSelect = document.getElementById('costLineAccount');
+  function refreshCostItemCodeCreateFields() {
+    const accountSelect = document.getElementById('costLineItemCode');
     const modeSelect = document.getElementById('costLineAccountMode');
     const createFields = document.getElementById('costAccountCreateFields');
     const libraryField = document.getElementById('standardAccountField');
@@ -555,20 +560,20 @@
   </div>
   <form method="post" action="{{ pkg_base }}/cost/add-item">
     <div class="fm-fields package-modal-grid">
-      <label>Cost Grouping *
-        <select name="cost_grouping_id" id="costLineGrouping" required onchange="refreshCostAccountOptions()">
+      <label>Level 2 Cost Component *
+        <select name="cost_component_id" id="costLineComponent" required onchange="refreshCostItemCodeOptions()">
           <option value="">Select...</option>
-          {% for node in cost_grouping_options %}<option value="{{ node.id }}">{% if node.code %}{{ node.code }} - {% endif %}{{ node.description }}</option>{% endfor %}
+          {% for component in cost_components %}<option value="{{ component.id }}">{{ component.cbs_l2_code }} - {{ component.description }}</option>{% endfor %}
         </select>
       </label>
       <label>Cost Item Account (CBS Level 3) *
-        <select name="cost_account_id" id="costLineAccount" required onchange="refreshCostAccountCreateFields()">
-          <option value="">Select Cost Grouping first...</option>
+        <select name="cost_item_code_id" id="costLineItemCode" required onchange="refreshCostItemCodeCreateFields()">
+          <option value="">Select Level 2 Cost Component first...</option>
         </select>
       </label>
       <div id="costAccountCreateFields" class="span-2 package-modal-grid" style="display:none;">
         <label>Create Cost Item Account by
-          <select name="account_mode" id="costLineAccountMode" onchange="refreshCostAccountCreateFields()">
+          <select name="account_mode" id="costLineAccountMode" onchange="refreshCostItemCodeCreateFields()">
             <option value="library">Standard library</option>
             <option value="custom">Custom account</option>
           </select>
@@ -589,7 +594,7 @@
         <input name="code" autocomplete="off">
       </label>
       <label>Cost Category (CBS Level 1)
-        <select name="cc_code">
+        <select name="cc_code" id="costLineCategory">
           <option value="">Select...</option>
           {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
         </select>

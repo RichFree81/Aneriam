@@ -128,6 +128,31 @@ def _cost_account_option_rows(nodes: list[PackageCostNode]) -> list[dict]:
     ]
 
 
+def _cost_item_code_option_rows(codes: list[CostItemCode]) -> list[dict]:
+    return [
+        {
+            "id": code.id,
+            "cost_component_id": code.cost_component_id,
+            "code": code.code,
+            "name": code.name,
+        }
+        for code in codes
+        if code.cost_component_id is not None
+    ]
+
+
+def _cost_component_option_rows(components: list[CostComponent]) -> list[dict]:
+    return [
+        {
+            "id": component.id,
+            "code": component.cbs_l2_code,
+            "description": component.description,
+            "commodity_code": component.commodity_code,
+        }
+        for component in components
+    ]
+
+
 def _package_detail_response(request: Request, db: Session, project_number: str, package_number: str, active_pkg_tab: str):
     project = get_project_or_404(db, project_number)
     pkg = get_package_or_404(db, project_number, package_number)
@@ -162,8 +187,10 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "totals": totals,
             "package": pkg,
             "cost_components": cost_components,
+            "cost_component_options": _cost_component_option_rows(cost_components),
             "indirect_l2": indirect_l2,
             "cost_codes": cost_codes,
+            "cost_item_code_options": _cost_item_code_option_rows(cost_codes),
             "direct_library": COST_ITEM_LIBRARY_DIRECT,
             "indirect_library": COST_ITEM_LIBRARY_INDIRECT,
             "pricing_bases": PRICING_BASES,
@@ -454,6 +481,99 @@ def _create_cost_account_node(
     return node
 
 
+def _find_or_create_component_grouping(db: Session, pkg, component: CostComponent) -> PackageCostNode:
+    for node in pkg.cost_nodes:
+        if not node.is_item and node.parent_id is None and node.description == component.description:
+            return node
+    node = PackageCostNode(
+        package_id=pkg.id,
+        parent_id=None,
+        code=_next_group_code(pkg, None, db),
+        description=component.description,
+        is_item=False,
+        display_order=_next_sibling_order(pkg, None),
+    )
+    db.add(node)
+    db.flush()
+    pkg.cost_nodes.append(node)
+    return node
+
+
+def _find_or_create_cost_account_for_code(
+    db: Session,
+    pkg,
+    *,
+    grouping_node: PackageCostNode,
+    cost_code: CostItemCode,
+) -> PackageCostNode:
+    for node in pkg.cost_nodes:
+        if not node.is_item and node.parent_id == grouping_node.id and node.code == cost_code.code:
+            return node
+    node = PackageCostNode(
+        package_id=pkg.id,
+        parent_id=grouping_node.id,
+        code=cost_code.code,
+        description=cost_code.name,
+        is_item=False,
+        display_order=_next_sibling_order(pkg, grouping_node.id),
+    )
+    db.add(node)
+    db.flush()
+    pkg.cost_nodes.append(node)
+    return node
+
+
+def _resolve_or_create_cost_item_code(
+    db: Session,
+    project_number: str,
+    *,
+    cost_component_id: str,
+    cost_item_code_id: str,
+    account_mode: str,
+    library_account_name: str,
+    custom_account_name: str,
+) -> CostItemCode:
+    if account_mode == "existing":
+        if not cost_item_code_id.strip():
+            raise HTTPException(status_code=400, detail="A CBS Level 3 Cost Item Account is required")
+        cost_code = db.get(CostItemCode, int(cost_item_code_id))
+        if cost_code is None or cost_code.project_number != project_number:
+            raise HTTPException(status_code=400, detail="Cost Item Account must belong to the same project")
+        if cost_component_id.strip() and str(cost_code.cost_component_id) != str(cost_component_id):
+            raise HTTPException(status_code=400, detail="Cost Item Account must belong to the selected Level 2 Cost Component")
+        return cost_code
+
+    if not cost_component_id.strip():
+        raise HTTPException(status_code=400, detail="A Level 2 Cost Component is required")
+    component = db.get(CostComponent, int(cost_component_id))
+    if component is None or component.project_number != project_number:
+        raise HTTPException(status_code=400, detail="Level 2 Cost Component must belong to the same project")
+
+    if account_mode == "library":
+        name = library_account_name.strip()
+        source = "library"
+    elif account_mode == "custom":
+        name = custom_account_name.strip()
+        source = "custom"
+    else:
+        raise HTTPException(status_code=400, detail="Cost Item Account mode must be existing, library, or custom")
+    if not name:
+        raise HTTPException(status_code=400, detail="Cost Item Account description is required")
+
+    code, seq, _ = next_cost_item_code(db, project_number, cost_component=component)
+    cost_code = CostItemCode(
+        project_number=project_number,
+        cost_component_id=component.id,
+        code=code,
+        sequence=seq,
+        name=name,
+        source=source,
+    )
+    db.add(cost_code)
+    db.flush()
+    return cost_code
+
+
 @router.post("/project/{project_number}/packages/{package_number}/cost/add-section")
 def cost_add_section(
     project_number: str,
@@ -530,6 +650,7 @@ def cost_add_item(
     level2_id: str = Form(""),
     account_mode: str = Form("existing"),
     cost_account_id: str = Form(""),
+    cost_item_code_id: str = Form(""),
     library_account_name: str = Form(""),
     custom_account_name: str = Form(""),
     cc_code: str = Form(""),
@@ -547,27 +668,51 @@ def cost_add_item(
     contract_amount: str = Form(""),
 ):
     pkg = get_package_or_404(db, project_number, package_number)
-    grouping_id = cost_grouping_id or cost_component_id or level2_id
-    if account_mode == "library":
-        grouping_node = _resolve_cost_grouping_node(db, pkg, grouping_id)
-        parent_node = _create_cost_account_node(
+    selected_component_id = cost_component_id or level2_id
+    if selected_component_id or cost_item_code_id:
+        cost_code = _resolve_or_create_cost_item_code(
+            db,
+            project_number,
+            cost_component_id=selected_component_id,
+            cost_item_code_id=cost_item_code_id,
+            account_mode=account_mode,
+            library_account_name=library_account_name,
+            custom_account_name=custom_account_name,
+        )
+        component = db.get(CostComponent, cost_code.cost_component_id)
+        if component is None:
+            raise HTTPException(status_code=400, detail="Cost Item Account must be linked to a Level 2 Cost Component")
+        grouping_node = _find_or_create_component_grouping(db, pkg, component)
+        parent_node = _find_or_create_cost_account_for_code(
             db,
             pkg,
             grouping_node=grouping_node,
-            account_name=library_account_name,
-            source="library",
+            cost_code=cost_code,
         )
-    elif account_mode == "custom":
-        grouping_node = _resolve_cost_grouping_node(db, pkg, grouping_id)
-        parent_node = _create_cost_account_node(
-            db,
-            pkg,
-            grouping_node=grouping_node,
-            account_name=custom_account_name,
-            source="custom",
-        )
+        code = code.strip() or cost_code.code
+        cc_code = cc_code.strip() or component.commodity_code
     else:
-        parent_node = _resolve_cost_account_node(db, pkg, cost_account_id or parent_id)
+        grouping_id = cost_grouping_id
+        if account_mode == "library":
+            grouping_node = _resolve_cost_grouping_node(db, pkg, grouping_id)
+            parent_node = _create_cost_account_node(
+                db,
+                pkg,
+                grouping_node=grouping_node,
+                account_name=library_account_name,
+                source="library",
+            )
+        elif account_mode == "custom":
+            grouping_node = _resolve_cost_grouping_node(db, pkg, grouping_id)
+            parent_node = _create_cost_account_node(
+                db,
+                pkg,
+                grouping_node=grouping_node,
+                account_name=custom_account_name,
+                source="custom",
+            )
+        else:
+            parent_node = _resolve_cost_account_node(db, pkg, cost_account_id or parent_id)
     parent_int = parent_node.id
     bl_u, bl_q, bl_r, bl_a = process_cost_column(baseline_unit, baseline_qty, baseline_rate, baseline_amount)
     pa_u, pa_q, pa_r, pa_a = process_cost_column(pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount)
