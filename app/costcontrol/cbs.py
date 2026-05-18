@@ -330,7 +330,7 @@ def cbs_rows(db: Session, project_number: str) -> list[dict]:
         for balance, subaccount in reserve_rows
     ]
     indirect_l2 = db.query(IndirectL2Account).order_by(IndirectL2Account.code).all()
-    deliverables = db.query(Deliverable).filter_by(project_number=project_number).order_by(Deliverable.cbs_l2_code).all()
+    direct_components = db.query(Deliverable).filter_by(project_number=project_number).order_by(Deliverable.cbs_l2_code).all()
     codes = db.query(CostItemCode).filter_by(project_number=project_number).order_by(CostItemCode.code).all()
     totals = dict(
         db.execute(text("""
@@ -357,6 +357,6 @@ def cbs_rows(db: Session, project_number: str) -> list[dict]:
     return [
         {"reserve": reserve},
         {"indirect_l2": indirect_l2},
-        {"deliverables": deliverables},
+        {"direct_components": direct_components, "deliverables": direct_components},
         {"codes": codes, "totals": totals, "ps_codes": ps_codes},
     ]

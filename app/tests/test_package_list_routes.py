@@ -186,7 +186,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
 
         response = client.get("/project/5006/packages/5006-PKG-001/cost")
         assert response.status_code == 200
-        assert "Add Level 2 Item" in response.text
+        assert "Add Cost Component" in response.text
         assert "Add Cost Line" in response.text
         assert "Level 3 cost item account" in response.text
         assert "Standard library" in response.text
@@ -204,7 +204,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         start = response.text.index("const COST_NODE_ROWS = ") + len("const COST_NODE_ROWS = ")
         end = response.text.index(";\n  const COST_ACCOUNT_OPTIONS", start)
         tree_data = json.loads(response.text[start:end])
-        assert tree_data[0]["type"] == "Level 2 Item"
+        assert tree_data[0]["type"] == "Cost Component"
         account_row = tree_data[0]["_children"][0]
         assert account_row["type"] == "Cost Item Account"
         leaf = account_row["_children"][0]
@@ -249,7 +249,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         response = client.post(
             "/project/5006/packages/5006-PKG-001/cost/add-item",
             data={
-                "level2_id": str(level2.id),
+                "cost_component_id": str(level2.id),
                 "account_mode": "library",
                 "library_account_name": "Installation",
                 "description": "Install anchor bolts",

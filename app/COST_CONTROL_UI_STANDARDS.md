@@ -14,7 +14,7 @@ Summary cards must use the shared `.summary-card` styling from `base.html`.
 Page-specific creation actions belong in the header three-dot actions menu, not as permanent forms in the page content area.
 
 - WBS package list: `Add Package`.
-- Package cost items tab: `Add Group`, `Add Cost Item`, and package award actions.
+- Package cost items tab: `Add Cost Component`, `Add Cost Line`, and package award actions.
 - Page content should show the working table/grid first, with creation forms opened as modal pop-outs.
 
 ## Hierarchical Tables
@@ -22,5 +22,5 @@ Page-specific creation actions belong in the header three-dot actions menu, not 
 Hierarchical project controls data must use Tabulator tree grids where practical.
 
 - Scope uses parent Scope Items with nested Deliverables.
-- Package cost items use cost groups with nested cost items.
-- Group rows must roll up child values so section, subsection, and grand totals can be read from the tree.
+- Package cost items use the three-level cost hierarchy: Cost Component -> Cost Item Account -> Cost Line.
+- Cost Component and Cost Item Account rows must roll up child values so component, account, and grand totals can be read from the tree.

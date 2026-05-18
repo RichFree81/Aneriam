@@ -3,7 +3,7 @@
 {% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
 {% set reserve = cbs[0].reserve %}
 {% set indirect_l2 = cbs[1].indirect_l2 %}
-{% set deliverables = cbs[2].deliverables %}
+{% set direct_components = cbs[2].direct_components %}
 {% set codes = cbs[3].codes %}
 {% set totals = cbs[3].totals %}
 {% set ps_codes = cbs[3].ps_codes %}
@@ -39,7 +39,7 @@
       {% for l1 in ["102", "103"] %}
       <tr class="hier-l1"><td>{{ l1 }}</td><td>{{ "EPCM" if l1 == "102" else "Preliminaries" }}</td><td>Cost Category</td><td></td></tr>
       {% for l2 in indirect_l2 if l2.parent_l1 == l1 %}
-      <tr class="hier-l2"><td>{{ l2.code }}</td><td class="hier-indent-1">{{ l2.name }}</td><td>Indirect L2</td><td></td></tr>
+      <tr class="hier-l2"><td>{{ l2.code }}</td><td class="hier-indent-1">{{ l2.name }}</td><td>Cost Component</td><td></td></tr>
       {% for code in codes if code.indirect_l2_code == l2.code %}
       <tr class="hier-l3">
         <td>{{ code.code }}</td>
@@ -53,8 +53,8 @@
 
       {% for l1 in ["201", "202", "203", "204", "205", "206"] %}
       <tr class="hier-l1"><td>{{ l1 }}</td><td>Cost Category</td><td>Cost Category</td><td></td></tr>
-      {% for d in deliverables if d.commodity_code == l1 %}
-      <tr class="hier-l2"><td>{{ d.cbs_l2_code }}</td><td class="hier-indent-1">{{ d.description }}</td><td>Deliverable</td><td></td></tr>
+      {% for d in direct_components if d.commodity_code == l1 %}
+      <tr class="hier-l2"><td>{{ d.cbs_l2_code }}</td><td class="hier-indent-1">{{ d.description }}</td><td>Cost Component</td><td></td></tr>
       {% for code in codes if code.deliverable_id == d.id %}
       <tr class="hier-l3">
         <td>{{ code.code }}</td>

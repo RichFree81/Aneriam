@@ -58,7 +58,7 @@ def _cost_node_grid_row(node: PackageCostNode) -> dict:
     if is_item:
         node_type = "Cost Line"
     elif node.parent_id is None:
-        node_type = "Level 2 Item"
+        node_type = "Cost Component"
     else:
         node_type = "Cost Item Account"
     row = {
@@ -108,7 +108,7 @@ def _cost_node_options(nodes: list[PackageCostNode]) -> list[PackageCostNode]:
     return ordered
 
 
-def _level2_options(nodes: list[PackageCostNode]) -> list[PackageCostNode]:
+def _cost_component_options(nodes: list[PackageCostNode]) -> list[PackageCostNode]:
     return sorted([node for node in nodes if node.parent_id is None and not node.is_item], key=lambda n: n.display_order)
 
 
@@ -170,7 +170,7 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "cost_node_rows": cost_node_rows,
             "cost_node_totals": cost_node_totals,
             "cost_group_options": cost_group_options,
-            "level2_options": _level2_options(all_cost_nodes),
+            "cost_component_options": _cost_component_options(all_cost_nodes),
             "cost_account_options": _cost_account_option_rows(all_cost_nodes),
             "control_accounts": control_accounts,
             "award_errors": award_errors,
@@ -305,13 +305,13 @@ def cost_create_code(
     if l2_kind == "deliverable":
         deliverable = db.get(Deliverable, int(deliverable_id))
         if deliverable is None or deliverable.project_number != project_number:
-            raise HTTPException(status_code=404, detail="Deliverable not found")
+            raise HTTPException(status_code=404, detail="Cost Component not found")
     elif l2_kind == "indirect":
         if db.get(IndirectL2Account, indirect_l2_code) is None:
-            raise HTTPException(status_code=404, detail="Indirect L2 account not found")
+            raise HTTPException(status_code=404, detail="Indirect Cost Component not found")
         indirect_code = indirect_l2_code
     else:
-        raise HTTPException(status_code=400, detail="L2 kind must be deliverable or indirect")
+        raise HTTPException(status_code=400, detail="Level 2 kind must be direct Cost Component or indirect Cost Component")
     code, seq, _ = next_cost_item_code(
         db,
         project_number,
@@ -399,12 +399,12 @@ def _resolve_parent_id(db: Session, pkg, parent_id_str: str) -> int | None:
     return parent_int
 
 
-def _resolve_level2_node(db: Session, pkg, level2_id: str) -> PackageCostNode:
-    if not level2_id.strip():
-        raise HTTPException(status_code=400, detail="A Level 2 item is required")
-    node = db.get(PackageCostNode, int(level2_id))
+def _resolve_cost_component_node(db: Session, pkg, component_id: str) -> PackageCostNode:
+    if not component_id.strip():
+        raise HTTPException(status_code=400, detail="A Cost Component is required")
+    node = db.get(PackageCostNode, int(component_id))
     if node is None or node.package_id != pkg.id or node.parent_id is not None or node.is_item:
-        raise HTTPException(status_code=400, detail="Level 2 item must belong to the same package")
+        raise HTTPException(status_code=400, detail="Cost Component must belong to the same package")
     return node
 
 
@@ -421,7 +421,7 @@ def _create_cost_account_node(
     db: Session,
     pkg,
     *,
-    level2_node: PackageCostNode,
+    component_node: PackageCostNode,
     account_name: str,
     source: str,
 ) -> PackageCostNode:
@@ -430,11 +430,11 @@ def _create_cost_account_node(
         raise HTTPException(status_code=400, detail="Cost item account name is required")
     node = PackageCostNode(
         package_id=pkg.id,
-        parent_id=level2_node.id,
+        parent_id=component_node.id,
         code="",
         description=name,
         is_item=False,
-        display_order=_next_sibling_order(pkg, level2_node.id),
+        display_order=_next_sibling_order(pkg, component_node.id),
     )
     db.add(node)
     db.flush()
@@ -455,7 +455,7 @@ def cost_add_section(
     if parent_int is not None:
         parent = db.get(PackageCostNode, parent_int)
         if parent is None or parent.parent_id is not None or parent.is_item:
-            raise HTTPException(status_code=400, detail="Cost item accounts must sit directly below a Level 2 item")
+            raise HTTPException(status_code=400, detail="Cost item accounts must sit directly below a Cost Component")
     node = PackageCostNode(
         package_id=pkg.id,
         parent_id=parent_int,
@@ -513,6 +513,7 @@ def cost_add_item(
     code: str = Form(""),
     description: str = Form(...),
     parent_id: str = Form(""),
+    cost_component_id: str = Form(""),
     level2_id: str = Form(""),
     account_mode: str = Form("existing"),
     cost_account_id: str = Form(""),
@@ -533,21 +534,22 @@ def cost_add_item(
     contract_amount: str = Form(""),
 ):
     pkg = get_package_or_404(db, project_number, package_number)
+    component_id = cost_component_id or level2_id
     if account_mode == "library":
-        level2_node = _resolve_level2_node(db, pkg, level2_id)
+        component_node = _resolve_cost_component_node(db, pkg, component_id)
         parent_node = _create_cost_account_node(
             db,
             pkg,
-            level2_node=level2_node,
+            component_node=component_node,
             account_name=library_account_name,
             source="library",
         )
     elif account_mode == "custom":
-        level2_node = _resolve_level2_node(db, pkg, level2_id)
+        component_node = _resolve_cost_component_node(db, pkg, component_id)
         parent_node = _create_cost_account_node(
             db,
             pkg,
-            level2_node=level2_node,
+            component_node=component_node,
             account_name=custom_account_name,
             source="custom",
         )
@@ -603,7 +605,7 @@ def cost_update_item(
     if node is None or node.package_id != pkg.id:
         raise HTTPException(status_code=404, detail="Cost node not found")
     if not node.is_item:
-        raise HTTPException(status_code=400, detail="Use the group editor for Level 2 items and cost item accounts")
+        raise HTTPException(status_code=400, detail="Use the group editor for Cost Components and cost item accounts")
     bl_u, bl_q, bl_r, bl_a = process_cost_column(baseline_unit, baseline_qty, baseline_rate, baseline_amount)
     pa_u, pa_q, pa_r, pa_a = process_cost_column(pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount)
     ct_u, ct_q, ct_r, ct_a = process_cost_column(contract_unit, contract_qty, contract_rate, contract_amount)
