@@ -200,6 +200,8 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert "Standard library" in response.text
         assert "Custom account" in response.text
         assert "Add Cost Item Account" in response.text
+        assert "Add Account" in response.text
+        assert "Use Account" not in response.text
         assert "+ Add new Cost Item Account" in response.text
         assert "COST_COMPONENT_OPTIONS" in response.text
         assert "COST_ITEM_CODE_OPTIONS" in response.text
