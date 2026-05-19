@@ -863,7 +863,7 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
             "baseline_lines": baseline_lines,
             "baseline_total": baseline_total,
             "baseline_total_display": fmt_zar(baseline_total),
-            "can_award": bool(pkg.is_external and not pkg.is_contracted and active_baseline is not None and active_baseline.status == "Approved"),
+            "can_award": bool(not pkg.is_contracted and active_baseline is not None and active_baseline.status == "Approved"),
             "is_contracted": pkg.is_contracted,
             "has_rto": package_rto is not None,
             "next_rto_number": rto_helpers.next_rto_number(db, pkg.package_number),
@@ -1036,8 +1036,6 @@ def project_package_award(
     pkg = db.get(Package, package_id)
     if pkg is None or pkg.project_number != project_number:
         raise HTTPException(status_code=404, detail="Package not found")
-    if not pkg.is_external:
-        raise HTTPException(status_code=400, detail="Only external packages use the RTO award workflow")
     if pkg.is_contracted:
         raise HTTPException(status_code=400, detail="Package has already been awarded")
 

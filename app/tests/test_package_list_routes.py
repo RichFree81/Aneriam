@@ -634,6 +634,10 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         working_sheet = session.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Working Estimate").one()
         assert working_sheet.source_sheet_id == baseline_sheet.id
         assert working_sheet.status == "In Progress"
+        package = session.get(Package, package_id)
+        package.package_source = "Internal"
+        package.is_external = False
+        session.commit()
 
         response = client.get("/project/5006/packages")
         assert response.status_code == 200

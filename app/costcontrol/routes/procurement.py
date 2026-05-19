@@ -53,7 +53,7 @@ def package_rto_view(project_number: str, package_number: str, request: Request,
     'Create RTO' empty-state otherwise. Available for any package; the
     package_detail tab gates visibility on `is_external`."""
     project = get_project_or_404(db, project_number)
-    pkg = _get_external_package_or_404(db, project_number, package_number)
+    pkg = get_package_or_404(db, project_number, package_number)
     rto = rto_helpers.get_for_package(db, package_number)
 
     if rto is None:
@@ -89,7 +89,7 @@ def package_rto_view(project_number: str, package_number: str, request: Request,
 @router.get("/project/{project_number}/packages/{package_number}/rto/new")
 def package_rto_new_form(project_number: str, package_number: str, request: Request, db: DbDep):
     project = get_project_or_404(db, project_number)
-    pkg = _get_external_package_or_404(db, project_number, package_number)
+    pkg = get_package_or_404(db, project_number, package_number)
     if not pkg.is_contracted:
         raise HTTPException(status_code=400, detail="Create the RTO after selecting the awarded baseline")
     next_number = rto_helpers.next_rto_number(db, package_number)
@@ -130,7 +130,7 @@ def package_rto_create(
     notes: str = Form(""),
 ):
     get_project_or_404(db, project_number)
-    pkg = _get_external_package_or_404(db, project_number, package_number)
+    pkg = get_package_or_404(db, project_number, package_number)
     if not pkg.is_contracted:
         raise HTTPException(status_code=400, detail="Create the RTO after selecting the awarded baseline")
     rto_number = rto_helpers.next_rto_number(db, package_number)
@@ -165,7 +165,7 @@ def package_rto_create(
 @router.get("/project/{project_number}/packages/{package_number}/rto/edit-form")
 def package_rto_edit_form(project_number: str, package_number: str, request: Request, db: DbDep):
     project = get_project_or_404(db, project_number)
-    pkg = _get_external_package_or_404(db, project_number, package_number)
+    pkg = get_package_or_404(db, project_number, package_number)
     rto = rto_helpers.get_for_package(db, package_number)
     if rto is None:
         raise HTTPException(status_code=404, detail="No RTO for this package")
@@ -193,7 +193,7 @@ def package_rto_edit(
     originator: str = Form(""),
     notes: str = Form(""),
 ):
-    _get_external_package_or_404(db, project_number, package_number)
+    get_package_or_404(db, project_number, package_number)
     rto = rto_helpers.get_for_package(db, package_number)
     if rto is None or rto.project_number != project_number:
         raise HTTPException(status_code=404, detail="No RTO for this package")
@@ -223,7 +223,7 @@ def package_rto_status_change(
     db: DbDep,
     target_status: str = Form(...),
 ):
-    _get_external_package_or_404(db, project_number, package_number)
+    get_package_or_404(db, project_number, package_number)
     rto = rto_helpers.get_for_package(db, package_number)
     if rto is None or rto.project_number != project_number:
         raise HTTPException(status_code=404, detail="No RTO for this package")
@@ -240,7 +240,7 @@ def package_rto_status_change(
 
 @router.post("/project/{project_number}/packages/{package_number}/rto/delete")
 def package_rto_delete(project_number: str, package_number: str, db: DbDep):
-    _get_external_package_or_404(db, project_number, package_number)
+    get_package_or_404(db, project_number, package_number)
     rto = rto_helpers.get_for_package(db, package_number)
     if rto is None or rto.project_number != project_number:
         raise HTTPException(status_code=404, detail="No RTO for this package")
