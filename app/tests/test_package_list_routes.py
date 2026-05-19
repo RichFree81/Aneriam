@@ -599,6 +599,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert "Add Cost Grouping" not in response.text
         assert "Add Cost Line" not in response.text
         assert "Create Baseline" not in response.text
+        assert "Add Estimate Costing" not in response.text
         assert "const ACTIVE_COST_SHEET_LOCKED = true" in response.text
 
         response = client.post(
@@ -611,6 +612,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         response = client.get("/project/5006/packages/5006-PKG-001/cost")
         assert response.status_code == 200
         assert "Create Working Estimate" in response.text
+        assert "Add Estimate Costing" not in response.text
         response = client.post(
             "/project/5006/packages/5006-PKG-001/cost/create-working-estimate",
             data={"baseline_sheet_id": str(baseline_sheet.id)},

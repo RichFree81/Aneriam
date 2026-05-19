@@ -32,10 +32,12 @@
   Create Working Estimate
 </a>
 {% endif %}
+{% if not baseline_sheets %}
 <a href="#" onclick="openCostSheetModal(); return false;">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h6A1.5 1.5 0 0 1 11 2.5V4h1.5A1.5 1.5 0 0 1 14 5.5v8a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5v-11zM3.5 2a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-8a.5.5 0 0 0-.5-.5H11v7.5a.5.5 0 0 1-.8.4L8 11.25 5.8 12.9a.5.5 0 0 1-.8-.4V2H3.5z"/></svg>
   Add Estimate Costing
 </a>
+{% endif %}
 {% endif %}
 {% if not package.is_contracted %}
 <a href="#" onclick="openAwardModal(); return false;">
@@ -997,6 +999,7 @@
 
 {% endif %}
 
+{% if not baseline_sheets %}
 <div class="filter-overlay" id="costSheetOverlay" onclick="closeCostSheetModal()"></div>
 <div class="filter-modal" id="costSheetModal" style="width:560px;">
   <div class="fm-header">
@@ -1018,6 +1021,7 @@
     </div>
   </form>
 </div>
+{% endif %}
 
 {% if cost_sheet_open and active_cost_sheet_working and not package.is_contracted %}
 <div class="filter-overlay" id="baselineOverlay" onclick="closeBaselineModal()"></div>
