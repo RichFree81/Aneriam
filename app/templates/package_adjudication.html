@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_project_nav.html" as nav %}
 {% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
 {% set pkg_base = "/project/" ~ project.project_number ~ "/packages/" ~ package.package_number %}
 {% block title %}{{ package.package_number }} — Adjudication — Cost Control{% endblock %}
@@ -14,24 +15,17 @@
       <a href="/project/{{ project.project_number }}/packages">Packages</a>
     </div>
     <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
-    <div class="tab-bar">
-      <a href="{{ pkg_base }}/cost">Cost Buildup</a>
-      <a href="{{ pkg_base }}/tender" class="active">Procurement</a>
-    </div>
   </div>
 </div>
 {% endblock %}
 
 {% block content %}
+<div class="workspace-shell">
+  {{ nav.package_sections(project, package, 'tendering') }}
+  <div class="workspace-main">
+    {{ nav.tendering_steps(project, package, 'adjudication') }}
 
 {# ── Procurement sub-nav ─────────────────────────────────────────── #}
-<div class="tab-bar" style="margin-bottom:14px;">
-  <a href="{{ pkg_base }}/tender">Tender</a>
-  <a href="{{ pkg_base }}/adjudication" class="active">Adjudication</a>
-  <a href="{{ pkg_base }}/award">Award</a>
-  <a href="{{ pkg_base }}/rto">Orders</a>
-</div>
-
 {% if not tender %}
 
 <div class="card">
@@ -234,5 +228,8 @@
 </div>
 
 {% endif %}
+
+  </div>
+</div>
 
 {% endblock %}

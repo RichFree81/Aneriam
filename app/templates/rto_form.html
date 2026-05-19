@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_project_nav.html" as nav %}
 {% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
 {% set pkg_base = "/project/" ~ project.project_number ~ "/packages/" ~ package.package_number %}
 {% block title %}{{ package.package_number }} — {% if mode == 'create' %}New RTO{% else %}{{ rto.rto_number }} (edit){% endif %} — Cost Control{% endblock %}
@@ -26,10 +27,14 @@
 {% endblock %}
 
 {% block content %}
-<div class="card" style="max-width:780px;">
-  <form method="post"
-        action="{% if mode == 'create' %}{{ pkg_base }}/rto/new{% else %}{{ pkg_base }}/rto/edit{% endif %}"
-        style="display:flex;flex-direction:column;gap:14px;">
+<div class="workspace-shell">
+  {{ nav.package_sections(project, package, 'tendering') }}
+  <div class="workspace-main">
+    {{ nav.tendering_steps(project, package, 'rto') }}
+    <div class="card" style="max-width:780px;">
+      <form method="post"
+            action="{% if mode == 'create' %}{{ pkg_base }}/rto/new{% else %}{{ pkg_base }}/rto/edit{% endif %}"
+            style="display:flex;flex-direction:column;gap:14px;">
 
     {% if mode == 'create' %}
     <div style="background:#f0f5fb;border-left:3px solid #1a6eb0;padding:10px 14px;font-size:12px;color:#1a4a70;">
@@ -89,6 +94,8 @@
         {% if mode == 'create' %}Create RTO{% else %}Save changes{% endif %}
       </button>
     </div>
-  </form>
+      </form>
+    </div>
+  </div>
 </div>
 {% endblock %}

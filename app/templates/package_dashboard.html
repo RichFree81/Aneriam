@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% import "_project_nav.html" as nav %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+{% set pkg_base = "/project/" ~ project.project_number ~ "/packages/" ~ package.package_number %}
+{% block title %}{{ package.package_number }} - Dashboard - Cost Control{% endblock %}
+
+{% block actions_items %}
+<a href="{{ pkg_base }}/cost">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h11A1.5 1.5 0 0 1 15 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 13.5v-11zM2.5 2a.5.5 0 0 0-.5.5V5h12V2.5a.5.5 0 0 0-.5-.5h-11zM14 6H2v7.5a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5V6z"/></svg>
+  Open Costings
+</a>
+{% if package.is_contracted %}
+  {% if package_rto %}
+  <a href="{{ pkg_base }}/rto">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h9A1.5 1.5 0 0 1 14 2.5v11a.5.5 0 0 1-.8.4L11.5 12.6l-1.7 1.3a.5.5 0 0 1-.6 0L7.5 12.6l-1.7 1.3a.5.5 0 0 1-.6 0L3.5 12.6l-1.7 1.3A.5.5 0 0 1 1 13.5v-11A1.5 1.5 0 0 1 2.5 1h1z"/></svg>
+    View RTO
+  </a>
+  {% else %}
+  <a href="{{ pkg_base }}/rto/new">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a.5.5 0 0 1 .5.5v5.5H14a.5.5 0 0 1 0 1H8.5V14a.5.5 0 0 1-1 0V8.5H2a.5.5 0 0 1 0-1h5.5V2a.5.5 0 0 1 .5-.5z"/></svg>
+    Create RTO
+  </a>
+  {% endif %}
+{% endif %}
+{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+  <div class="subheader-inner">
+    <div class="subheader-crumb">
+      <a href="/">Portfolio</a>
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a>
+      <span>&rsaquo;</span>
+      <a href="/project/{{ project.project_number }}/packages">Packages</a>
+    </div>
+    <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="workspace-shell">
+  {{ nav.package_sections(project, package, 'dashboard') }}
+  <div class="workspace-main">
+    <div class="summary-cards">
+      <div class="summary-card sc-main">
+        <div class="sc-label">Pricing Basis</div>
+        <div class="sc-value">{{ pricing_bases.get(package.pricing_basis, package.pricing_basis) }}</div>
+      </div>
+      <div class="summary-card sc-main">
+        <div class="sc-label">Package Category</div>
+        <div class="sc-value">{{ package.package_type }}</div>
+      </div>
+      <div class="summary-card sc-main">
+        <div class="sc-label">Source</div>
+        <div class="sc-value">{{ package.package_source }}</div>
+      </div>
+      <div class="summary-card fy">
+        <div class="sc-label">Provisional Allocation</div>
+        <div class="sc-value">{{ package.planned_value | zar }}</div>
+      </div>
+      <div class="summary-card fy">
+        <div class="sc-label">Estimate</div>
+        <div class="sc-value">{{ active_baseline_estimate | zar }}</div>
+        <div class="sc-note">
+          {% if active_baseline_sheet %}
+          Active baseline: Sheet {{ active_baseline_sheet.sheet_number }}
+          {% else %}
+          No active baseline
+          {% endif %}
+        </div>
+      </div>
+      <div class="summary-card fy">
+        <div class="sc-label">Commercial Status</div>
+        <div class="sc-value">{{ commercial_status.status }}</div>
+        <div class="sc-note">
+          {% if commercial_status.rto_number %}
+          {{ commercial_status.rto_number }} &middot; {{ commercial_status.po_count }} PO{{ '' if commercial_status.po_count == 1 else 's' }}
+          {% elif package.is_contracted %}
+          RTO not yet created
+          {% else %}
+          Award baseline before RTO
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Package Workspace</h2>
+      <table>
+        <tbody>
+          <tr><td style="width:180px;font-weight:600;">Costing sheets</td><td>{{ cost_sheets | length }}</td></tr>
+          <tr><td style="font-weight:600;">Active baseline</td><td>{% if active_baseline_sheet %}Sheet {{ active_baseline_sheet.sheet_number }} - {{ active_baseline_sheet.title }}{% else %}None{% endif %}</td></tr>
+          <tr><td style="font-weight:600;">RTO</td><td>{% if package_rto %}<a href="{{ pkg_base }}/rto">{{ package_rto.rto_number }}</a>{% else %}Not created{% endif %}</td></tr>
+          <tr><td style="font-weight:600;">Linked PO value</td><td>{{ commercial_status.linked_po_total | zar }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

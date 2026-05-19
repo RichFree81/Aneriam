@@ -460,10 +460,30 @@ def package_cost_components(project_number: str, package_number: str, request: R
 
 @router.get("/project/{project_number}/packages/{package_number}")
 def package_detail(project_number: str, package_number: str, request: Request, db: DbDep):
-    # Default tab is Cost — Scope/Schedule/Cost Components are hidden from the UI
-    # for the cost-control-focused MVP. Their routes still exist but are
-    # unreachable without typing the URL by hand.
-    return _package_detail_response(request, db, project_number, package_number, "cost")
+    project = get_project_or_404(db, project_number)
+    pkg = get_package_or_404(db, project_number, package_number)
+    cost_sheets = _ensure_cost_sheets(db, pkg)
+    active_baseline_sheet = _active_baseline_sheet(pkg)
+    active_baseline_estimate = (
+        _cost_sheet_estimate_total(pkg, active_baseline_sheet.id)
+        if active_baseline_sheet is not None
+        else 0.0
+    )
+    package_rto = rto_helpers.get_for_package(db, package_number)
+    commercial_status = rto_helpers.package_commercial_status(db, pkg)
+    return templates.TemplateResponse("package_dashboard.html", {
+        "request": request,
+        "project": project,
+        "package": pkg,
+        "pricing_bases": PRICING_BASES,
+        "cost_sheets": cost_sheets,
+        "active_baseline_sheet": active_baseline_sheet,
+        "active_baseline_estimate": active_baseline_estimate,
+        "package_rto": package_rto,
+        "commercial_status": commercial_status,
+        "active_tab": "packages",
+        "active_pkg_tab": "dashboard",
+    })
 
 
 # ---------------------------------------------------------------------------

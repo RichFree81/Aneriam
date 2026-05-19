@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..capitalisation import IS_CAP_SQL, NOT_CAP_SQL
-from ..cbs import award_package, cbs_rows, next_cost_component_code, plan_package, po_package_suggestions, scope_item_state
+from ..cbs import award_package, next_cost_component_code, plan_package, po_package_suggestions, scope_item_state
 from ..dependencies import DbDep
 from ..formatting import fmt_zar
 from ..hierarchy import build_hierarchy
@@ -487,13 +487,8 @@ def project_scope_delete_cost_component(project_number: str, cost_component_id: 
 
 @router.get("/project/{project_number}/cbs")
 def project_cbs_page(project_number: str, request: Request, db: DbDep):
-    project = get_project_or_404(db, project_number)
-    return templates.TemplateResponse("project_cbs.html", {
-        "request": request,
-        "project": project,
-        "cbs": cbs_rows(db, project_number),
-        "active_tab": "cbs",
-    })
+    get_project_or_404(db, project_number)
+    return RedirectResponse(f"/project/{project_number}/analysis", status_code=303)
 
 
 @router.get("/project/{project_number}/po-package-suggestions")
@@ -515,32 +510,20 @@ def project_analysis_placeholder(project_number: str, request: Request, db: DbDe
         "project": project,
         "active_tab": "analysis",
         "heading": "Analysis",
-        "message": "Pivoted cost views and performance indicators are deferred for this rebuild.",
+        "message": "Project analysis will include CBS-aligned views of actual cost, committed cost, and total cost.",
     })
 
 
 @router.get("/project/{project_number}/changes")
 def project_changes_placeholder(project_number: str, request: Request, db: DbDep):
-    project = get_project_or_404(db, project_number)
-    return templates.TemplateResponse("project_placeholder.html", {
-        "request": request,
-        "project": project,
-        "active_tab": "changes",
-        "heading": "Changes",
-        "message": "Variation, compensation event, and trend tracking are deferred for this rebuild.",
-    })
+    get_project_or_404(db, project_number)
+    return RedirectResponse(f"/project/{project_number}/scope", status_code=303)
 
 
 @router.get("/project/{project_number}/closeout")
 def project_closeout_placeholder(project_number: str, request: Request, db: DbDep):
-    project = get_project_or_404(db, project_number)
-    return templates.TemplateResponse("project_placeholder.html", {
-        "request": request,
-        "project": project,
-        "active_tab": "closeout",
-        "heading": "Closeout",
-        "message": "Capitalisation closeout is deferred; PBS and Work Type hooks are now in place.",
-    })
+    get_project_or_404(db, project_number)
+    return RedirectResponse(f"/project/{project_number}", status_code=303)
 
 
 @router.get("/project/{project_number}/drilldown")

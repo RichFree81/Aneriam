@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% import "_project_nav.html" as nav %}
 {% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
 {% set pkg_base = "/project/" ~ project.project_number ~ "/packages/" ~ package.package_number %}
-{% block title %}{{ package.package_number }} - WBS - Cost Control{% endblock %}
+{% block title %}{{ package.package_number }} - Costings - Cost Control{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/vendor/tabulator/tabulator.min.css">
@@ -57,12 +58,8 @@
 {% block subheader %}
 <div class="subheader">
   <div class="subheader-inner">
-    <div class="subheader-crumb"><a href="/">Portfolio</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}/packages">WBS</a></div>
+    <div class="subheader-crumb"><a href="/">Portfolio</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}/packages">Packages</a></div>
     <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
-    <div class="tab-bar">
-      <a href="{{ pkg_base }}/cost" class="active">Cost Items</a>
-      {% if package.is_external %}<a href="{{ pkg_base }}/tender">Procurement</a>{% endif %}
-    </div>
   </div>
 </div>
 {% endblock %}
@@ -771,6 +768,10 @@
   }
 </style>
 
+<div class="workspace-shell">
+  {{ nav.package_sections(project, package, 'costings') }}
+  <div class="workspace-main">
+
 <div class="summary-cards">
   <div class="summary-card sc-main"><div class="sc-label">Pricing basis</div><div class="sc-value">{{ pricing_bases.get(package.pricing_basis, package.pricing_basis) }}</div></div>
   <div class="summary-card sc-main"><div class="sc-label">Package category</div><div class="sc-value">{{ package.package_type }}</div></div>
@@ -854,6 +855,9 @@
 </div>
 
 {% endif %}
+
+</div>
+</div>
 
 <div class="cost-drawer-overlay" id="sheetEditOverlay" onclick="closeSheetEditDrawer()"></div>
 <aside class="cost-drawer" id="sheetEditDrawer" aria-label="Edit cost sheet">

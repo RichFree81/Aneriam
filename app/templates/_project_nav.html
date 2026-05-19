@@ -5,22 +5,16 @@
   <a href="/project/{{ project.project_number }}/scope"
      class="{% if active == 'scope' %}active{% endif %}">Scope</a>
   <a href="/project/{{ project.project_number }}/packages"
-     class="{% if active == 'wbs' %}active{% endif %}">WBS</a>
-  <a href="/project/{{ project.project_number }}/cbs"
-     class="{% if active == 'cbs' %}active{% endif %}">CBS</a>
+     class="{% if active in ['wbs', 'packages'] %}active{% endif %}">Packages</a>
   <a href="/project/{{ project.project_number }}/analysis"
      class="{% if active == 'analysis' %}active{% endif %}">Analysis</a>
-  <a href="/project/{{ project.project_number }}/changes"
-     class="{% if active == 'changes' %}active{% endif %}">Changes</a>
   <a href="/project/{{ project.project_number }}/commitments"
      class="{% if active == 'commitments' %}active{% endif %}">Commitments</a>
-  <a href="/project/{{ project.project_number }}/closeout"
-     class="{% if active == 'closeout' %}active{% endif %}">Closeout</a>
 </div>
 {%- endmacro %}
 
 {% macro commitments_tabs(project, active) -%}
-<div class="tab-bar" style="margin-bottom:14px;">
+<div class="view-switch" aria-label="Commitments view">
   <a href="/project/{{ project.project_number }}/commitments"
      class="{% if active == 'overview' %}active{% endif %}">Overview</a>
   <a href="/project/{{ project.project_number }}/commitments/request-to-order"
@@ -31,5 +25,54 @@
      class="{% if active == 'variation_requests' %}active{% endif %}">Variation Requests</a>
   <a href="/project/{{ project.project_number }}/commitments/cashflow"
      class="{% if active == 'cashflow' %}active{% endif %}">Cashflow</a>
+</div>
+{%- endmacro %}
+
+{% macro package_sections(project, package, active) -%}
+{% set pkg_base = "/project/" ~ project.project_number ~ "/packages/" ~ package.package_number %}
+<aside class="section-rail" aria-label="Package sections">
+  <a href="{{ pkg_base }}"
+     class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
+  <a href="{{ pkg_base }}/cost"
+     class="{% if active == 'costings' %}active{% endif %}">Costings</a>
+  {% if package.is_external %}
+  <a href="{{ pkg_base }}/tender"
+     class="{% if active == 'tendering' %}active{% endif %}">Tendering</a>
+  {% elif package.is_contracted %}
+  <a href="{{ pkg_base }}/rto"
+     class="{% if active == 'tendering' %}active{% endif %}">Tendering</a>
+  {% else %}
+  <a href="#"
+     class="disabled"
+     aria-disabled="true">Tendering</a>
+  {% endif %}
+  <a href="#"
+     class="disabled"
+     aria-disabled="true">Documents</a>
+  <a href="#"
+     class="disabled"
+     aria-disabled="true">History</a>
+</aside>
+{%- endmacro %}
+
+{% macro tendering_steps(project, package, active) -%}
+{% set pkg_base = "/project/" ~ project.project_number ~ "/packages/" ~ package.package_number %}
+<div class="workflow-steps" aria-label="Tendering workflow">
+  <a href="{{ pkg_base }}/tender" class="{% if active == 'tender' %}active{% endif %}">
+    <span class="workflow-step-title">Tender</span>
+    <span class="workflow-step-meta">Issue tender and manage bidders</span>
+  </a>
+  <a href="{{ pkg_base }}/adjudication" class="{% if active == 'adjudication' %}active{% endif %}">
+    <span class="workflow-step-title">Adjudication</span>
+    <span class="workflow-step-meta">Evaluate bids and select vendor</span>
+  </a>
+  <a href="{{ pkg_base }}/award" class="{% if active == 'award' %}active{% endif %}">
+    <span class="workflow-step-title">Award</span>
+    <span class="workflow-step-meta">Confirm award position</span>
+  </a>
+  <a href="{{ pkg_base }}/rto" class="{% if active == 'rto' %}active{% endif %}">
+    <span class="workflow-step-title">RTO / Order</span>
+    <span class="workflow-step-meta">Create RTO and link PO</span>
+  </a>
 </div>
 {%- endmacro %}
