@@ -31,6 +31,7 @@
     </div>
     <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
     {{ nav.project_tabs(project, 'packages') }}
+    {{ nav.package_tabs(project, package, 'tendering') }}
   </div>
 </div>
 {% endblock %}
@@ -38,7 +39,6 @@
 {% block content %}
 <div class="workspace-shell">
   <div class="workspace-main">
-    {{ nav.package_tabs(project, package, 'tendering') }}
     {{ nav.tendering_steps(project, package, 'rto') }}
 
 {% if rto %}

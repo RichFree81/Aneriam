@@ -61,6 +61,7 @@
     <div class="subheader-crumb"><a href="/">Portfolio</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}/packages">Packages</a></div>
     <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
     {{ nav.project_tabs(project, 'packages') }}
+    {{ nav.package_tabs(project, package, 'costings') }}
   </div>
 </div>
 {% endblock %}
@@ -783,8 +784,6 @@
     <div class="sc-value">{{ commercial_status.linked_po_total | zar }}</div>
   </div>
 </div>
-
-{{ nav.package_tabs(project, package, 'costings') }}
 
 {% if not cost_sheet_open %}
 <div class="card">

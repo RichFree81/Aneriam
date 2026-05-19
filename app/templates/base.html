@@ -1,3 +1,4 @@
+{% import "_project_nav.html" as project_nav %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -370,7 +371,7 @@
     .summary-card.sc-main { border-color: #e0c87a; border-left: 3px solid #c8840a; }
     .summary-card.fy      { background: #fff; border-color: #c8d8e8; border-left: 3px solid #8aaac8; }
     .summary-cards.package-kpi-cards {
-      margin-bottom: 0;
+      margin-bottom: 16px;
       padding-bottom: 0;
     }
     .package-kpi-cards .summary-card {
@@ -457,6 +458,141 @@
     }
     .empty-state strong { display: block; font-size: 14px; color: #445; margin-bottom: 6px; }
 
+    .project-shell {
+      display: flex;
+      align-items: stretch;
+      min-height: calc(100vh - 48px);
+    }
+    .project-sidebar {
+      position: sticky;
+      top: 48px;
+      align-self: flex-start;
+      width: 224px;
+      height: calc(100vh - 48px);
+      background: #fff;
+      border-right: 1px solid #d9e2ec;
+      box-shadow: 1px 0 4px rgba(0,0,0,.05);
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-width: 224px;
+      max-width: 224px;
+      flex: 0 0 auto;
+      z-index: 180;
+      transition: width .16s ease, min-width .16s ease, max-width .16s ease;
+    }
+    .project-shell.nav-collapsed .project-sidebar {
+      width: 58px;
+      min-width: 58px;
+      max-width: 58px;
+    }
+    .project-surface {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .project-nav-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 52px;
+      padding: 10px 10px 10px 14px;
+      border-bottom: 1px solid #edf0f4;
+    }
+    .project-nav-title {
+      min-width: 0;
+      flex: 1;
+    }
+    .project-nav-code {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: #1a2e4a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .project-nav-label {
+      display: block;
+      margin-top: 2px;
+      font-size: 11px;
+      color: #667;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .project-nav-toggle {
+      width: 30px;
+      height: 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #d4dde7;
+      border-radius: 5px;
+      background: #f7f9fb;
+      color: #36506d;
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+    .project-nav-toggle:hover {
+      background: #edf3f8;
+      color: #1a2e4a;
+    }
+    .project-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 10px 8px;
+    }
+    .project-nav a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 38px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      color: #405064;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .project-nav a:hover {
+      background: #f0f5fb;
+      color: #1a2e4a;
+      text-decoration: none;
+    }
+    .project-nav a.active {
+      background: #e6f0fb;
+      color: #1a2e4a;
+      box-shadow: inset 3px 0 0 #1a6eb0;
+    }
+    .project-nav-icon {
+      width: 18px;
+      height: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 18px;
+    }
+    .project-nav-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .project-shell.nav-collapsed .project-nav-header {
+      justify-content: center;
+      padding: 10px 8px;
+    }
+    .project-shell.nav-collapsed .project-nav-title,
+    .project-shell.nav-collapsed .project-nav-text {
+      display: none;
+    }
+    .project-shell.nav-collapsed .project-nav-toggle {
+      transform: rotate(180deg);
+    }
+    .project-shell.nav-collapsed .project-nav a {
+      justify-content: center;
+      padding: 8px;
+    }
+
     /* ── Sub-header (section title + tab bar, sticky below global header) ── */
     .subheader {
       position: sticky;
@@ -492,6 +628,7 @@
       margin-bottom: 8px;
     }
     .subheader .tab-bar { margin-bottom: 0; }
+    .subheader .record-tabs { margin-top: 8px; }
 
     /* -- Workspace navigation ------------------------------------------ */
     .workspace-shell {
@@ -652,11 +789,19 @@
   </div>
 </header>
 
+{% if project is defined %}
+<div class="project-shell" id="projectShell">
+  {{ project_nav.project_sidebar(project, request.url.path if request is defined else '') }}
+  <div class="project-surface">
+{% endif %}
 {% block subheader %}{% endblock %}
-
 <div class="container">
   {% block content %}{% endblock %}
 </div>
+{% if project is defined %}
+  </div>
+</div>
+{% endif %}
 
 <script>
   // ── Actions dropdown (shared across all pages) ──
@@ -675,6 +820,20 @@
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeActions();
   });
+
+  (function initialiseProjectNavigation() {
+    const shell = document.getElementById('projectShell');
+    if (!shell) return;
+    const collapsed = localStorage.getItem('costControlProjectNavCollapsed') === '1';
+    if (collapsed) shell.classList.add('nav-collapsed');
+  })();
+
+  window.toggleProjectNav = function toggleProjectNav() {
+    const shell = document.getElementById('projectShell');
+    if (!shell) return;
+    shell.classList.toggle('nav-collapsed');
+    localStorage.setItem('costControlProjectNavCollapsed', shell.classList.contains('nav-collapsed') ? '1' : '0');
+  };
 </script>
 {% block scripts %}{% endblock %}
 </body>

@@ -1,16 +1,51 @@
 {% macro project_tabs(project, active) -%}
-<div class="tab-bar">
-  <a href="/project/{{ project.project_number }}"
-     class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
-  <a href="/project/{{ project.project_number }}/scope"
-     class="{% if active == 'scope' %}active{% endif %}">Scope</a>
-  <a href="/project/{{ project.project_number }}/packages"
-     class="{% if active in ['wbs', 'packages'] %}active{% endif %}">Packages</a>
-  <a href="/project/{{ project.project_number }}/commitments"
-     class="{% if active == 'commitments' %}active{% endif %}">Commitments</a>
-  <a href="/project/{{ project.project_number }}/analysis"
-     class="{% if active == 'analysis' %}active{% endif %}">Analysis</a>
-</div>
+{%- endmacro %}
+
+{% macro project_sidebar(project, path) -%}
+{% set nav_state = namespace(active='dashboard') %}
+{% if '/scope' in path %}
+  {% set nav_state.active = 'scope' %}
+{% elif '/packages' in path or '/suggestions' in path %}
+  {% set nav_state.active = 'packages' %}
+{% elif '/commitments' in path %}
+  {% set nav_state.active = 'commitments' %}
+{% elif '/analysis' in path %}
+  {% set nav_state.active = 'analysis' %}
+{% endif %}
+{% set proj_name = project.project_name | replace(project.project_number ~ ' ', '') %}
+<aside class="project-sidebar" aria-label="Project navigation">
+  <div class="project-nav-header">
+    <div class="project-nav-title">
+      <span class="project-nav-code">{{ project.project_number }}</span>
+      <span class="project-nav-label">{{ proj_name }}</span>
+    </div>
+    <button type="button" class="project-nav-toggle" onclick="toggleProjectNav()" title="Collapse project navigation" aria-label="Collapse project navigation">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M10.354 3.646a.5.5 0 0 1 0 .708L6.707 8l3.647 3.646a.5.5 0 0 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4a.5.5 0 0 1 .708 0z"/></svg>
+    </button>
+  </div>
+  <nav class="project-nav">
+    <a href="/project/{{ project.project_number }}" class="{% if nav_state.active == 'dashboard' %}active{% endif %}" title="Dashboard">
+      <span class="project-nav-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 2A1.5 1.5 0 0 1 3 .5h10A1.5 1.5 0 0 1 14.5 2v12A1.5 1.5 0 0 1 13 15.5H3A1.5 1.5 0 0 1 1.5 14V2zM3 1.5a.5.5 0 0 0-.5.5v4.5h11V2a.5.5 0 0 0-.5-.5H3zm10.5 6h-5v7H13a.5.5 0 0 0 .5-.5V7.5zm-6 7v-7h-5V14a.5.5 0 0 0 .5.5h4.5z"/></svg></span>
+      <span class="project-nav-text">Dashboard</span>
+    </a>
+    <a href="/project/{{ project.project_number }}/scope" class="{% if nav_state.active == 'scope' %}active{% endif %}" title="Scope">
+      <span class="project-nav-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h3A1.5 1.5 0 0 1 8 2.5v1A1.5 1.5 0 0 1 6.5 5h-3A1.5 1.5 0 0 1 2 3.5v-1zM3.5 2a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-3zM8 7.5A1.5 1.5 0 0 1 9.5 6h3A1.5 1.5 0 0 1 14 7.5v1A1.5 1.5 0 0 1 12.5 10h-3A1.5 1.5 0 0 1 8 8.5v-1zM9.5 7a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-3zM5 5.5a.5.5 0 0 1 .5.5v1.5H8a.5.5 0 0 1 0 1H5.5A1.5 1.5 0 0 1 4 7V6a.5.5 0 0 1 .5-.5z"/></svg></span>
+      <span class="project-nav-text">Scope</span>
+    </a>
+    <a href="/project/{{ project.project_number }}/packages" class="{% if nav_state.active == 'packages' %}active{% endif %}" title="Packages">
+      <span class="project-nav-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2a1 1 0 0 1 1-1h3.5a1 1 0 0 1 .8.4L8.2 2.6A1 1 0 0 0 9 3h4a1 1 0 0 1 1 1v1H2V2zm0 4h12v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6z"/></svg></span>
+      <span class="project-nav-text">Packages</span>
+    </a>
+    <a href="/project/{{ project.project_number }}/commitments" class="{% if nav_state.active == 'commitments' %}active{% endif %}" title="Commitments">
+      <span class="project-nav-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1.5A1.5 1.5 0 0 1 4.5 0h7A1.5 1.5 0 0 1 13 1.5v13a.5.5 0 0 1-.8.4L10.5 13.6l-1.7 1.3a.5.5 0 0 1-.6 0l-1.7-1.3-1.7 1.3A.5.5 0 0 1 4 14.5v-13zm1.5-.5a.5.5 0 0 0-.5.5v12l1.2-.9a.5.5 0 0 1 .6 0l1.7 1.3 1.7-1.3a.5.5 0 0 1 .6 0l1.2.9v-12a.5.5 0 0 0-.5-.5h-7z"/><path d="M5.5 4.5A.5.5 0 0 1 6 4h4a.5.5 0 0 1 0 1H6a.5.5 0 0 1-.5-.5zm0 2A.5.5 0 0 1 6 6h4a.5.5 0 0 1 0 1H6a.5.5 0 0 1-.5-.5z"/></svg></span>
+      <span class="project-nav-text">Commitments</span>
+    </a>
+    <a href="/project/{{ project.project_number }}/analysis" class="{% if nav_state.active == 'analysis' %}active{% endif %}" title="Analysis">
+      <span class="project-nav-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 14a.5.5 0 0 1 .5-.5h12a.5.5 0 0 1 0 1H2a.5.5 0 0 1-.5-.5zM3 12V7h2v5H3zm4 0V3h2v9H7zm4 0V5h2v7h-2z"/></svg></span>
+      <span class="project-nav-text">Analysis</span>
+    </a>
+  </nav>
+</aside>
 {%- endmacro %}
 
 {% macro commitments_tabs(project, active) -%}
