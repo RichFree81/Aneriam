@@ -9,10 +9,6 @@
 
 {% block actions_items %}
 {% if cost_sheet_open %}
-<a href="{{ pkg_base }}/cost">
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M5.854 3.146a.5.5 0 0 1 0 .708L2.707 7H14a.5.5 0 0 1 0 1H2.707l3.147 3.146a.5.5 0 0 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4a.5.5 0 0 1 .708 0z"/></svg>
-  Back to Cost Sheets
-</a>
 {% if active_cost_sheet_working and not package.is_contracted %}
 <a href="#" onclick="openBaselineModal(); return false;">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5A1.5 1.5 0 0 1 5.5 0h5A1.5 1.5 0 0 1 12 1.5V2h1.5A1.5 1.5 0 0 1 15 3.5v10A1.5 1.5 0 0 1 13.5 15h-11A1.5 1.5 0 0 1 1 13.5v-10A1.5 1.5 0 0 1 2.5 2H4v-.5zM5 2h6v-.5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0-.5.5V2zm-2.5 1a.5.5 0 0 0-.5.5v10a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-10a.5.5 0 0 0-.5-.5h-11z"/><path d="M5 7.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zM5 10a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3A.5.5 0 0 1 5 10z"/></svg>
@@ -38,7 +34,7 @@
 {% endif %}
 <a href="#" onclick="openCostSheetModal(); return false;">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h6A1.5 1.5 0 0 1 11 2.5V4h1.5A1.5 1.5 0 0 1 14 5.5v8a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5v-11zM3.5 2a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-8a.5.5 0 0 0-.5-.5H11v7.5a.5.5 0 0 1-.8.4L8 11.25 5.8 12.9a.5.5 0 0 1-.8-.4V2H3.5z"/></svg>
-  Add Variation Cost Sheet
+  Add Scenario Cost Sheet
 </a>
 {% endif %}
 {% if not package.is_contracted %}
@@ -231,9 +227,7 @@
       document.getElementById('costEditItemForm').action = '{{ pkg_base }}/cost/update-item/' + data.node_id;
       document.getElementById('editItemDescription').value = formValue(data.description);
       document.getElementById('editItemControlAccount').value = formValue(data.control_account);
-      document.getElementById('editItemBaseline').value = formValue(data.baseline_amount);
       document.getElementById('editItemAssigned').value = formValue(data.pre_award_amount);
-      document.getElementById('editItemCommitted').value = formValue(data.contract_amount);
     } else {
       document.getElementById('costEditGroupForm').action = '{{ pkg_base }}/cost/update-section/' + data.node_id;
       document.getElementById('editGroupCode').value = formValue(data.code);
@@ -255,13 +249,19 @@
     document.getElementById('sheetDeleteForm').action = '{{ pkg_base }}/cost/delete-sheet/' + data.id;
     document.getElementById('sheetDeleteForm').dataset.sheetTitle = data.title || 'this cost sheet';
     const deleteButton = document.getElementById('sheetDeleteButton');
-    const isAwardBaseline = data.status === 'Award Baseline';
+    const isAwardBaseline = data.status === 'Awarded';
     deleteButton.disabled = isAwardBaseline;
-    deleteButton.title = isAwardBaseline ? 'The awarded baseline cannot be deleted' : 'Delete cost sheet';
+    deleteButton.title = isAwardBaseline ? 'The awarded cost sheet cannot be deleted' : 'Delete cost sheet';
     document.getElementById('editSheetNumber').value = formValue(data.sheet_number);
     document.getElementById('editSheetTitle').value = formValue(data.title);
     document.getElementById('editSheetType').value = formValue(data.sheet_type);
-    document.getElementById('editSheetStatus').value = formValue(data.status);
+    const statusSelect = document.getElementById('editSheetStatus');
+    const statusValue = formValue(data.status);
+    if (statusValue && !Array.from(statusSelect.options).some(option => option.value === statusValue)) {
+      statusSelect.appendChild(new Option(statusValue, statusValue));
+    }
+    statusSelect.value = statusValue;
+    statusSelect.disabled = isAwardBaseline;
     document.getElementById('editSheetCreatedBy').value = formValue(data.created_by);
     document.getElementById('editSheetReviewedBy').value = formValue(data.reviewed_by);
     document.getElementById('editSheetApprovedBy').value = formValue(data.approved_by);
@@ -414,7 +414,7 @@
           {title: 'Status', field: 'status', width: 120, headerSort: true},
           {title: 'Created by', field: 'created_by', width: 140, headerSort: true},
           {title: 'Reviewed by', field: 'reviewed_by', width: 140, headerSort: true},
-          {title: 'Assigned cost', field: 'pre_award', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('pre_award'), sorter: 'number', headerSort: true},
+          {title: 'Estimate cost', field: 'pre_award', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('pre_award'), sorter: 'number', headerSort: true},
           {title: 'Committed cost', field: 'contract', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('contract'), sorter: 'number', headerSort: true},
           {
             title: '',
@@ -438,8 +438,7 @@
       {title: 'Description', field: 'description', minWidth: 340, widthGrow: 3, formatter: descriptionFormatter, headerSort: true},
       {title: 'Type', field: 'type', width: 150, formatter: typeFormatter, headerSort: true},
       {title: 'Related Cost Item Account', field: 'cost_item_account', minWidth: 190, widthGrow: 1.2, headerSort: true},
-      {title: 'Baseline estimate', field: 'baseline', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('baseline'), sorter: 'number', headerSort: true},
-      {title: 'Assigned cost', field: 'pre_award', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('pre_award'), sorter: 'number', headerSort: true},
+      {title: 'Estimate cost', field: 'pre_award', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('pre_award'), sorter: 'number', headerSort: true},
       {title: 'Committed cost', field: 'contract', width: 145, hozAlign: 'right', headerHozAlign: 'right', formatter: amountFormatter('contract'), sorter: 'number', headerSort: true},
     ];
     if (!ACTIVE_COST_SHEET_LOCKED) {
@@ -620,7 +619,7 @@
   }
   .cost-total-strip {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(145px, 0.32fr));
+    grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(145px, 0.32fr));
     gap: 0;
     border-top: 2px solid #d0d8e4;
     background: #f7f9fc;
@@ -800,7 +799,7 @@
       <a href="{{ pkg_base }}/cost" class="btn btn-sm btn-ghost back-link">Back to Cost Sheets</a>
     </div>
     {% if active_cost_sheet_locked %}
-    <div class="baseline-lock-note">This baseline is locked and read-only.</div>
+    <div class="baseline-lock-note">This cost sheet is {{ active_cost_sheet.status | lower }} and read-only.</div>
     {% elif package.is_contracted %}
     <div class="baseline-lock-note">The package has been awarded. New estimate baselines cannot be created after award.</div>
     {% endif %}
@@ -808,7 +807,6 @@
       <div id="costNodeGrid"></div>
       <div class="cost-total-strip">
         <div>Grand Total</div>
-        <div class="num">{{ cost_node_totals.baseline | zar if cost_node_totals.baseline else 'R 0.00' }}</div>
         <div class="num">{{ cost_node_totals.pre_award | zar if cost_node_totals.pre_award else 'R 0.00' }}</div>
         <div class="num">{{ cost_node_totals.contract | zar if cost_node_totals.contract else 'R 0.00' }}</div>
       </div>
@@ -839,7 +837,11 @@
         <input id="editSheetType" readonly autocomplete="off">
       </label>
       <label>Status
-        <input name="status" id="editSheetStatus" autocomplete="off">
+        <select name="status" id="editSheetStatus">
+          {% for status in cost_sheet_statuses %}
+          <option value="{{ status }}">{{ status }}</option>
+          {% endfor %}
+        </select>
       </label>
       <label>Created by
         <input name="created_by" id="editSheetCreatedBy" autocomplete="off">
@@ -895,14 +897,8 @@
           {% for ca in control_accounts %}<option value="{{ ca.code }}">{{ ca.code }} - {{ ca.name }}</option>{% endfor %}
         </select>
       </label>
-      <label>Baseline estimate
-        <input name="baseline_amount" id="editItemBaseline" type="number" min="0" step="0.01">
-      </label>
-      <label>Assigned cost
+      <label>Estimate cost
         <input name="pre_award_amount" id="editItemAssigned" type="number" min="0" step="0.01">
-      </label>
-      <label>Committed cost
-        <input name="contract_amount" id="editItemCommitted" type="number" min="0" step="0.01">
       </label>
       <div class="cost-drawer-footer">
         <button type="button" class="btn btn-sm btn-ghost" onclick="closeCostEditDrawer()">Cancel</button>
@@ -971,14 +967,8 @@
       <label class="span-2">Cost line description *
         <input name="description" id="itemDescription" required autocomplete="off">
       </label>
-      <label>Baseline estimate
-        <input name="baseline_amount" type="number" min="0" step="0.01">
-      </label>
-      <label>Assigned cost
+      <label>Estimate cost
         <input name="pre_award_amount" type="number" min="0" step="0.01">
-      </label>
-      <label>Committed cost
-        <input name="contract_amount" type="number" min="0" step="0.01">
       </label>
     </div>
     <div class="fm-footer">
@@ -993,13 +983,13 @@
 <div class="filter-overlay" id="costSheetOverlay" onclick="closeCostSheetModal()"></div>
 <div class="filter-modal" id="costSheetModal" style="width:560px;">
   <div class="fm-header">
-    <span>Add Variation Cost Sheet</span>
+    <span>Add Scenario Cost Sheet</span>
     <button class="fm-close" onclick="closeCostSheetModal()" aria-label="Close">&times;</button>
   </div>
   <form method="post" action="{{ pkg_base }}/cost/add-sheet">
     <div class="fm-fields package-modal-grid">
       <label class="span-2">Title *
-        <input name="title" id="costSheetTitle" required autocomplete="off" placeholder="Variation 001 - scope change">
+        <input name="title" id="costSheetTitle" required autocomplete="off" placeholder="Scenario 001 - scope change">
       </label>
       <label class="span-2">Description
         <input name="description" autocomplete="off">
@@ -1049,7 +1039,7 @@
       <label class="span-2">Create from baseline *
         <select name="baseline_sheet_id" required>
           {% for sheet in baseline_sheets %}
-          <option value="{{ sheet.id }}">{{ sheet.sheet_number }} - {{ sheet.title }}{% if sheet.status == 'Award Baseline' %} (Award Baseline){% endif %}</option>
+          <option value="{{ sheet.id }}">{{ sheet.sheet_number }} - {{ sheet.title }}{% if sheet.status == 'Awarded' %} (Awarded){% endif %}</option>
           {% endfor %}
         </select>
       </label>
@@ -1106,7 +1096,7 @@
           {% endfor %}
         </select>
       </label>
-      <p style="margin:0;color:#556;line-height:1.5;">Awarding the package removes open working estimates and marks the selected baseline as the award baseline.</p>
+      <p style="margin:0;color:#556;line-height:1.5;">Awarding the package removes open working estimates, converts the selected baseline estimate to committed cost, and marks the selected baseline as awarded.</p>
       {% else %}
       <p style="margin:0;color:#8b1a10;line-height:1.5;">Create and lock an estimate baseline before awarding this package.</p>
       {% endif %}

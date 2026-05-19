@@ -270,7 +270,7 @@
     white-space: nowrap;
   }
   #packageGrid .pkg-cost-status-provisional-allocation { background: #fff4d8; color: #7a4b00; }
-  #packageGrid .pkg-cost-status-assigned-cost { background: #e6f0fb; color: #1a4a70; }
+  #packageGrid .pkg-cost-status-estimate-cost { background: #e6f0fb; color: #1a4a70; }
   #packageGrid .pkg-cost-status-committed-cost { background: #d1e7dd; color: #0a5233; }
   #packageGrid .pkg-source-external { background: #fdf3e6; color: #8b4513; }
   #packageGrid .pkg-source-client { background: #f4e9fb; color: #5b2a76; }
@@ -405,7 +405,7 @@
     <div class="sc-value">{{ pkg_stats.provisional_allocation | zar }}</div>
   </div>
   <div class="summary-card fy">
-    <div class="sc-label">Assigned</div>
+    <div class="sc-label">Estimate</div>
     <div class="sc-value">{{ pkg_stats.assigned | zar }}</div>
   </div>
   <div class="summary-card fy">

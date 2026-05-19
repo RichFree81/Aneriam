@@ -30,6 +30,8 @@ from ..templates import templates
 
 router = APIRouter()
 
+COST_SHEET_SELECTABLE_STATUSES = ("In Progress", "In Review", "Approved", "Scenario", "Superseded")
+
 
 def _sheet_redirect(project_number: str, package_number: str, sheet_id: int | None = None):
     suffix = f"?sheet_id={sheet_id}" if sheet_id is not None else ""
@@ -46,20 +48,20 @@ def _next_numeric_sheet_number(db: Session, package_id: int) -> str:
 
 
 def _is_working_sheet(sheet: PackageCostSheet) -> bool:
-    return sheet.sheet_type in {"Original", "Working Estimate"} and sheet.status != "Locked"
+    return sheet.sheet_type in {"Original", "Working Estimate", "Variation", "Scenario"} and sheet.status in {"In Progress", "In Review", "Scenario"}
 
 
 def _is_editable_sheet(sheet: PackageCostSheet) -> bool:
-    return _is_working_sheet(sheet) or (sheet.sheet_type == "Variation" and sheet.status != "Locked")
+    return _is_working_sheet(sheet)
 
 
 def _is_locked_sheet(sheet: PackageCostSheet) -> bool:
-    return sheet.sheet_type == "Baseline" or sheet.status == "Locked"
+    return sheet.sheet_type == "Baseline" or sheet.status in {"Approved", "Awarded", "Superseded"}
 
 
 def _assert_cost_sheet_editable(sheet: PackageCostSheet) -> None:
     if not _is_editable_sheet(sheet):
-        raise HTTPException(status_code=400, detail="Locked baselines are read-only")
+        raise HTTPException(status_code=400, detail="Approved or awarded cost sheets are read-only")
 
 
 def _renumber_cost_sheets(db: Session, pkg) -> None:
@@ -90,7 +92,7 @@ def _ensure_cost_sheets(db: Session, pkg) -> list[PackageCostSheet]:
             sheet_number="1",
             title="Package Base Cost",
             sheet_type="Working Estimate",
-            status="Working",
+            status="In Progress",
             display_order=0,
             created_at=datetime.now(),
         )
@@ -102,8 +104,8 @@ def _ensure_cost_sheets(db: Session, pkg) -> list[PackageCostSheet]:
             original.title = "Package Base Cost"
         if original.sheet_type == "Original":
             original.sheet_type = "Working Estimate"
-        if original.status == "Draft":
-            original.status = "Working"
+        if original.status in {"Draft", "Working"}:
+            original.status = "In Progress"
     for node in pkg.cost_nodes:
         if original is not None and node.cost_sheet_id is None:
             node.cost_sheet_id = original.id
@@ -145,16 +147,13 @@ def _cost_node_amount(node: PackageCostNode, column: str) -> float:
 
 
 def _cost_node_subtotals(node: PackageCostNode) -> dict[str, float]:
-    baseline = _cost_node_amount(node, "baseline_amount")
     pre_award = _cost_node_amount(node, "pre_award_amount")
     contract = _cost_node_amount(node, "contract_amount")
     for child in node.children:
         child_totals = _cost_node_subtotals(child)
-        baseline += child_totals["baseline"]
         pre_award += child_totals["pre_award"]
         contract += child_totals["contract"]
     return {
-        "baseline": baseline,
         "pre_award": pre_award,
         "contract": contract,
     }
@@ -186,16 +185,10 @@ def _cost_node_grid_row(node: PackageCostNode, cost_item_account_names: dict[str
         "type": node_type,
         "control_account": node.cc_code or "",
         "cost_item_account": cost_item_account,
-        "baseline": totals["baseline"],
-        "baseline_display": fmt_zar(totals["baseline"]) if totals["baseline"] else "",
         "pre_award": totals["pre_award"],
         "pre_award_display": fmt_zar(totals["pre_award"]) if totals["pre_award"] else "",
         "contract": totals["contract"],
         "contract_display": fmt_zar(totals["contract"]) if totals["contract"] else "",
-        "unit": node.unit,
-        "qty": node.qty,
-        "rate": node.rate,
-        "baseline_amount": node.baseline_amount,
         "pre_award_unit": node.pre_award_unit,
         "pre_award_qty": node.pre_award_qty,
         "pre_award_rate": node.pre_award_rate,
@@ -240,10 +233,9 @@ def _cost_item_code_option_rows(codes: list[CostItemCode]) -> list[dict]:
 
 def _cost_sheet_row(pkg, sheet: PackageCostSheet) -> dict:
     roots = [node for node in pkg.cost_nodes if node.parent_id is None and node.cost_sheet_id == sheet.id]
-    totals = {"baseline": 0.0, "pre_award": 0.0, "contract": 0.0}
+    totals = {"pre_award": 0.0, "contract": 0.0}
     for node in roots:
         node_totals = _cost_node_subtotals(node)
-        totals["baseline"] += node_totals["baseline"]
         totals["pre_award"] += node_totals["pre_award"]
         totals["contract"] += node_totals["contract"]
     return {
@@ -257,8 +249,6 @@ def _cost_sheet_row(pkg, sheet: PackageCostSheet) -> dict:
         "created_by": sheet.created_by or "",
         "reviewed_by": sheet.reviewed_by or "",
         "approved_by": sheet.approved_by or "",
-        "baseline": totals["baseline"],
-        "baseline_display": fmt_zar(totals["baseline"]) if totals["baseline"] else "R 0.00",
         "pre_award": totals["pre_award"],
         "pre_award_display": fmt_zar(totals["pre_award"]) if totals["pre_award"] else "R 0.00",
         "contract": totals["contract"],
@@ -283,10 +273,6 @@ def _clone_cost_node_tree(
         description=node.description,
         is_item=node.is_item,
         cc_code=node.cc_code,
-        unit=node.unit,
-        qty=node.qty,
-        rate=node.rate,
-        baseline_amount=node.baseline_amount,
         pre_award_unit=node.pre_award_unit,
         pre_award_qty=node.pre_award_qty,
         pre_award_rate=node.pre_award_rate,
@@ -354,7 +340,6 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             for node in sorted(root_nodes, key=lambda n: n.display_order)
         ]
         cost_node_totals = {
-            "baseline": sum(row["baseline"] for row in cost_node_rows),
             "pre_award": sum(row["pre_award"] for row in cost_node_rows),
             "contract": sum(row["contract"] for row in cost_node_rows),
         }
@@ -386,6 +371,7 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "active_cost_sheet_locked": _is_locked_sheet(active_cost_sheet),
             "active_cost_sheet_working": _is_working_sheet(active_cost_sheet),
             "baseline_sheets": baseline_sheets,
+            "cost_sheet_statuses": COST_SHEET_SELECTABLE_STATUSES,
             "control_accounts": control_accounts,
             "award_errors": award_errors,
             "active_tab": "wbs",
@@ -748,7 +734,6 @@ def _write_audit_log(db: Session, node: PackageCostNode, action: str) -> None:
         action=action,
         changed_at=datetime.now(),
         snapshot=json.dumps({
-            "bl_unit": node.unit, "bl_qty": node.qty, "bl_rate": node.rate, "bl_amount": node.baseline_amount,
             "pa_unit": node.pre_award_unit, "pa_qty": node.pre_award_qty, "pa_rate": node.pre_award_rate, "pa_amount": node.pre_award_amount,
             "ct_unit": node.contract_unit, "ct_qty": node.contract_qty, "ct_rate": node.contract_rate, "ct_amount": node.contract_amount,
         }),
@@ -773,8 +758,8 @@ def cost_add_sheet(
         package_id=pkg.id,
         sheet_number=sheet_number,
         title=title.strip(),
-        sheet_type="Variation",
-        status="Draft",
+        sheet_type="Scenario",
+        status="Scenario",
         description=description.strip(),
         display_order=display_order,
         created_at=datetime.now(),
@@ -808,8 +793,11 @@ def cost_update_sheet(
     sheet.created_by = created_by.strip()
     sheet.reviewed_by = reviewed_by.strip()
     sheet.approved_by = approved_by.strip()
-    if status.strip() and sheet.status != "Award Baseline":
-        sheet.status = status.strip()
+    requested_status = status.strip()
+    if requested_status and sheet.status != "Awarded":
+        if requested_status not in COST_SHEET_SELECTABLE_STATUSES:
+            raise HTTPException(status_code=400, detail="Invalid cost sheet status")
+        sheet.status = requested_status
     db.commit()
     return _cost_redirect(project_number, package_number)
 
@@ -820,8 +808,8 @@ def cost_delete_sheet(project_number: str, package_number: str, sheet_id: int, d
     sheet = db.get(PackageCostSheet, sheet_id)
     if sheet is None or sheet.package_id != pkg.id:
         raise HTTPException(status_code=404, detail="Cost sheet not found")
-    if sheet.status == "Award Baseline":
-        raise HTTPException(status_code=400, detail="The awarded baseline cannot be deleted")
+    if sheet.status == "Awarded":
+        raise HTTPException(status_code=400, detail="The awarded cost sheet cannot be deleted")
 
     for dependent in db.query(PackageCostSheet).filter_by(source_sheet_id=sheet.id).all():
         dependent.source_sheet_id = None
@@ -858,7 +846,7 @@ def cost_create_baseline(
         sheet_number=sheet_number,
         title=title.strip(),
         sheet_type="Baseline",
-        status="Locked",
+        status="Approved",
         description=(
             f"Baselined from {source_sheet.sheet_number} - {source_sheet.title}."
             if not description.strip()
@@ -904,7 +892,7 @@ def cost_create_working_estimate(
         sheet_number=_next_numeric_sheet_number(db, pkg.id),
         title=f"Working Estimate - {baseline.title}",
         sheet_type="Working Estimate",
-        status="Working",
+        status="In Progress",
         description=f"Created from {baseline.sheet_number} - {baseline.title}",
         source_sheet_id=baseline.id,
         display_order=display_order,
@@ -941,18 +929,10 @@ def cost_add_item(
     library_account_name: str = Form(""),
     custom_account_name: str = Form(""),
     cc_code: str = Form(""),
-    baseline_unit: str = Form("Sum"),
-    baseline_qty: str = Form(""),
-    baseline_rate: str = Form(""),
-    baseline_amount: str = Form(""),
     pre_award_unit: str = Form("Sum"),
     pre_award_qty: str = Form(""),
     pre_award_rate: str = Form(""),
     pre_award_amount: str = Form(""),
-    contract_unit: str = Form("Sum"),
-    contract_qty: str = Form(""),
-    contract_rate: str = Form(""),
-    contract_amount: str = Form(""),
 ):
     pkg = get_package_or_404(db, project_number, package_number)
     sheet = _resolve_cost_sheet(db, pkg, sheet_id)
@@ -975,9 +955,7 @@ def cost_add_item(
     code = cost_code.code
     cc_code = cc_code.strip() or component.commodity_code
     parent_int = _resolve_cost_line_parent(db, pkg, cost_grouping_id or parent_id, sheet.id)
-    bl_u, bl_q, bl_r, bl_a = process_cost_column(baseline_unit, baseline_qty, baseline_rate, baseline_amount)
     pa_u, pa_q, pa_r, pa_a = process_cost_column(pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount)
-    ct_u, ct_q, ct_r, ct_a = process_cost_column(contract_unit, contract_qty, contract_rate, contract_amount)
     node = PackageCostNode(
         package_id=pkg.id,
         cost_sheet_id=sheet.id,
@@ -986,9 +964,7 @@ def cost_add_item(
         description=description.strip(),
         is_item=True,
         cc_code=cc_code.strip() or None,
-        unit=bl_u, qty=bl_q, rate=bl_r, baseline_amount=bl_a,
         pre_award_unit=pa_u, pre_award_qty=pa_q, pre_award_rate=pa_r, pre_award_amount=pa_a,
-        contract_unit=ct_u, contract_qty=ct_q, contract_rate=ct_r, contract_amount=ct_a or None,
         display_order=_next_sibling_order(pkg, parent_int, sheet.id),
     )
     db.add(node)
@@ -1007,18 +983,10 @@ def cost_update_item(
     code: str | None = Form(None),
     description: str = Form(...),
     cc_code: str = Form(""),
-    baseline_unit: str = Form("Sum"),
-    baseline_qty: str = Form(""),
-    baseline_rate: str = Form(""),
-    baseline_amount: str = Form(""),
     pre_award_unit: str = Form("Sum"),
     pre_award_qty: str = Form(""),
     pre_award_rate: str = Form(""),
     pre_award_amount: str = Form(""),
-    contract_unit: str = Form("Sum"),
-    contract_qty: str = Form(""),
-    contract_rate: str = Form(""),
-    contract_amount: str = Form(""),
 ):
     pkg = get_package_or_404(db, project_number, package_number)
     node = db.get(PackageCostNode, node_id)
@@ -1028,25 +996,15 @@ def cost_update_item(
         _assert_cost_sheet_editable(node.cost_sheet_ref)
     if not node.is_item:
         raise HTTPException(status_code=400, detail="Use the group editor for Cost Groupings and cost item accounts")
-    bl_u, bl_q, bl_r, bl_a = process_cost_column(baseline_unit, baseline_qty, baseline_rate, baseline_amount)
     pa_u, pa_q, pa_r, pa_a = process_cost_column(pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount)
-    ct_u, ct_q, ct_r, ct_a = process_cost_column(contract_unit, contract_qty, contract_rate, contract_amount)
     if code is not None:
         node.code = code.strip()
     node.description = description.strip()
     node.cc_code = cc_code.strip() or None
-    node.unit = bl_u
-    node.qty = bl_q
-    node.rate = bl_r
-    node.baseline_amount = bl_a
     node.pre_award_unit = pa_u
     node.pre_award_qty = pa_q
     node.pre_award_rate = pa_r
     node.pre_award_amount = pa_a
-    node.contract_unit = ct_u
-    node.contract_qty = ct_q
-    node.contract_rate = ct_r
-    node.contract_amount = ct_a or None
     db.commit()
     _write_audit_log(db, node, "Updated")
     return _cost_redirect(project_number, package_number, node.cost_sheet_id)
@@ -1082,11 +1040,22 @@ def cost_award(
     pkg = get_package_or_404(db, project_number, package_number)
     baseline = _resolve_cost_sheet(db, pkg, baseline_sheet_id)
     if baseline.sheet_type != "Baseline":
-        raise HTTPException(status_code=400, detail="Select the locked baseline being awarded")
+        raise HTTPException(status_code=400, detail="Select the approved baseline being awarded")
+    if baseline.status != "Approved":
+        raise HTTPException(status_code=400, detail="Only an approved baseline can be awarded")
     try:
         award_package(db, pkg)
         _delete_working_estimates(db, pkg)
-        baseline.status = "Award Baseline"
+        awarded_total = 0.0
+        for node in pkg.cost_nodes:
+            if node.cost_sheet_id == baseline.id and node.is_item:
+                node.contract_unit = node.pre_award_unit
+                node.contract_qty = node.pre_award_qty
+                node.contract_rate = node.pre_award_rate
+                node.contract_amount = node.pre_award_amount
+                awarded_total += float(node.contract_amount or 0)
+        pkg.awarded_amount = awarded_total
+        baseline.status = "Awarded"
         baseline.display_order = -100
         marker = f"Used for package award on {datetime.now().date().isoformat()}."
         baseline.description = (

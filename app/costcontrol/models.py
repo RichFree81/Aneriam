@@ -445,7 +445,7 @@ class PackageCostSheet(Base):
     sheet_number: Mapped[str] = mapped_column(String(30), nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     sheet_type: Mapped[str] = mapped_column(String(20), nullable=False, default="Original")
-    status: Mapped[str] = mapped_column(String(30), nullable=False, default="Draft")
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="In Progress")
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by: Mapped[str] = mapped_column(Text, nullable=False, default="")
     reviewed_by: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -471,9 +471,8 @@ class PackageCostNode(Base):
     their children's amounts for display.
 
     Columns:
-        baseline_amount   — initial estimate, locked once baseline is set
-        pre_award_amount  — working estimate; frozen when package.is_contracted=True
-        contract_amount   — contractor-awarded amount, locked once entered
+        pre_award_amount: estimate value before award.
+        contract_amount: committed value populated when the package is awarded.
     """
 
     __tablename__ = "package_cost_nodes"
@@ -499,13 +498,7 @@ class PackageCostNode(Base):
         String(3), ForeignKey("control_accounts.code"), nullable=True
     )
 
-    # Baseline
-    unit: Mapped[str] = mapped_column(String(20), nullable=False, default="Sum")
-    qty: Mapped[float | None] = mapped_column(Numeric(18, 4, asdecimal=False), nullable=True)
-    rate: Mapped[float | None] = mapped_column(Numeric(18, 2, asdecimal=False), nullable=True)
-    baseline_amount: Mapped[float | None] = mapped_column(Numeric(18, 2, asdecimal=False), nullable=True)
-
-    # Pre-award estimate
+    # Estimate
     pre_award_unit: Mapped[str] = mapped_column(String(20), nullable=False, default="Sum")
     pre_award_qty: Mapped[float | None] = mapped_column(Numeric(18, 4, asdecimal=False), nullable=True)
     pre_award_rate: Mapped[float | None] = mapped_column(Numeric(18, 2, asdecimal=False), nullable=True)

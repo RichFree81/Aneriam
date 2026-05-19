@@ -15,14 +15,12 @@ def flatten_cost_nodes(nodes: list[Any], depth: int = 0, ancestor_ids: tuple[int
             return own + sum(r["_subtotals"][col] for r in cr if r["node"].parent_id == n.id)
 
         subtotals = {
-            "baseline": _col_total("baseline_amount"),
             "pre_award": _col_total("pre_award_amount"),
             "contract": _col_total("contract_amount"),
         }
         subtotals["effective"] = (
             subtotals["contract"] if subtotals["contract"]
-            else subtotals["pre_award"] if subtotals["pre_award"]
-            else subtotals["baseline"]
+            else subtotals["pre_award"]
         )
 
         rows.append({
@@ -46,7 +44,7 @@ def package_effective_total(pkg: Any) -> float:
     total = 0.0
     for node in pkg.cost_nodes:
         if node.is_item:
-            value = node.contract_amount or node.pre_award_amount or node.baseline_amount
+            value = node.contract_amount or node.pre_award_amount
             if value:
                 total += value
     return total

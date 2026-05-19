@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 from costcontrol.startup import (
     migrate_cost_component_schema,
     ensure_package_cost_sheets,
+    remove_package_cost_node_baseline_columns,
     repair_auto_cbs_cost_node_hierarchy,
     repair_package_cost_nodes_workstream_fk,
 )
@@ -228,7 +229,7 @@ def test_repair_auto_cbs_cost_node_hierarchy_flattens_old_generated_rows():
         session.execute(text("""
             INSERT INTO package_cost_nodes (
                 id, package_id, parent_id, code, description, is_item, cc_code,
-                baseline_amount, display_order
+                pre_award_amount, display_order
             ) VALUES (102, 1, 101, '201.01.01', 'Pump supply', 1, '201', 123, 0)
         """))
         session.commit()
@@ -236,7 +237,7 @@ def test_repair_auto_cbs_cost_node_hierarchy_flattens_old_generated_rows():
         repair_auto_cbs_cost_node_hierarchy(session)
 
         line = session.execute(text("""
-            SELECT parent_id, code, description, cc_code, baseline_amount
+            SELECT parent_id, code, description, cc_code, pre_award_amount
             FROM package_cost_nodes
             WHERE id = 102
         """)).mappings().one()
@@ -244,7 +245,7 @@ def test_repair_auto_cbs_cost_node_hierarchy_flattens_old_generated_rows():
         assert line["code"] == "201.01.01"
         assert line["description"] == "Pump supply"
         assert line["cc_code"] == "201"
-        assert line["baseline_amount"] == 123
+        assert line["pre_award_amount"] == 123
 
         remaining_group_count = session.execute(text("""
             SELECT COUNT(*)
@@ -283,6 +284,12 @@ def test_ensure_package_cost_sheets_creates_original_and_assigns_legacy_nodes():
                 display_order INTEGER NOT NULL DEFAULT 0,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(package_id, sheet_number)
+            )
+        """))
+        session.execute(text("""
+            CREATE TABLE control_accounts (
+                code VARCHAR(3) PRIMARY KEY,
+                name TEXT NOT NULL
             )
         """))
         session.execute(text("""
@@ -326,13 +333,14 @@ def test_ensure_package_cost_sheets_creates_original_and_assigns_legacy_nodes():
         ensure_package_cost_sheets(session)
 
         sheet = session.execute(text("""
-            SELECT id, sheet_number, title, sheet_type
+            SELECT id, sheet_number, title, sheet_type, status
             FROM package_cost_sheets
             WHERE package_id = 1
         """)).mappings().one()
         assert sheet["sheet_number"] == "1"
         assert sheet["title"] == "Package Base Cost"
         assert sheet["sheet_type"] == "Working Estimate"
+        assert sheet["status"] == "In Progress"
 
         node_sheet_id = session.execute(text("""
             SELECT cost_sheet_id
@@ -342,10 +350,15 @@ def test_ensure_package_cost_sheets_creates_original_and_assigns_legacy_nodes():
         assert node_sheet_id == sheet["id"]
 
         repair_package_cost_nodes_workstream_fk(session)
+        remove_package_cost_node_baseline_columns(session)
 
         columns = [row[1] for row in session.execute(text("PRAGMA table_info(package_cost_nodes)")).fetchall()]
         foreign_tables = [row[2] for row in session.execute(text("PRAGMA foreign_key_list(package_cost_nodes)")).fetchall()]
         assert "workstream_id" not in columns
+        assert "baseline_amount" not in columns
+        assert "unit" not in columns
+        assert "qty" not in columns
+        assert "rate" not in columns
         assert "workstreams" not in foreign_tables
 
         session.execute(text("""

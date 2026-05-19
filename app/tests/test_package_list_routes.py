@@ -182,7 +182,7 @@ def test_package_cost_sheet_edit_drawer_deletes_working_sheet_and_baseline():
             sheet_number="2",
             title="Baseline 1 - Feasibility",
             sheet_type="Baseline",
-            status="Locked",
+            status="Approved",
             description="Admin removable baseline",
             display_order=1,
         )
@@ -212,9 +212,9 @@ def test_package_cost_sheet_edit_drawer_deletes_working_sheet_and_baseline():
         award_baseline = PackageCostSheet(
             package_id=package_id,
             sheet_number="2",
-            title="Award Baseline",
+            title="Awarded Baseline",
             sheet_type="Baseline",
-            status="Award Baseline",
+            status="Awarded",
             description="Contractual award reference",
             display_order=-100,
         )
@@ -250,7 +250,6 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             description="Bulk excavation line",
             is_item=True,
             cc_code="205",
-            baseline_amount=1000,
             pre_award_amount=1200,
             contract_amount=1300,
             display_order=0,
@@ -263,9 +262,9 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         original_sheet = session.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Working Estimate").one()
         session.refresh(level2)
         assert level2.cost_sheet_id == original_sheet.id
-        assert original_sheet.status == "Working"
+        assert original_sheet.status == "In Progress"
         assert "Package Base Cost" in response.text
-        assert "Add Variation Cost Sheet" in response.text
+        assert "Add Scenario Cost Sheet" in response.text
         assert 'id="costSheetGrid"' in response.text
         assert 'id="costNodeGrid"' not in response.text
         assert "Back to Cost Sheets" not in response.text
@@ -278,8 +277,8 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert sheet_data[0]["sheet_number"] == "1"
         assert sheet_data[0]["title"] == "Package Base Cost"
         assert sheet_data[0]["sheet_type"] == "Working Estimate"
-        assert sheet_data[0]["status"] == "Working"
-        assert sheet_data[0]["baseline"] == 1000
+        assert sheet_data[0]["status"] == "In Progress"
+        assert sheet_data[0]["pre_award"] == 1200
         assert "Created by" in response.text
         assert "Reviewed by" in response.text
         assert "sheetEditDrawer" in response.text
@@ -289,7 +288,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             f"/project/5006/packages/5006-PKG-001/cost/update-sheet/{original_sheet.id}",
             data={
                 "title": "Package Base Cost - reviewed",
-                "status": "Working",
+                "status": "In Review",
                 "created_by": "Estimator",
                 "reviewed_by": "PM",
                 "approved_by": "Sponsor",
@@ -376,7 +375,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert response.status_code == 303
         variation_sheet = session.query(PackageCostSheet).filter_by(
             package_id=package_id,
-            sheet_type="Variation",
+            sheet_type="Scenario",
             title="Variation 001 - scope change",
         ).one()
         assert variation_sheet.sheet_number == "2"
@@ -404,9 +403,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             data={
                 "description": "Bulk earthworks",
                 "cc_code": "206",
-                "baseline_amount": "1400",
                 "pre_award_amount": "1500",
-                "contract_amount": "1600",
             },
             follow_redirects=False,
         )
@@ -415,9 +412,8 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert item.code == "01.01"
         assert item.description == "Bulk earthworks"
         assert item.cc_code == "206"
-        assert item.baseline_amount == 1400
         assert item.pre_award_amount == 1500
-        assert item.contract_amount == 1600
+        assert item.contract_amount == 1300
 
         response = client.post(
             "/project/5006/packages/5006-PKG-001/cost/add-section",
@@ -472,7 +468,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
                 "cost_item_code_id": str(existing_code.id),
                 "account_mode": "existing",
                 "description": "Install anchor bolts",
-                "baseline_amount": "2100",
+                "pre_award_amount": "2100",
             },
             follow_redirects=False,
         )
@@ -485,7 +481,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         ).one()
         assert component_line.code == "205.01.01"
         assert component_line.cc_code == "205"
-        assert component_line.baseline_amount == 2100
+        assert component_line.pre_award_amount == 2100
         assert session.query(PackageCostNode).filter_by(
             package_id=package_id,
             parent_id=None,
@@ -510,7 +506,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
                 "account_mode": "custom",
                 "custom_account_name": "Refractory works",
                 "description": "Install refractory",
-                "baseline_amount": "700",
+                "pre_award_amount": "700",
             },
             follow_redirects=False,
         )
@@ -540,7 +536,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
                 "cost_item_code_id": str(existing_code.id),
                 "account_mode": "existing",
                 "description": "Mismatched control account",
-                "baseline_amount": "1",
+                "pre_award_amount": "1",
             },
             follow_redirects=False,
         )
@@ -569,7 +565,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
             title="Baseline 1 - Feasibility",
         ).one()
         assert baseline_sheet.sheet_number == "2"
-        assert baseline_sheet.status == "Locked"
+        assert baseline_sheet.status == "Approved"
         assert baseline_sheet.source_sheet_id is None
         assert "Baselined from 1 - Package Base Cost" in baseline_sheet.description
         assert baseline_sheet.locked_at is not None
@@ -580,7 +576,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
 
         response = client.get(f"/project/5006/packages/5006-PKG-001/cost?sheet_id={baseline_sheet.id}")
         assert response.status_code == 200
-        assert "This baseline is locked and read-only." in response.text
+        assert "This cost sheet is approved and read-only." in response.text
         assert "Add Cost Grouping" not in response.text
         assert "Add Cost Line" not in response.text
         assert "Create Baseline" not in response.text
@@ -604,7 +600,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert response.status_code == 303
         working_sheet = session.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Working Estimate").one()
         assert working_sheet.source_sheet_id == baseline_sheet.id
-        assert working_sheet.status == "Working"
+        assert working_sheet.status == "In Progress"
 
         package = session.get(Package, package_id)
         package.is_contracted = True

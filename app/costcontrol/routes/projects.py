@@ -1031,7 +1031,7 @@ def _package_node_assigned_total(pkg: Package) -> float:
     total = 0.0
     for node in pkg.cost_nodes:
         if node.is_item:
-            value = node.pre_award_amount or node.baseline_amount
+            value = node.pre_award_amount
             if value:
                 total += float(value)
     return total
@@ -1080,7 +1080,7 @@ def _package_cost_position(pkg: Package) -> dict[str, float | str]:
         return {
             "amount": assigned,
             "amount_display": fmt_zar(assigned),
-            "cost_status": "Assigned Cost",
+            "cost_status": "Estimate Cost",
         }
 
     provisional = float(pkg.planned_value or 0)

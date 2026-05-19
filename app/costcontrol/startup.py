@@ -250,10 +250,6 @@ def repair_package_cost_nodes_workstream_fk(db: Session) -> None:
                 description TEXT NOT NULL,
                 is_item BOOLEAN NOT NULL DEFAULT 0,
                 cc_code VARCHAR(3) REFERENCES control_accounts(code),
-                unit VARCHAR(20) NOT NULL DEFAULT 'Sum',
-                qty NUMERIC(18,4),
-                rate NUMERIC(18,2),
-                baseline_amount NUMERIC(18,2),
                 pre_award_unit VARCHAR(20) NOT NULL DEFAULT 'Sum',
                 pre_award_qty NUMERIC(18,4),
                 pre_award_rate NUMERIC(18,2),
@@ -269,7 +265,6 @@ def repair_package_cost_nodes_workstream_fk(db: Session) -> None:
         db.execute(text(f"""
             INSERT INTO package_cost_nodes_rebuild (
                 id, package_id, cost_sheet_id, parent_id, code, description, is_item, cc_code,
-                unit, qty, rate, baseline_amount,
                 pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount,
                 contract_unit, contract_qty, contract_rate, contract_amount,
                 display_order
@@ -278,7 +273,6 @@ def repair_package_cost_nodes_workstream_fk(db: Session) -> None:
                 id, package_id,
                 {cost_sheet_select},
                 parent_id, code, description, is_item, cc_code,
-                unit, qty, rate, baseline_amount,
                 COALESCE(pre_award_unit, 'Sum'), pre_award_qty, pre_award_rate, pre_award_amount,
                 COALESCE(contract_unit, 'Sum'), contract_qty, contract_rate, contract_amount,
                 display_order
@@ -290,6 +284,76 @@ def repair_package_cost_nodes_workstream_fk(db: Session) -> None:
     except Exception:
         db.rollback()
         logger.exception("Failed to rebuild package_cost_nodes")
+        raise
+    finally:
+        db.execute(text("PRAGMA foreign_keys=ON"))
+        db.commit()
+
+
+def remove_package_cost_node_baseline_columns(db: Session) -> None:
+    """Drop the removed baseline estimate columns from existing SQLite DBs."""
+    if not _table_exists(db, "package_cost_nodes"):
+        return
+    columns = [row[1] for row in db.execute(text("PRAGMA table_info(package_cost_nodes)")).fetchall()]
+    removed_columns = {"unit", "qty", "rate", "baseline_amount"}
+    if not removed_columns.intersection(columns):
+        return
+
+    logger.info("Rebuilding package_cost_nodes to remove baseline estimate columns")
+    db.commit()
+    db.execute(text("PRAGMA foreign_keys=OFF"))
+    try:
+        db.execute(text("DROP TABLE IF EXISTS package_cost_nodes_rebuild"))
+        db.execute(text("""
+            CREATE TABLE package_cost_nodes_rebuild (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+                cost_sheet_id INTEGER REFERENCES package_cost_sheets(id) ON DELETE CASCADE,
+                parent_id INTEGER REFERENCES package_cost_nodes(id) ON DELETE CASCADE,
+                code VARCHAR(30) NOT NULL DEFAULT '',
+                description TEXT NOT NULL,
+                is_item BOOLEAN NOT NULL DEFAULT 0,
+                cc_code VARCHAR(3) REFERENCES control_accounts(code),
+                pre_award_unit VARCHAR(20) NOT NULL DEFAULT 'Sum',
+                pre_award_qty NUMERIC(18,4),
+                pre_award_rate NUMERIC(18,2),
+                pre_award_amount NUMERIC(18,2),
+                contract_unit VARCHAR(20) NOT NULL DEFAULT 'Sum',
+                contract_qty NUMERIC(18,4),
+                contract_rate NUMERIC(18,2),
+                contract_amount NUMERIC(18,2),
+                display_order INTEGER NOT NULL DEFAULT 0
+            )
+        """))
+        cost_sheet_select = "cost_sheet_id" if "cost_sheet_id" in columns else "NULL"
+        estimate_select = (
+            "COALESCE(pre_award_amount, baseline_amount)"
+            if "baseline_amount" in columns
+            else "pre_award_amount"
+        )
+        db.execute(text(f"""
+            INSERT INTO package_cost_nodes_rebuild (
+                id, package_id, cost_sheet_id, parent_id, code, description, is_item, cc_code,
+                pre_award_unit, pre_award_qty, pre_award_rate, pre_award_amount,
+                contract_unit, contract_qty, contract_rate, contract_amount,
+                display_order
+            )
+            SELECT
+                id, package_id,
+                {cost_sheet_select},
+                parent_id, code, description, is_item, cc_code,
+                COALESCE(pre_award_unit, 'Sum'), pre_award_qty, pre_award_rate,
+                {estimate_select},
+                COALESCE(contract_unit, 'Sum'), contract_qty, contract_rate, contract_amount,
+                display_order
+            FROM package_cost_nodes
+        """))
+        db.execute(text("DROP TABLE package_cost_nodes"))
+        db.execute(text("ALTER TABLE package_cost_nodes_rebuild RENAME TO package_cost_nodes"))
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to remove package_cost_nodes baseline estimate columns")
         raise
     finally:
         db.execute(text("PRAGMA foreign_keys=ON"))
@@ -379,6 +443,17 @@ def ensure_package_cost_sheets(db: Session) -> None:
         return
 
     try:
+        db.execute(text("""
+            UPDATE package_cost_sheets
+            SET status = CASE
+                WHEN status = 'Draft' THEN 'In Progress'
+                WHEN status = 'Working' THEN 'In Progress'
+                WHEN status = 'Locked' THEN 'Approved'
+                WHEN status = 'Award Baseline' THEN 'Awarded'
+                ELSE status
+            END
+            WHERE status IN ('Draft', 'Working', 'Locked', 'Award Baseline')
+        """))
         for (package_id,) in packages:
             original = db.execute(text("""
                 SELECT id
@@ -395,7 +470,7 @@ def ensure_package_cost_sheets(db: Session) -> None:
                     )
                     VALUES (
                         :package_id, '1', 'Package Base Cost', 'Working Estimate',
-                        'Working', '', 0, CURRENT_TIMESTAMP
+                        'In Progress', '', 0, CURRENT_TIMESTAMP
                     )
                 """), {"package_id": package_id})
                 original_id = db.execute(text("SELECT last_insert_rowid()")).scalar_one()
@@ -405,12 +480,12 @@ def ensure_package_cost_sheets(db: Session) -> None:
                     UPDATE package_cost_sheets
                     SET title = 'Package Base Cost',
                         sheet_type = CASE WHEN sheet_type = 'Original' THEN 'Working Estimate' ELSE sheet_type END,
-                        status = CASE WHEN status = 'Draft' THEN 'Working' ELSE status END
+                        status = CASE WHEN status IN ('Draft', 'Working') THEN 'In Progress' ELSE status END
                     WHERE id = :original_id
                       AND (
                         title = 'Original Cost Sheet'
                         OR sheet_type = 'Original'
-                        OR status = 'Draft'
+                        OR status IN ('Draft', 'Working')
                       )
                 """), {"original_id": original_id})
             db.execute(text("""
@@ -458,6 +533,7 @@ def initialise_database() -> None:
     try:
         run_startup_migrations(db)
         repair_package_cost_nodes_workstream_fk(db)
+        remove_package_cost_node_baseline_columns(db)
         repair_auto_cbs_cost_node_hierarchy(db)
         ensure_package_cost_sheets(db)
         seed_control_accounts(db)
