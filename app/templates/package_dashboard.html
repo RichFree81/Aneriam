@@ -63,26 +63,10 @@
       <div class="summary-card fy">
         <div class="sc-label">Estimate</div>
         <div class="sc-value">{{ active_baseline_estimate | zar }}</div>
-        <div class="sc-note">
-          {% if active_baseline_sheet %}
-          Active baseline: Sheet {{ active_baseline_sheet.sheet_number }}
-          {% else %}
-          No active baseline
-          {% endif %}
-        </div>
       </div>
       <div class="summary-card fy">
         <div class="sc-label">Commercial Status</div>
         <div class="sc-value">{{ commercial_status.status }}</div>
-        <div class="sc-note">
-          {% if commercial_status.rto_number %}
-          {{ commercial_status.rto_number }} &middot; {{ commercial_status.po_count }} PO{{ '' if commercial_status.po_count == 1 else 's' }}
-          {% elif package.is_contracted %}
-          RTO not yet created
-          {% else %}
-          Award baseline before RTO
-          {% endif %}
-        </div>
       </div>
     </div>
 

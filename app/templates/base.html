@@ -369,7 +369,13 @@
     }
     .summary-card.sc-main { border-color: #e0c87a; border-left: 3px solid #c8840a; }
     .summary-card.fy      { background: #fff; border-color: #c8d8e8; border-left: 3px solid #8aaac8; }
-    .summary-cards.package-kpi-cards { margin-bottom: 0; }
+    .summary-cards.package-kpi-cards {
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+    .package-kpi-cards .summary-card {
+      min-height: 72px;
+    }
     .sc-label { font-size: 10px; color: #667; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; white-space: nowrap; }
     /* nowrap on the value too — currency strings like "R 325,842,308.00"
        must not break inside a card. */

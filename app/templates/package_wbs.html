@@ -761,12 +761,6 @@
     gap: 8px;
     margin-top: auto;
   }
-  .sc-note {
-    margin-top: 3px;
-    font-size: 11px;
-    line-height: 1.25;
-    color: #667;
-  }
 </style>
 
 <div class="workspace-shell">
@@ -779,39 +773,14 @@
   <div class="summary-card fy">
     <div class="sc-label">Estimate</div>
     <div class="sc-value">{{ active_baseline_estimate | zar }}</div>
-    <div class="sc-note">
-      {% if active_baseline_sheet %}
-      Active baseline: Sheet {{ active_baseline_sheet.sheet_number }}
-      {% else %}
-      No active baseline
-      {% endif %}
-    </div>
   </div>
   <div class="summary-card fy">
     <div class="sc-label">Commercial Status</div>
     <div class="sc-value">{{ commercial_status.status }}</div>
-    <div class="sc-note">
-      {% if commercial_status.rto_number %}
-      {{ commercial_status.rto_number }} · {{ commercial_status.po_count }} PO{{ '' if commercial_status.po_count == 1 else 's' }}
-      {% elif package.is_contracted %}
-      RTO not yet created
-      {% else %}
-      Award baseline before RTO
-      {% endif %}
-    </div>
   </div>
   <div class="summary-card fy">
     <div class="sc-label">Committed Cost</div>
     <div class="sc-value">{{ commercial_status.linked_po_total | zar }}</div>
-    <div class="sc-note">
-      {% if commercial_status.po_count %}
-      Linked PO value
-      {% elif package.is_contracted %}
-      Awaiting linked PO
-      {% else %}
-      No order linked
-      {% endif %}
-    </div>
   </div>
 </div>
 
@@ -829,7 +798,7 @@
       {% for sheet in cost_sheets %}
       <a class="cost-sheet-link{% if sheet.id == active_cost_sheet.id %} active{% endif %}" href="{{ pkg_base }}/cost?sheet_id={{ sheet.id }}">
         <span class="cost-sheet-title">{{ sheet.title }}</span>
-        <span class="cost-sheet-meta">{{ sheet.sheet_number }} · {{ sheet.sheet_type }} · {{ sheet.status }}</span>
+        <span class="cost-sheet-meta">{{ sheet.sheet_number }} &middot; {{ sheet.sheet_type }} &middot; {{ sheet.status }}</span>
       </a>
       {% endfor %}
     </div>
