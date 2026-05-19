@@ -24,6 +24,7 @@
       <a href="/project/{{ project.project_number }}/packages">Packages</a>
     </div>
     <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
+    {{ nav.project_tabs(project, 'packages') }}
   </div>
 </div>
 {% endblock %}

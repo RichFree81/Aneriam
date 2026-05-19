@@ -35,6 +35,7 @@
       <a href="/project/{{ project.project_number }}/packages">Packages</a>
     </div>
     <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
+    {{ nav.project_tabs(project, 'packages') }}
   </div>
 </div>
 {% endblock %}
@@ -42,7 +43,7 @@
 {% block content %}
 <div class="workspace-shell">
   <div class="workspace-main">
-    <div class="summary-cards">
+    <div class="summary-cards package-kpi-cards">
       <div class="summary-card sc-main">
         <div class="sc-label">Pricing Basis</div>
         <div class="sc-value">{{ pricing_bases.get(package.pricing_basis, package.pricing_basis) }}</div>

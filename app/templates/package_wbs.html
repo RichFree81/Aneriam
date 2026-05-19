@@ -60,6 +60,7 @@
   <div class="subheader-inner">
     <div class="subheader-crumb"><a href="/">Portfolio</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}/packages">Packages</a></div>
     <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
+    {{ nav.project_tabs(project, 'packages') }}
   </div>
 </div>
 {% endblock %}
@@ -771,7 +772,7 @@
 <div class="workspace-shell">
   <div class="workspace-main">
 
-<div class="summary-cards">
+<div class="summary-cards package-kpi-cards">
   <div class="summary-card sc-main"><div class="sc-label">Pricing basis</div><div class="sc-value">{{ pricing_bases.get(package.pricing_basis, package.pricing_basis) }}</div></div>
   <div class="summary-card sc-main"><div class="sc-label">Package category</div><div class="sc-value">{{ package.package_type }}</div></div>
   <div class="summary-card fy"><div class="sc-label">Provisional Allocation</div><div class="sc-value">{{ package.planned_value | zar }}</div></div>

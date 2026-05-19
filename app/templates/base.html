@@ -369,6 +369,7 @@
     }
     .summary-card.sc-main { border-color: #e0c87a; border-left: 3px solid #c8840a; }
     .summary-card.fy      { background: #fff; border-color: #c8d8e8; border-left: 3px solid #8aaac8; }
+    .summary-cards.package-kpi-cards { margin-bottom: 0; }
     .sc-label { font-size: 10px; color: #667; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; white-space: nowrap; }
     /* nowrap on the value too — currency strings like "R 325,842,308.00"
        must not break inside a card. */
@@ -494,26 +495,27 @@
     .record-tabs {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 0;
       align-items: flex-end;
-      margin: 0 0 14px;
-      padding: 0 0 0 10px;
+      margin: 0;
+      padding: 0 0 0 8px;
       border-bottom: 1px solid #cbd8e5;
     }
     .record-tabs a {
       display: inline-flex;
       align-items: center;
       min-height: 31px;
-      padding: 6px 13px 7px;
+      padding: 7px 14px 8px;
       border: 1px solid #d8e1ea;
       border-bottom: none;
-      border-radius: 5px 5px 0 0;
-      background: #f5f8fb;
+      border-radius: 6px 6px 0 0;
+      background: #eef3f8;
       color: #445;
       font-size: 12px;
       font-weight: 600;
       text-decoration: none;
       margin-bottom: -1px;
+      margin-right: -1px;
     }
     .record-tabs a:hover {
       border-color: #cbd8e5;
@@ -532,6 +534,15 @@
       color: #aab;
       cursor: default;
       pointer-events: none;
+    }
+    .record-tabs + .card,
+    .record-tabs + .cost-sheet-layout,
+    .record-tabs + .workflow-steps {
+      margin-top: 0;
+      border-top-left-radius: 0;
+    }
+    .record-tabs + .card {
+      border-top: none;
     }
     .view-switch {
       display: flex;

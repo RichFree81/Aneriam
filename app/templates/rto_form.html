@@ -22,6 +22,7 @@
       {% if mode == 'create' %}New RTO — {{ next_number }}{% else %}Edit {{ rto.rto_number }}{% endif %}
     </div>
     <div class="subheader-subtitle">{{ package.description }}</div>
+    {{ nav.project_tabs(project, 'packages') }}
   </div>
 </div>
 {% endblock %}
