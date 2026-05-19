@@ -848,6 +848,7 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
             "pricing_basis_label": PRICING_BASES.get(pkg.pricing_basis, pkg.pricing_basis),
             "planned_value": float(pkg.planned_value or 0),
             "planned_value_display": fmt_zar(pkg.planned_value),
+            "planned_value_locked": _package_active_baseline(pkg) is not None,
             "package_stage": pkg.package_stage,
             "url": f"/project/{project.project_number}/packages/{pkg.package_number}",
         }
@@ -975,10 +976,12 @@ def project_package_update(
     if package_stage not in PACKAGE_STAGES:
         raise HTTPException(status_code=400, detail="Invalid package stage")
 
-    try:
-        planned = float(planned_value or 0)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Provisional allocation must be numeric") from exc
+    active_baseline = _package_active_baseline(pkg)
+    if active_baseline is None:
+        try:
+            planned = float(planned_value or 0)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Provisional allocation must be numeric") from exc
 
     pkg.description = description
     pkg.package_type = package_type
@@ -987,10 +990,11 @@ def project_package_update(
     pkg.pricing_basis = pricing_basis
     pkg.package_stage = package_stage
 
-    try:
-        plan_package(db, pkg, planned)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if active_baseline is None:
+        try:
+            plan_package(db, pkg, planned)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     db.commit()
     return RedirectResponse(f"/project/{project_number}/packages", status_code=303)
@@ -1028,9 +1032,12 @@ def _package_awarded_line_total(pkg: Package) -> float:
 
 
 def _package_node_assigned_total(pkg: Package) -> float:
+    active_baseline = _package_active_baseline(pkg)
+    if active_baseline is None:
+        return 0.0
     total = 0.0
     for node in pkg.cost_nodes:
-        if node.is_item:
+        if node.cost_sheet_id == active_baseline.id and node.is_item:
             value = node.pre_award_amount
             if value:
                 total += float(value)
@@ -1040,9 +1047,22 @@ def _package_node_assigned_total(pkg: Package) -> float:
 def _package_node_committed_total(pkg: Package) -> float:
     total = 0.0
     for node in pkg.cost_nodes:
+        active_baseline = _package_active_baseline(pkg)
+        if active_baseline is not None and node.cost_sheet_id != active_baseline.id:
+            continue
         if node.is_item and node.contract_amount:
             total += float(node.contract_amount)
     return total
+
+
+def _package_active_baseline(pkg: Package):
+    baselines = [
+        sheet for sheet in pkg.cost_sheets
+        if sheet.sheet_type == "Baseline" and sheet.status in {"Approved", "Awarded"}
+    ]
+    if not baselines:
+        return None
+    return sorted(baselines, key=lambda sheet: (sheet.status == "Awarded", sheet.locked_at or sheet.created_at, sheet.id))[-1]
 
 
 def _package_assigned_total(pkg: Package) -> float:
@@ -1094,6 +1114,8 @@ def _package_cost_position(pkg: Package) -> dict[str, float | str]:
 def _package_provisional_balance(pkg: Package) -> float:
     """Remaining package-level reservation not yet assigned to WBS cost items."""
     if pkg.is_contracted:
+        return 0.0
+    if _package_active_baseline(pkg) is not None:
         return 0.0
     assigned = _package_assigned_total(pkg)
     return max(float(pkg.planned_value or 0) - assigned, 0.0)

@@ -463,6 +463,14 @@ def ensure_package_cost_sheets(db: Session) -> None:
                 LIMIT 1
             """), {"package_id": package_id}).first()
             if original is None:
+                legacy_node_count = db.execute(text("""
+                    SELECT COUNT(*)
+                    FROM package_cost_nodes
+                    WHERE package_id = :package_id
+                      AND cost_sheet_id IS NULL
+                """), {"package_id": package_id}).scalar_one()
+                if not legacy_node_count:
+                    continue
                 db.execute(text("""
                     INSERT INTO package_cost_sheets (
                         package_id, sheet_number, title, sheet_type, status,

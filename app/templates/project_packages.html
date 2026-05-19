@@ -85,7 +85,13 @@
     document.getElementById('editPackageSource').value = data.package_source || 'Internal';
     document.getElementById('editPricingBasis').value = data.pricing_basis || 'LS';
     document.getElementById('editPackageStage').value = data.package_stage || 'Definition';
-    document.getElementById('editPlannedValue').value = data.planned_value || 0;
+    const plannedInput = document.getElementById('editPlannedValue');
+    plannedInput.value = data.planned_value || 0;
+    plannedInput.readOnly = Boolean(data.planned_value_locked);
+    plannedInput.classList.toggle('locked-input', Boolean(data.planned_value_locked));
+    plannedInput.title = data.planned_value_locked
+      ? 'Controlled by the active baseline costing'
+      : 'Editable until a baseline costing is approved';
     document.getElementById('packageEditOverlay').classList.add('open');
     document.getElementById('packageEditDrawer').classList.add('open');
   }
@@ -380,6 +386,11 @@
     border-radius: 4px;
     font-size: 13px;
     font-family: inherit;
+  }
+  .package-drawer-form input.locked-input {
+    background: #f0f2f5;
+    color: #667;
+    cursor: not-allowed;
   }
   .package-modal-grid textarea {
     min-height: 82px;

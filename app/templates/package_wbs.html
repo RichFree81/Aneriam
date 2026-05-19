@@ -34,7 +34,7 @@
 {% endif %}
 <a href="#" onclick="openCostSheetModal(); return false;">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h6A1.5 1.5 0 0 1 11 2.5V4h1.5A1.5 1.5 0 0 1 14 5.5v8a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5v-11zM3.5 2a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-8a.5.5 0 0 0-.5-.5H11v7.5a.5.5 0 0 1-.8.4L8 11.25 5.8 12.9a.5.5 0 0 1-.8-.4V2H3.5z"/></svg>
-  Add Scenario Cost Sheet
+  Add Estimate Costing
 </a>
 {% endif %}
 {% if not package.is_contracted %}
@@ -983,13 +983,13 @@
 <div class="filter-overlay" id="costSheetOverlay" onclick="closeCostSheetModal()"></div>
 <div class="filter-modal" id="costSheetModal" style="width:560px;">
   <div class="fm-header">
-    <span>Add Scenario Cost Sheet</span>
+    <span>Add Estimate Costing</span>
     <button class="fm-close" onclick="closeCostSheetModal()" aria-label="Close">&times;</button>
   </div>
   <form method="post" action="{{ pkg_base }}/cost/add-sheet">
     <div class="fm-fields package-modal-grid">
       <label class="span-2">Title *
-        <input name="title" id="costSheetTitle" required autocomplete="off" placeholder="Scenario 001 - scope change">
+        <input name="title" id="costSheetTitle" required autocomplete="off" placeholder="Estimate Costing 001">
       </label>
       <label class="span-2">Description
         <input name="description" autocomplete="off">
@@ -997,7 +997,7 @@
     </div>
     <div class="fm-footer">
       <button type="button" class="btn btn-sm btn-ghost" onclick="closeCostSheetModal()">Cancel</button>
-      <button type="submit" class="btn btn-sm">Add Cost Sheet</button>
+      <button type="submit" class="btn btn-sm">Add Estimate Costing</button>
     </div>
   </form>
 </div>

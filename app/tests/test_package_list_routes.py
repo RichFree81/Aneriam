@@ -154,6 +154,12 @@ def test_package_cost_sheet_edit_drawer_deletes_working_sheet_and_baseline():
         assert response.status_code == 200
         assert "sheetDeleteForm" in response.text
         assert "/cost/delete-sheet/" in response.text
+        response = client.post(
+            "/project/5006/packages/5006-PKG-001/cost/add-sheet",
+            data={"title": "Estimate Costing 001", "description": ""},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
         working_sheet = session.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Working Estimate").one()
         node = PackageCostNode(
             package_id=package_id,
@@ -172,14 +178,11 @@ def test_package_cost_sheet_edit_drawer_deletes_working_sheet_and_baseline():
         )
         assert response.status_code == 303
         assert session.get(PackageCostNode, node.id) is None
-        replacement_sheet = session.query(PackageCostSheet).filter_by(package_id=package_id).one()
-        assert replacement_sheet.sheet_number == "1"
-        assert replacement_sheet.title == "Package Base Cost"
-        assert replacement_sheet.sheet_type == "Working Estimate"
+        assert session.query(PackageCostSheet).filter_by(package_id=package_id).count() == 0
 
         baseline = PackageCostSheet(
             package_id=package_id,
-            sheet_number="2",
+            sheet_number="1",
             title="Baseline 1 - Feasibility",
             sheet_type="Baseline",
             status="Approved",
@@ -206,12 +209,10 @@ def test_package_cost_sheet_edit_drawer_deletes_working_sheet_and_baseline():
         assert response.status_code == 303
         assert session.get(PackageCostSheet, baseline.id) is None
         assert session.get(PackageCostNode, baseline_node.id) is None
-        session.refresh(replacement_sheet)
-        assert replacement_sheet.sheet_number == "1"
 
         award_baseline = PackageCostSheet(
             package_id=package_id,
-            sheet_number="2",
+            sheet_number="1",
             title="Awarded Baseline",
             sheet_type="Baseline",
             status="Awarded",
@@ -234,8 +235,22 @@ def test_package_cost_sheet_edit_drawer_deletes_working_sheet_and_baseline():
 def test_package_cost_tab_uses_hierarchical_actions_and_table():
     client, session, package_id = _client_with_package()
     try:
+        response = client.get("/project/5006/packages/5006-PKG-001/cost")
+        assert response.status_code == 200
+        assert session.query(PackageCostSheet).filter_by(package_id=package_id).count() == 0
+        assert "Add Estimate Costing" in response.text
+        assert "Package Base Cost" not in response.text
+
+        response = client.post(
+            "/project/5006/packages/5006-PKG-001/cost/add-sheet",
+            data={"title": "Estimate Costing 001", "description": ""},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        original_sheet = session.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Working Estimate").one()
         level2 = PackageCostNode(
             package_id=package_id,
+            cost_sheet_id=original_sheet.id,
             code="01",
             description="Earthworks",
             is_item=False,
@@ -245,6 +260,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         session.flush()
         item = PackageCostNode(
             package_id=package_id,
+            cost_sheet_id=original_sheet.id,
             parent_id=level2.id,
             code="01.01",
             description="Bulk excavation line",
@@ -259,12 +275,11 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
 
         response = client.get("/project/5006/packages/5006-PKG-001/cost")
         assert response.status_code == 200
-        original_sheet = session.query(PackageCostSheet).filter_by(package_id=package_id, sheet_type="Working Estimate").one()
         session.refresh(level2)
         assert level2.cost_sheet_id == original_sheet.id
         assert original_sheet.status == "In Progress"
-        assert "Package Base Cost" in response.text
-        assert "Add Scenario Cost Sheet" in response.text
+        assert "Estimate Costing 001" in response.text
+        assert "Add Estimate Costing" in response.text
         assert 'id="costSheetGrid"' in response.text
         assert 'id="costNodeGrid"' not in response.text
         assert "Back to Cost Sheets" not in response.text
@@ -275,7 +290,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         end = response.text.index(";\n  const ACTIVE_COST_SHEET_LOCKED", start)
         sheet_data = json.loads(response.text[start:end])
         assert sheet_data[0]["sheet_number"] == "1"
-        assert sheet_data[0]["title"] == "Package Base Cost"
+        assert sheet_data[0]["title"] == "Estimate Costing 001"
         assert sheet_data[0]["sheet_type"] == "Working Estimate"
         assert sheet_data[0]["status"] == "In Progress"
         assert sheet_data[0]["pre_award"] == 1200
@@ -287,7 +302,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         response = client.post(
             f"/project/5006/packages/5006-PKG-001/cost/update-sheet/{original_sheet.id}",
             data={
-                "title": "Package Base Cost - reviewed",
+                "title": "Estimate Costing 001 - reviewed",
                 "status": "In Review",
                 "created_by": "Estimator",
                 "reviewed_by": "PM",
@@ -299,12 +314,12 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert response.status_code == 303
         session.refresh(original_sheet)
         assert original_sheet.sheet_number == "1"
-        assert original_sheet.title == "Package Base Cost - reviewed"
+        assert original_sheet.title == "Estimate Costing 001 - reviewed"
         assert original_sheet.created_by == "Estimator"
         assert original_sheet.reviewed_by == "PM"
         assert original_sheet.approved_by == "Sponsor"
         assert original_sheet.description == "Updated basis note"
-        original_sheet.title = "Package Base Cost"
+        original_sheet.title = "Estimate Costing 001"
         original_sheet.created_by = ""
         original_sheet.reviewed_by = ""
         original_sheet.approved_by = ""
@@ -375,7 +390,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert response.status_code == 303
         variation_sheet = session.query(PackageCostSheet).filter_by(
             package_id=package_id,
-            sheet_type="Scenario",
+            sheet_type="Working Estimate",
             title="Variation 001 - scope change",
         ).one()
         assert variation_sheet.sheet_number == "2"
@@ -567,7 +582,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert baseline_sheet.sheet_number == "2"
         assert baseline_sheet.status == "Approved"
         assert baseline_sheet.source_sheet_id is None
-        assert "Baselined from 1 - Package Base Cost" in baseline_sheet.description
+        assert "Baselined from 1 - Estimate Costing 001" in baseline_sheet.description
         assert baseline_sheet.locked_at is not None
         assert response.headers["location"].endswith(f"/cost?sheet_id={baseline_sheet.id}")
         assert session.get(PackageCostSheet, original_sheet.id) is None
