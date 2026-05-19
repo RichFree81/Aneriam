@@ -32,6 +32,7 @@
 <script src="/static/vendor/tabulator/tabulator.min.js"></script>
 <script>
   const PACKAGE_ROWS = {{ package_grid_rows | tojson }};
+  let currentAwardPackage = null;
 
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -77,6 +78,12 @@
     document.getElementById('packageDeleteForm').action =
       '/project/{{ project.project_number }}/packages/delete/' + data.record_id;
     document.getElementById('packageDeleteForm').dataset.packageNumber = data.package_number || '';
+    currentAwardPackage = data;
+    const awardButton = document.getElementById('packageAwardButton');
+    awardButton.disabled = !data.can_award;
+    awardButton.title = data.can_award
+      ? 'Award package from the active baseline'
+      : (data.is_contracted ? 'Package has already been awarded' : 'Approve an active baseline before award');
     document.getElementById('packageEditForm').action =
       '/project/{{ project.project_number }}/packages/update/' + data.record_id;
     document.getElementById('editPackageNumber').value = data.package_number || '';
@@ -99,6 +106,37 @@
   function closePackageEditDrawer() {
     document.getElementById('packageEditOverlay').classList.remove('open');
     document.getElementById('packageEditDrawer').classList.remove('open');
+  }
+
+  function openAwardWorkflow() {
+    if (!currentAwardPackage || !currentAwardPackage.can_award) return;
+    closePackageEditDrawer();
+    document.getElementById('awardPackageForm').action =
+      '/project/{{ project.project_number }}/packages/award/' + currentAwardPackage.record_id;
+    document.getElementById('awardPackageTitle').textContent =
+      'Award ' + (currentAwardPackage.package_number || 'Package');
+    document.getElementById('awardBaselineRef').textContent =
+      'Sheet ' + currentAwardPackage.active_baseline_sheet_number + ' - ' + currentAwardPackage.active_baseline_title;
+    document.getElementById('awardRtoNumber').textContent = currentAwardPackage.next_rto_number || '';
+    document.getElementById('awardCompanyName').value = '';
+    document.getElementById('awardTotalValue').textContent = currentAwardPackage.baseline_total_display || 'R 0.00';
+    const body = document.getElementById('awardLineBody');
+    const lines = currentAwardPackage.baseline_lines || [];
+    body.innerHTML = lines.map(line => `
+      <tr>
+        <td style="font-family:monospace;font-size:12px;">${escapeHtml(line.code || '')}</td>
+        <td>${escapeHtml(line.description || '')}</td>
+        <td class="num">${escapeHtml(line.amount_display || 'R 0.00')}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="3" class="empty-state">No baseline cost lines found.</td></tr>';
+    document.getElementById('awardPackageOverlay').classList.add('open');
+    document.getElementById('awardPackageModal').classList.add('open');
+    setTimeout(() => document.getElementById('awardCompanyName').focus(), 60);
+  }
+
+  function closeAwardWorkflow() {
+    document.getElementById('awardPackageOverlay').classList.remove('open');
+    document.getElementById('awardPackageModal').classList.remove('open');
   }
 
   function packageDeleteMessage() {
@@ -165,6 +203,7 @@
     if (e.key === 'Escape') {
       closePackageEditDrawer();
       closeAddPackageModal();
+      closeAwardWorkflow();
     }
   });
 </script>
@@ -325,6 +364,16 @@
     border: 1px solid #f3c1bb;
   }
   .package-delete-btn:hover { background: #f8d7da; }
+  .package-award-btn {
+    background: #e6f0fa;
+    color: #1a4a80;
+    border: 1px solid #b7cbe0;
+  }
+  .package-award-btn:hover { background: #dbeaf7; }
+  .package-award-btn:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+  }
   .package-drawer-body {
     padding: 16px;
     overflow-y: auto;
@@ -370,6 +419,15 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
+  }
+  .award-lines {
+    max-height: 260px;
+    overflow: auto;
+    border: 1px solid #e1e8f0;
+    border-radius: 5px;
+  }
+  .award-lines table {
+    margin: 0;
   }
   .package-modal-grid .span-2 { grid-column: span 2; }
   .package-modal-grid label {
@@ -441,6 +499,7 @@
 <aside class="package-drawer" id="packageEditDrawer" aria-label="Edit package">
   <div class="package-drawer-header">
     <div class="package-drawer-title" id="packageEditTitle">Edit Package</div>
+    <button type="button" class="btn btn-sm package-award-btn" id="packageAwardButton" onclick="openAwardWorkflow()">Award</button>
     <form id="packageDeleteForm" method="post" onsubmit="return confirm(packageDeleteMessage());">
       <button type="submit" class="btn btn-sm package-delete-btn">Delete</button>
     </form>
@@ -484,6 +543,51 @@
     </form>
   </div>
 </aside>
+
+<div class="filter-overlay" id="awardPackageOverlay" onclick="closeAwardWorkflow()"></div>
+<div class="filter-modal" id="awardPackageModal" style="width:760px;">
+  <div class="fm-header">
+    <span id="awardPackageTitle">Award Package</span>
+    <button class="fm-close" onclick="closeAwardWorkflow()" aria-label="Close">&times;</button>
+  </div>
+  <form id="awardPackageForm" method="post" onsubmit="return confirm('Award this package and create the RTO?');">
+    <div class="fm-fields package-modal-grid">
+      <label class="span-2">Company name *
+        <input name="company_name" id="awardCompanyName" required autocomplete="off">
+      </label>
+      <div>
+        <div class="sc-label">Active baseline</div>
+        <div id="awardBaselineRef" style="font-size:13px;color:#1a2e4a;font-weight:600;"></div>
+      </div>
+      <div>
+        <div class="sc-label">RTO number</div>
+        <div id="awardRtoNumber" style="font-size:13px;color:#1a2e4a;font-weight:600;font-family:monospace;"></div>
+      </div>
+      <div class="span-2 award-lines">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:120px;">Account</th>
+              <th>Description</th>
+              <th class="num" style="width:130px;">Estimate</th>
+            </tr>
+          </thead>
+          <tbody id="awardLineBody"></tbody>
+          <tfoot>
+            <tr>
+              <th colspan="2" class="num">Total</th>
+              <th class="num" id="awardTotalValue">R 0.00</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+    <div class="fm-footer">
+      <button type="button" class="btn btn-sm btn-ghost" onclick="closeAwardWorkflow()">Cancel</button>
+      <button type="submit" class="btn btn-sm">Award Package and Issue RTO</button>
+    </div>
+  </form>
+</div>
 
 <div class="filter-overlay" id="addPackageOverlay" onclick="closeAddPackageModal()"></div>
 <div class="filter-modal" id="addPackageModal" style="width:640px;">

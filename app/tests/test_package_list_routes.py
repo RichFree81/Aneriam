@@ -635,48 +635,47 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert working_sheet.source_sheet_id == baseline_sheet.id
         assert working_sheet.status == "In Progress"
 
-        package = session.get(Package, package_id)
-        package.is_contracted = True
-        package.awarded_amount = 2100
-        session.commit()
+        response = client.get("/project/5006/packages")
+        assert response.status_code == 200
+        assert "packageAwardButton" in response.text
+        assert "Award Package and Issue RTO" in response.text
+        assert "baseline_lines" in response.text
+        assert "5006-PKG-001-RTO.01" in response.text
 
         response = client.get("/project/5006/packages/5006-PKG-001/cost")
         assert response.status_code == 200
-        assert "Create RTO" in response.text
-        assert "RTO not yet created" in response.text
-
-        response = client.get("/project/5006/packages/5006-PKG-001/rto/new")
-        assert response.status_code == 200
-        assert "PO matching is completed under Project Commitments" in response.text
-        assert 'value="Original package"' in response.text
-        assert 'value="2100.0"' in response.text
+        assert "Award Package" not in response.text
 
         response = client.post(
-            "/project/5006/packages/5006-PKG-001/rto/new",
-            data={
-                "vendor_name": "ACME Contractors",
-                "description": "Original package",
-                "total_amount": "2100",
-                "request_date": "2026-05-19",
-                "originator": "PM",
-                "notes": "Awarded baseline RTO",
-            },
+            f"/project/5006/packages/award/{package_id}",
+            data={"company_name": "ACME Contractors"},
             follow_redirects=False,
         )
         assert response.status_code == 303
+
+        response = client.get("/project/5006/packages/5006-PKG-001/cost")
+        assert response.status_code == 200
         rto = session.query(RTO).filter_by(package_number="5006-PKG-001").one()
-        assert rto.rto_number == "5006-PKG-001.RTO.001"
+        assert rto.rto_number == "5006-PKG-001-RTO.01"
         assert rto.total_amount == 2100
+        assert rto.vendor_name == "ACME Contractors"
+        package = session.get(Package, package_id)
+        assert package.is_contracted is True
+        assert package.awarded_vendor_name == "ACME Contractors"
+        assert package.awarded_amount == 2100
+        assert session.get(PackageCostSheet, working_sheet.id) is None
+        session.refresh(baseline_sheet)
+        assert baseline_sheet.status == "Awarded"
 
         response = client.get("/project/5006/packages/5006-PKG-001/cost")
         assert response.status_code == 200
         assert "View RTO" in response.text
         assert "Awaiting PO" in response.text
-        assert "5006-PKG-001.RTO.001" in response.text
+        assert "5006-PKG-001-RTO.01" in response.text
 
         response = client.get("/project/5006/commitments/request-to-order")
         assert response.status_code == 200
-        assert "5006-PKG-001.RTO.001" in response.text
+        assert "5006-PKG-001-RTO.01" in response.text
         assert "ACME Contractors" in response.text
 
         session.add(PurchaseOrderLine(
@@ -710,7 +709,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
 
         response = client.post(
             "/project/5006/packages/5006-PKG-001/cost/create-baseline",
-            data={"sheet_id": str(working_sheet.id), "title": "Baseline after award"},
+            data={"sheet_id": str(baseline_sheet.id), "title": "Baseline after award"},
             follow_redirects=False,
         )
         assert response.status_code == 400

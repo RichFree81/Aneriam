@@ -1064,10 +1064,12 @@ def cost_award(
     project_number: str,
     package_number: str,
     db: DbDep,
-    baseline_sheet_id: str = Form(...),
+    baseline_sheet_id: str = Form(""),
 ):
     pkg = get_package_or_404(db, project_number, package_number)
-    baseline = _resolve_cost_sheet(db, pkg, baseline_sheet_id)
+    baseline = _resolve_cost_sheet(db, pkg, baseline_sheet_id) if baseline_sheet_id.strip() else _active_baseline_sheet(pkg)
+    if baseline is None:
+        raise HTTPException(status_code=400, detail="Approve a baseline before awarding the package")
     if baseline.sheet_type != "Baseline":
         raise HTTPException(status_code=400, detail="Select the approved baseline being awarded")
     if baseline.status != "Approved":

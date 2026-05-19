@@ -39,12 +39,6 @@
 </a>
 {% endif %}
 {% endif %}
-{% if not package.is_contracted %}
-<a href="#" onclick="openAwardModal(); return false;">
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>
-  Award Package
-</a>
-{% endif %}
 {% if package.is_external and package.is_contracted %}
   {% if package_rto %}
   <a href="{{ pkg_base }}/rto">
@@ -216,17 +210,6 @@
       document.getElementById('costLineLibraryAccount').value = '';
       document.getElementById('costLineCustomAccount').value = '';
     }
-  }
-
-  function openAwardModal() {
-    closeActions();
-    document.getElementById('awardOverlay').classList.add('open');
-    document.getElementById('awardModal').classList.add('open');
-  }
-
-  function closeAwardModal() {
-    document.getElementById('awardOverlay').classList.remove('open');
-    document.getElementById('awardModal').classList.remove('open');
   }
 
   function openCostEditDrawer(data) {
@@ -1139,31 +1122,4 @@
   </div>
 </div>
 
-<div class="filter-overlay" id="awardOverlay" onclick="closeAwardModal()"></div>
-<div class="filter-modal" id="awardModal" style="width:520px;">
-  <div class="fm-header">
-    <span>Award Package</span>
-    <button class="fm-close" onclick="closeAwardModal()" aria-label="Close">&times;</button>
-  </div>
-  <form method="post" action="{{ pkg_base }}/cost/award" onsubmit="return confirm('Award this package? Award validation will block missing Scope/Plant metadata.')">
-    <div class="fm-fields">
-      {% if baseline_sheets %}
-      <label>Baseline being awarded *
-        <select name="baseline_sheet_id" required>
-          {% for sheet in baseline_sheets %}
-          <option value="{{ sheet.id }}">{{ sheet.sheet_number }} - {{ sheet.title }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <p style="margin:0;color:#556;line-height:1.5;">Awarding the package removes open working estimates, converts the selected baseline estimate to committed cost, and marks the selected baseline as awarded.</p>
-      {% else %}
-      <p style="margin:0;color:#8b1a10;line-height:1.5;">Create and lock an estimate baseline before awarding this package.</p>
-      {% endif %}
-    </div>
-    <div class="fm-footer">
-      <button type="button" class="btn btn-sm btn-ghost" onclick="closeAwardModal()">Cancel</button>
-      <button type="submit" class="btn btn-sm" {% if not baseline_sheets %}disabled{% endif %}>Award Package</button>
-    </div>
-  </form>
-</div>
 {% endblock %}

@@ -43,16 +43,16 @@ def can_delete(status: str) -> bool:
     return status in (STATUS_DRAFT, STATUS_SUBMITTED, STATUS_CANCELLED)
 
 
-_RTO_SUFFIX_RE = re.compile(r"\.RTO\.(\d+)$")
+_RTO_SUFFIX_RE = re.compile(r"(?:\.RTO\.|-RTO\.)(\d+)$")
 
 
 def next_rto_number(db: Session, package_number: str) -> str:
-    """Generate the next RTO number for a *package*: {package}.RTO.NNN where
-    NNN is the highest existing trailing-digit suffix + 1, zero-padded.
+    """Generate the next RTO number for a package: {package}-RTO.NN where
+    NN is the highest existing trailing-digit suffix + 1, zero-padded.
 
     The new (post-Slice-B) numbering scheme keys RTOs to packages, so each
     external package owns its own RTO sequence. v1 expects exactly one RTO
-    per package, but the NNN suffix leaves room for re-tenders / replacement
+    per package, but the NN suffix leaves room for re-tenders / replacement
     RTOs without a schema change.
     """
     rows = db.execute(
@@ -65,7 +65,7 @@ def next_rto_number(db: Session, package_number: str) -> str:
             n = int(m.group(1))
             if n > max_n:
                 max_n = n
-    return f"{package_number}.RTO.{max_n + 1:03d}"
+    return f"{package_number}-RTO.{max_n + 1:02d}"
 
 
 def get_for_package(db: Session, package_number: str) -> RTO | None:

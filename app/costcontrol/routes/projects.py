@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..capitalisation import IS_CAP_SQL, NOT_CAP_SQL
-from ..cbs import cbs_rows, next_cost_component_code, plan_package, po_package_suggestions, scope_item_state
+from ..cbs import award_package, cbs_rows, next_cost_component_code, plan_package, po_package_suggestions, scope_item_state
 from ..dependencies import DbDep
 from ..formatting import fmt_zar
 from ..hierarchy import build_hierarchy
@@ -20,6 +20,7 @@ from ..models import (
     CostComponentPlantArea,
     ImportBatch,
     Package,
+    PackageCostSheet,
     PlantArea,
     PORtoLink,
     ProjectScopeItem,
@@ -836,8 +837,13 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
         "committed": committed,
         "unallocated": unallocated,
     }
-    package_grid_rows = [
-        {
+    package_grid_rows = []
+    for pkg in packages:
+        active_baseline = _package_active_baseline(pkg)
+        baseline_lines = _package_baseline_lines(pkg, active_baseline)
+        baseline_total = sum(float(line["amount"]) for line in baseline_lines)
+        package_rto = rto_helpers.get_for_package(db, pkg.package_number)
+        package_grid_rows.append({
             **_package_cost_position(pkg),
             "commercial_status": rto_helpers.package_commercial_status(db, pkg)["status"],
             "package_number": pkg.package_number,
@@ -849,12 +855,20 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
             "pricing_basis_label": PRICING_BASES.get(pkg.pricing_basis, pkg.pricing_basis),
             "planned_value": float(pkg.planned_value or 0),
             "planned_value_display": fmt_zar(pkg.planned_value),
-            "planned_value_locked": _package_active_baseline(pkg) is not None,
+            "planned_value_locked": active_baseline is not None,
             "package_stage": pkg.package_stage,
+            "active_baseline_id": active_baseline.id if active_baseline else None,
+            "active_baseline_sheet_number": active_baseline.sheet_number if active_baseline else "",
+            "active_baseline_title": active_baseline.title if active_baseline else "",
+            "baseline_lines": baseline_lines,
+            "baseline_total": baseline_total,
+            "baseline_total_display": fmt_zar(baseline_total),
+            "can_award": bool(pkg.is_external and not pkg.is_contracted and active_baseline is not None and active_baseline.status == "Approved"),
+            "is_contracted": pkg.is_contracted,
+            "has_rto": package_rto is not None,
+            "next_rto_number": rto_helpers.next_rto_number(db, pkg.package_number),
             "url": f"/project/{project.project_number}/packages/{pkg.package_number}",
-        }
-        for pkg in packages
-    ]
+        })
 
     po_total, po_unassigned, _ = _po_counts(db, project_number)
     return templates.TemplateResponse("project_packages.html", {
@@ -1012,6 +1026,78 @@ def project_package_delete(project_number: str, package_id: int, db: DbDep):
     return RedirectResponse(f"/project/{project_number}/packages", status_code=303)
 
 
+@router.post("/project/{project_number}/packages/award/{package_id}")
+def project_package_award(
+    project_number: str,
+    package_id: int,
+    db: DbDep,
+    company_name: str = Form(...),
+):
+    pkg = db.get(Package, package_id)
+    if pkg is None or pkg.project_number != project_number:
+        raise HTTPException(status_code=404, detail="Package not found")
+    if not pkg.is_external:
+        raise HTTPException(status_code=400, detail="Only external packages use the RTO award workflow")
+    if pkg.is_contracted:
+        raise HTTPException(status_code=400, detail="Package has already been awarded")
+
+    active_baseline = _package_active_baseline(pkg)
+    if active_baseline is None or active_baseline.status != "Approved":
+        raise HTTPException(status_code=400, detail="Approve a baseline before awarding the package")
+
+    company_name = company_name.strip()
+    if not company_name:
+        raise HTTPException(status_code=400, detail="Company name is required")
+
+    now = datetime.now()
+    try:
+        award_package(db, pkg)
+        for sheet in list(pkg.cost_sheets):
+            if sheet.id != active_baseline.id and sheet.sheet_type == "Working Estimate":
+                db.delete(sheet)
+
+        awarded_total = 0.0
+        for node in pkg.cost_nodes:
+            if node.cost_sheet_id == active_baseline.id and node.is_item:
+                node.contract_unit = node.pre_award_unit
+                node.contract_qty = node.pre_award_qty
+                node.contract_rate = node.pre_award_rate
+                node.contract_amount = node.pre_award_amount
+                awarded_total += float(node.contract_amount or 0)
+
+        pkg.awarded_vendor_name = company_name
+        pkg.awarded_amount = awarded_total
+        pkg.awarded_date = now.date()
+        pkg.package_stage = "Execution"
+        active_baseline.status = "Awarded"
+        active_baseline.display_order = -100
+        marker = f"Used for package award on {now.date().isoformat()}."
+        active_baseline.description = (
+            marker if not active_baseline.description else f"{marker}\n{active_baseline.description}"
+        )
+
+        db.add(RTO(
+            rto_number=rto_helpers.next_rto_number(db, pkg.package_number),
+            project_number=project_number,
+            package_number=pkg.package_number,
+            vendor_name=company_name,
+            description=pkg.description,
+            total_amount=awarded_total,
+            status=rto_helpers.STATUS_DRAFT,
+            request_date=now.date(),
+            originator="",
+            notes=f"Created from awarded baseline Sheet {active_baseline.sheet_number} - {active_baseline.title}",
+            created_at=now,
+            updated_at=now,
+        ))
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return RedirectResponse(f"/project/{project_number}/packages", status_code=303)
+
+
 def _active_package_cost_items(pkg: Package):
     return [item for item in pkg.cost_items if not item.superseded]
 
@@ -1064,6 +1150,28 @@ def _package_active_baseline(pkg: Package):
     if not baselines:
         return None
     return sorted(baselines, key=lambda sheet: (sheet.status == "Awarded", sheet.locked_at or sheet.created_at, sheet.id))[-1]
+
+
+def _package_baseline_lines(pkg: Package, baseline: PackageCostSheet | None) -> list[dict[str, float | str]]:
+    if baseline is None:
+        return []
+    lines = [
+        node for node in pkg.cost_nodes
+        if node.cost_sheet_id == baseline.id and node.is_item
+    ]
+    return [
+        {
+            "code": node.code,
+            "description": node.description,
+            "amount": float(node.pre_award_amount or 0),
+            "amount_display": fmt_zar(node.pre_award_amount or 0),
+        }
+        for node in sorted(lines, key=lambda node: (node.display_order, node.id))
+    ]
+
+
+def _package_baseline_total(pkg: Package, baseline: PackageCostSheet | None) -> float:
+    return sum(float(line["amount"]) for line in _package_baseline_lines(pkg, baseline))
 
 
 def _package_assigned_total(pkg: Package) -> float:
