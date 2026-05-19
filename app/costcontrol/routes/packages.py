@@ -354,6 +354,12 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
         cost_group_options = _cost_node_options(root_nodes)
         cost_sheet_rows = [_cost_sheet_row(pkg, sheet) for sheet in cost_sheets]
         baseline_sheets = [sheet for sheet in cost_sheets if sheet.sheet_type == "Baseline"]
+        active_baseline_sheet = _active_baseline_sheet(pkg)
+        active_baseline_estimate = (
+            _cost_sheet_estimate_total(pkg, active_baseline_sheet.id)
+            if active_baseline_sheet is not None
+            else 0.0
+        )
         control_accounts = db.query(ControlAccount).order_by(ControlAccount.code).all()
         award_errors = []
         return templates.TemplateResponse("package_wbs.html", {
@@ -379,6 +385,8 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "active_cost_sheet_locked": _is_locked_sheet(active_cost_sheet) if active_cost_sheet is not None else False,
             "active_cost_sheet_working": _is_working_sheet(active_cost_sheet) if active_cost_sheet is not None else False,
             "baseline_sheets": baseline_sheets,
+            "active_baseline_sheet": active_baseline_sheet,
+            "active_baseline_estimate": active_baseline_estimate,
             "cost_sheet_statuses": COST_SHEET_SELECTABLE_STATUSES,
             "control_accounts": control_accounts,
             "award_errors": award_errors,

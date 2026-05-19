@@ -239,6 +239,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert response.status_code == 200
         assert session.query(PackageCostSheet).filter_by(package_id=package_id).count() == 0
         assert "Add Estimate Costing" in response.text
+        assert "No active baseline" in response.text
         assert "Package Base Cost" not in response.text
 
         response = client.post(
@@ -280,6 +281,7 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         assert original_sheet.status == "In Progress"
         assert "Estimate Costing 001" in response.text
         assert "Add Estimate Costing" in response.text
+        assert "No active baseline" in response.text
         assert 'id="costSheetGrid"' in response.text
         assert 'id="costNodeGrid"' not in response.text
         assert "Back to Cost Sheets" not in response.text
@@ -592,6 +594,8 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
         response = client.get(f"/project/5006/packages/5006-PKG-001/cost?sheet_id={baseline_sheet.id}")
         assert response.status_code == 200
         assert "This cost sheet is approved and read-only." in response.text
+        assert "Active baseline: Sheet 2" in response.text
+        assert "R 2,100.00" in response.text
         assert "Add Cost Grouping" not in response.text
         assert "Add Cost Line" not in response.text
         assert "Create Baseline" not in response.text

@@ -766,12 +766,29 @@
     gap: 8px;
     margin-top: auto;
   }
+  .sc-note {
+    margin-top: 3px;
+    font-size: 11px;
+    line-height: 1.25;
+    color: #667;
+  }
 </style>
 
 <div class="summary-cards">
   <div class="summary-card sc-main"><div class="sc-label">Pricing basis</div><div class="sc-value">{{ pricing_bases.get(package.pricing_basis, package.pricing_basis) }}</div></div>
   <div class="summary-card sc-main"><div class="sc-label">Package category</div><div class="sc-value">{{ package.package_type }}</div></div>
   <div class="summary-card fy"><div class="sc-label">Provisional Allocation</div><div class="sc-value">{{ package.planned_value | zar }}</div></div>
+  <div class="summary-card fy">
+    <div class="sc-label">Estimate</div>
+    <div class="sc-value">{{ active_baseline_estimate | zar }}</div>
+    <div class="sc-note">
+      {% if active_baseline_sheet %}
+      Active baseline: Sheet {{ active_baseline_sheet.sheet_number }}
+      {% else %}
+      No active baseline
+      {% endif %}
+    </div>
+  </div>
   <div class="summary-card fy"><div class="sc-label">Committed Cost</div><div class="sc-value">{{ (package.awarded_amount or 0) | zar }}</div></div>
 </div>
 
