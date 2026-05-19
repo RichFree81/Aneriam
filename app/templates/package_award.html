@@ -15,7 +15,6 @@
       <a href="/project/{{ project.project_number }}/packages">Packages</a>
     </div>
     <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
-    {{ nav.package_sections(project, package, 'tendering') }}
   </div>
 </div>
 {% endblock %}
@@ -23,6 +22,7 @@
 {% block content %}
 <div class="workspace-shell">
   <div class="workspace-main">
+    {{ nav.package_tabs(project, package, 'tendering') }}
     {{ nav.tendering_steps(project, package, 'award') }}
 
 {% if awarded_bidder %}

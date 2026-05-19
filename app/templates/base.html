@@ -491,38 +491,44 @@
       display: block;
     }
     .workspace-main { min-width: 0; }
-    .record-nav {
+    .record-tabs {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      padding-top: 8px;
-      padding-bottom: 10px;
+      align-items: flex-end;
+      margin: 0 0 14px;
+      padding: 0 0 0 10px;
+      border-bottom: 1px solid #cbd8e5;
     }
-    .record-nav a {
+    .record-tabs a {
       display: inline-flex;
       align-items: center;
-      min-height: 30px;
-      padding: 6px 11px;
-      border: 1px solid transparent;
-      border-radius: 4px;
+      min-height: 31px;
+      padding: 6px 13px 7px;
+      border: 1px solid #d8e1ea;
+      border-bottom: none;
+      border-radius: 5px 5px 0 0;
+      background: #f5f8fb;
       color: #445;
       font-size: 12px;
       font-weight: 600;
       text-decoration: none;
+      margin-bottom: -1px;
     }
-    .record-nav a:hover {
+    .record-tabs a:hover {
       border-color: #cbd8e5;
-      background: #f6f9fc;
+      background: #eef4fa;
       color: #1a2e4a;
       text-decoration: none;
     }
-    .record-nav a.active {
-      border-color: #9db9d5;
-      background: #e6f0fb;
+    .record-tabs a.active {
+      border-color: #cbd8e5;
+      border-bottom: 1px solid #fff;
+      background: #fff;
       color: #1a2e4a;
       font-weight: 700;
     }
-    .record-nav a.disabled {
+    .record-tabs a.disabled {
       color: #aab;
       cursor: default;
       pointer-events: none;

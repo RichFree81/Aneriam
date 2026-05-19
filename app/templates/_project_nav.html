@@ -28,9 +28,9 @@
 </div>
 {%- endmacro %}
 
-{% macro package_sections(project, package, active) -%}
+{% macro package_tabs(project, package, active) -%}
 {% set pkg_base = "/project/" ~ project.project_number ~ "/packages/" ~ package.package_number %}
-<nav class="record-nav" aria-label="Package sections">
+<nav class="record-tabs" aria-label="Package sections">
   <a href="{{ pkg_base }}"
      class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
   <a href="{{ pkg_base }}/cost"

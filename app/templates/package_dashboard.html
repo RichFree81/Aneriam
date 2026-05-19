@@ -35,7 +35,6 @@
       <a href="/project/{{ project.project_number }}/packages">Packages</a>
     </div>
     <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
-    {{ nav.package_sections(project, package, 'dashboard') }}
   </div>
 </div>
 {% endblock %}
@@ -85,6 +84,8 @@
         </div>
       </div>
     </div>
+
+    {{ nav.package_tabs(project, package, 'dashboard') }}
 
     <div class="card">
       <h2>Package Workspace</h2>
