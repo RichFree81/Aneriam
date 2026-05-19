@@ -33,40 +33,45 @@
 
     {% if mode == 'create' %}
     <div style="background:#f0f5fb;border-left:3px solid #1a6eb0;padding:10px 14px;font-size:12px;color:#1a4a70;">
-      RTO number <strong>{{ next_number }}</strong> will be assigned on save.
+      RTO number <strong>{{ next_number }}</strong> will be assigned on save. This request is created from the awarded package and will appear under Project Commitments for PO matching.
     </div>
+    {% if existing_rto %}
+    <div style="background:#fff3cd;border-left:3px solid #c8840a;padding:10px 14px;font-size:12px;color:#856404;">
+      This package already has RTO <strong>{{ existing_rto.rto_number }}</strong>. Create a further RTO only if this is a replacement or later commercial request.
+    </div>
+    {% endif %}
     {% endif %}
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;">
         Vendor name
-        <input type="text" name="vendor_name" value="{{ rto.vendor_name if rto else '' }}" required
+        <input type="text" name="vendor_name" value="{{ rto.vendor_name if rto else suggested_rto.vendor_name }}" required
                style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
       </label>
 
       <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;">
         Request date
         <input type="date" name="request_date"
-               value="{{ rto.request_date if rto and rto.request_date else '' }}" required
+               value="{{ rto.request_date if rto and rto.request_date else suggested_rto.request_date }}" required
                style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
       </label>
 
       <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;grid-column:1/-1;">
         Description
-        <input type="text" name="description" value="{{ rto.description if rto else '' }}" required
+        <input type="text" name="description" value="{{ rto.description if rto else suggested_rto.description }}" required
                style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
       </label>
 
       <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;">
         Total amount (excl. VAT)
         <input type="number" step="0.01" name="total_amount"
-               value="{{ rto.total_amount if rto else '' }}" required
+               value="{{ rto.total_amount if rto else suggested_rto.total_amount }}" required
                style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
       </label>
 
       <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;">
         Originator
-        <input type="text" name="originator" value="{{ rto.originator if rto else '' }}"
+        <input type="text" name="originator" value="{{ rto.originator if rto else suggested_rto.originator }}"
                placeholder="(your name)"
                style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
       </label>
@@ -74,7 +79,7 @@
       <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#556;grid-column:1/-1;">
         Notes
         <textarea name="notes" rows="3"
-                  style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;font-family:inherit;resize:vertical;">{{ rto.notes if rto else '' }}</textarea>
+                  style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;font-family:inherit;resize:vertical;">{{ rto.notes if rto else suggested_rto.notes }}</textarea>
       </label>
     </div>
 

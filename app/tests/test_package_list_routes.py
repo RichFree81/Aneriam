@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -9,7 +10,18 @@ from sqlalchemy.pool import StaticPool
 
 from costcontrol.app import app
 from costcontrol.database import Base, get_db
-from costcontrol.models import CostComponent, CostItemCode, Package, PackageCostNode, PackageCostSheet, Project, ProjectScopeItem
+from costcontrol.models import (
+    CostComponent,
+    CostItemCode,
+    Package,
+    PackageCostNode,
+    PackageCostSheet,
+    PORtoLink,
+    Project,
+    ProjectScopeItem,
+    PurchaseOrderLine,
+    RTO,
+)
 from costcontrol.seed import seed_control_accounts, seed_cost_control_master_data
 
 
@@ -625,7 +637,77 @@ def test_package_cost_tab_uses_hierarchical_actions_and_table():
 
         package = session.get(Package, package_id)
         package.is_contracted = True
+        package.awarded_amount = 2100
         session.commit()
+
+        response = client.get("/project/5006/packages/5006-PKG-001/cost")
+        assert response.status_code == 200
+        assert "Create RTO" in response.text
+        assert "RTO not yet created" in response.text
+
+        response = client.get("/project/5006/packages/5006-PKG-001/rto/new")
+        assert response.status_code == 200
+        assert "PO matching is completed under Project Commitments" in response.text
+        assert 'value="Original package"' in response.text
+        assert 'value="2100.0"' in response.text
+
+        response = client.post(
+            "/project/5006/packages/5006-PKG-001/rto/new",
+            data={
+                "vendor_name": "ACME Contractors",
+                "description": "Original package",
+                "total_amount": "2100",
+                "request_date": "2026-05-19",
+                "originator": "PM",
+                "notes": "Awarded baseline RTO",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        rto = session.query(RTO).filter_by(package_number="5006-PKG-001").one()
+        assert rto.rto_number == "5006-PKG-001.RTO.001"
+        assert rto.total_amount == 2100
+
+        response = client.get("/project/5006/packages/5006-PKG-001/cost")
+        assert response.status_code == 200
+        assert "View RTO" in response.text
+        assert "Awaiting PO" in response.text
+        assert "5006-PKG-001.RTO.001" in response.text
+
+        response = client.get("/project/5006/commitments/request-to-order")
+        assert response.status_code == 200
+        assert "5006-PKG-001.RTO.001" in response.text
+        assert "ACME Contractors" in response.text
+
+        session.add(PurchaseOrderLine(
+            po_number="PO-001",
+            project_number="5006",
+            memo_main="Original package",
+            memo="Original package",
+            amount=2100,
+            actual_amount=0,
+            remaining=2100,
+            vendor="ACME Contractors",
+            date=date(2026, 5, 20),
+            status="Pending Receipt",
+        ))
+        rto.status = "Approved"
+        session.commit()
+
+        response = client.post(
+            "/project/5006/commitments/purchase-orders/PO-001/link",
+            data={"rto_id": str(rto.id)},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert session.query(PORtoLink).filter_by(po_number="PO-001", rto_id=rto.id).one().is_original is True
+        session.refresh(rto)
+        assert rto.status == "Issued for PO"
+        response = client.get("/project/5006/packages/5006-PKG-001/cost")
+        assert response.status_code == 200
+        assert "Committed" in response.text
+        assert "Linked PO value" in response.text
+
         response = client.post(
             "/project/5006/packages/5006-PKG-001/cost/create-baseline",
             data={"sheet_id": str(working_sheet.id), "title": "Baseline after award"},

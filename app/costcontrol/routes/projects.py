@@ -839,6 +839,7 @@ def project_packages_page(project_number: str, request: Request, db: DbDep):
     package_grid_rows = [
         {
             **_package_cost_position(pkg),
+            "commercial_status": rto_helpers.package_commercial_status(db, pkg)["status"],
             "package_number": pkg.package_number,
             "record_id": pkg.id,
             "description": pkg.description,

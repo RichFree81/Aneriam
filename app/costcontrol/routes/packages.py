@@ -23,6 +23,7 @@ from ..models import (
     PackageCostNode,
     PackageCostSheet,
 )
+from .. import rto as rto_helpers
 from ..seed import COST_ITEM_LIBRARY_DIRECT, COST_ITEM_LIBRARY_INDIRECT, PRICING_BASES
 from ..reports import project_totals
 from ..templates import templates
@@ -360,6 +361,8 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             if active_baseline_sheet is not None
             else 0.0
         )
+        package_rto = rto_helpers.get_for_package(db, package_number)
+        commercial_status = rto_helpers.package_commercial_status(db, pkg)
         control_accounts = db.query(ControlAccount).order_by(ControlAccount.code).all()
         award_errors = []
         return templates.TemplateResponse("package_wbs.html", {
@@ -387,6 +390,8 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
             "baseline_sheets": baseline_sheets,
             "active_baseline_sheet": active_baseline_sheet,
             "active_baseline_estimate": active_baseline_estimate,
+            "package_rto": package_rto,
+            "commercial_status": commercial_status,
             "cost_sheet_statuses": COST_SHEET_SELECTABLE_STATUSES,
             "control_accounts": control_accounts,
             "award_errors": award_errors,

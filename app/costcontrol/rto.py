@@ -10,7 +10,7 @@ import re
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from .models import RTO
+from .models import Package, RTO
 
 
 # Status workflow constants (see RTO_SPEC.md §7).
@@ -76,6 +76,51 @@ def get_for_package(db: Session, package_number: str) -> RTO | None:
         .order_by(RTO.id.desc())
         .first()
     )
+
+
+def linked_po_total(db: Session, rto_id: int) -> float:
+    row = db.execute(
+        text("""
+            SELECT COALESCE(SUM(p.amount), 0) AS linked_po_total
+            FROM po_rto_links l
+            JOIN po_lines p ON p.po_number = l.po_number AND p.voided = 0
+            WHERE l.rto_id = :rto_id
+        """),
+        {"rto_id": rto_id},
+    ).fetchone()
+    return float(row.linked_po_total or 0) if row else 0.0
+
+
+def package_commercial_status(db: Session, pkg: Package) -> dict[str, float | int | str | None]:
+    """Return the package's derived commercial state.
+
+    The package is the origin of the RTO, but the PO link lives in the
+    project-level commitments register. This helper keeps that status derived
+    from the linked records instead of duplicating editable fields on Package.
+    """
+    rto = get_for_package(db, pkg.package_number)
+    if rto is None:
+        return {
+            "status": "Awarded" if pkg.is_contracted else "Not Awarded",
+            "rto_number": None,
+            "rto_status": None,
+            "po_count": 0,
+            "linked_po_total": 0.0,
+        }
+
+    linked_pos = linked_po_total(db, rto.id)
+    po_count_row = db.execute(
+        text("SELECT COUNT(*) AS po_count FROM po_rto_links WHERE rto_id = :rto_id"),
+        {"rto_id": rto.id},
+    ).fetchone()
+    po_count = int(po_count_row.po_count or 0) if po_count_row else 0
+    return {
+        "status": "Committed" if po_count else "Awaiting PO",
+        "rto_number": rto.rto_number,
+        "rto_status": rto.status,
+        "po_count": po_count,
+        "linked_po_total": linked_pos,
+    }
 
 
 def linked_pos(db: Session, rto_id: int) -> list[dict]:

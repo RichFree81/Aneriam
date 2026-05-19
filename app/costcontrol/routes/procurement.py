@@ -90,12 +90,28 @@ def package_rto_view(project_number: str, package_number: str, request: Request,
 def package_rto_new_form(project_number: str, package_number: str, request: Request, db: DbDep):
     project = get_project_or_404(db, project_number)
     pkg = _get_external_package_or_404(db, project_number, package_number)
+    if not pkg.is_contracted:
+        raise HTTPException(status_code=400, detail="Create the RTO after selecting the awarded baseline")
     next_number = rto_helpers.next_rto_number(db, package_number)
+    existing_rto = rto_helpers.get_for_package(db, package_number)
+    suggested_rto = {
+        "vendor_name": pkg.awarded_vendor_name or "",
+        "description": pkg.description,
+        "total_amount": float(pkg.awarded_amount or 0),
+        "request_date": datetime.now().date(),
+        "originator": "",
+        "notes": (
+            "Created from the package awarded baseline. "
+            "PO matching is completed under Project Commitments > Purchase Orders."
+        ),
+    }
     return templates.TemplateResponse("rto_form.html", {
         "request": request,
         "project": project,
         "package": pkg,
         "rto": None,
+        "existing_rto": existing_rto,
+        "suggested_rto": suggested_rto,
         "next_number": next_number,
         "mode": "create",
     })
@@ -114,7 +130,9 @@ def package_rto_create(
     notes: str = Form(""),
 ):
     get_project_or_404(db, project_number)
-    _get_external_package_or_404(db, project_number, package_number)
+    pkg = _get_external_package_or_404(db, project_number, package_number)
+    if not pkg.is_contracted:
+        raise HTTPException(status_code=400, detail="Create the RTO after selecting the awarded baseline")
     rto_number = rto_helpers.next_rto_number(db, package_number)
     now = datetime.now()
     try:
@@ -156,6 +174,8 @@ def package_rto_edit_form(project_number: str, package_number: str, request: Req
         "project": project,
         "package": pkg,
         "rto": rto,
+        "existing_rto": None,
+        "suggested_rto": {},
         "next_number": rto.rto_number,
         "mode": "edit",
     })
@@ -851,5 +871,3 @@ def package_award_view(project_number: str, package_number: str, request: Reques
         "committed_total": committed_total,
         "variance": variance,
     })
-
-
