@@ -488,44 +488,41 @@
 
     /* -- Workspace navigation ------------------------------------------ */
     .workspace-shell {
-      display: grid;
-      grid-template-columns: 180px minmax(0, 1fr);
-      gap: 16px;
-      align-items: start;
+      display: block;
     }
     .workspace-main { min-width: 0; }
-    .section-rail {
-      position: sticky;
-      top: 112px;
+    .record-nav {
       display: flex;
-      flex-direction: column;
-      gap: 2px;
-      background: #fff;
-      border: 1px solid #dde6ee;
-      border-radius: 6px;
-      box-shadow: 0 1px 3px rgba(0,0,0,.07);
-      padding: 6px;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding-top: 8px;
+      padding-bottom: 10px;
     }
-    .section-rail a {
-      display: block;
-      padding: 8px 10px;
+    .record-nav a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 6px 11px;
+      border: 1px solid transparent;
       border-radius: 4px;
       color: #445;
-      font-size: 13px;
-      font-weight: 500;
+      font-size: 12px;
+      font-weight: 600;
       text-decoration: none;
     }
-    .section-rail a:hover {
-      background: #f0f4f8;
+    .record-nav a:hover {
+      border-color: #cbd8e5;
+      background: #f6f9fc;
       color: #1a2e4a;
       text-decoration: none;
     }
-    .section-rail a.active {
+    .record-nav a.active {
+      border-color: #9db9d5;
       background: #e6f0fb;
       color: #1a2e4a;
       font-weight: 700;
     }
-    .section-rail a.disabled {
+    .record-nav a.disabled {
       color: #aab;
       cursor: default;
       pointer-events: none;
@@ -563,29 +560,29 @@
     .workflow-steps {
       display: grid;
       grid-template-columns: repeat(4, minmax(120px, 1fr));
-      gap: 8px;
+      gap: 1px;
       margin-bottom: 14px;
+      border: 1px solid #dde6ee;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #dde6ee;
     }
     .workflow-steps a {
       display: block;
       min-height: 54px;
-      padding: 9px 10px;
-      border: 1px solid #dde6ee;
-      border-left: 3px solid #8aaac8;
-      border-radius: 5px;
+      padding: 10px 12px;
+      border: none;
+      border-bottom: 3px solid transparent;
       background: #fff;
       color: #445;
       text-decoration: none;
     }
     .workflow-steps a:hover {
-      border-color: #9db9d5;
-      border-left-color: #1a6eb0;
       background: #f4f8fc;
       text-decoration: none;
     }
     .workflow-steps a.active {
-      border-color: #9db9d5;
-      border-left-color: #1a6eb0;
+      border-bottom-color: #1a6eb0;
       background: #e6f0fb;
     }
     .workflow-step-title {

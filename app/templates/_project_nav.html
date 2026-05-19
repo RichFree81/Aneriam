@@ -6,10 +6,10 @@
      class="{% if active == 'scope' %}active{% endif %}">Scope</a>
   <a href="/project/{{ project.project_number }}/packages"
      class="{% if active in ['wbs', 'packages'] %}active{% endif %}">Packages</a>
-  <a href="/project/{{ project.project_number }}/analysis"
-     class="{% if active == 'analysis' %}active{% endif %}">Analysis</a>
   <a href="/project/{{ project.project_number }}/commitments"
      class="{% if active == 'commitments' %}active{% endif %}">Commitments</a>
+  <a href="/project/{{ project.project_number }}/analysis"
+     class="{% if active == 'analysis' %}active{% endif %}">Analysis</a>
 </div>
 {%- endmacro %}
 
@@ -30,7 +30,7 @@
 
 {% macro package_sections(project, package, active) -%}
 {% set pkg_base = "/project/" ~ project.project_number ~ "/packages/" ~ package.package_number %}
-<aside class="section-rail" aria-label="Package sections">
+<nav class="record-nav" aria-label="Package sections">
   <a href="{{ pkg_base }}"
      class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
   <a href="{{ pkg_base }}/cost"
@@ -40,19 +40,13 @@
      class="{% if active == 'tendering' %}active{% endif %}">Tendering</a>
   {% elif package.is_contracted %}
   <a href="{{ pkg_base }}/rto"
-     class="{% if active == 'tendering' %}active{% endif %}">Tendering</a>
+     class="{% if active == 'tendering' %}active{% endif %}">RTO / Order</a>
   {% else %}
   <a href="#"
      class="disabled"
      aria-disabled="true">Tendering</a>
   {% endif %}
-  <a href="#"
-     class="disabled"
-     aria-disabled="true">Documents</a>
-  <a href="#"
-     class="disabled"
-     aria-disabled="true">History</a>
-</aside>
+</nav>
 {%- endmacro %}
 
 {% macro tendering_steps(project, package, active) -%}

@@ -440,12 +440,14 @@ def _package_detail_response(request: Request, db: Session, project_number: str,
 
 @router.get("/project/{project_number}/packages/{package_number}/scope")
 def package_scope(project_number: str, package_number: str, request: Request, db: DbDep):
-    return _package_detail_response(request, db, project_number, package_number, "scope")
+    get_package_or_404(db, project_number, package_number)
+    return RedirectResponse(f"/project/{project_number}/packages/{package_number}", status_code=303)
 
 
 @router.get("/project/{project_number}/packages/{package_number}/schedule")
 def package_schedule(project_number: str, package_number: str, request: Request, db: DbDep):
-    return _package_detail_response(request, db, project_number, package_number, "schedule")
+    get_package_or_404(db, project_number, package_number)
+    return RedirectResponse(f"/project/{project_number}/packages/{package_number}", status_code=303)
 
 
 @router.get("/project/{project_number}/packages/{package_number}/cost")
@@ -455,7 +457,8 @@ def package_cost(project_number: str, package_number: str, request: Request, db:
 
 @router.get("/project/{project_number}/packages/{package_number}/cost_components")
 def package_cost_components(project_number: str, package_number: str, request: Request, db: DbDep):
-    return _package_detail_response(request, db, project_number, package_number, "cost_components")
+    get_package_or_404(db, project_number, package_number)
+    return RedirectResponse(f"/project/{project_number}/packages/{package_number}/cost", status_code=303)
 
 
 @router.get("/project/{project_number}/packages/{package_number}")

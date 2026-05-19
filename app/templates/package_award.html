@@ -15,17 +15,16 @@
       <a href="/project/{{ project.project_number }}/packages">Packages</a>
     </div>
     <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
+    {{ nav.package_sections(project, package, 'tendering') }}
   </div>
 </div>
 {% endblock %}
 
 {% block content %}
 <div class="workspace-shell">
-  {{ nav.package_sections(project, package, 'tendering') }}
   <div class="workspace-main">
     {{ nav.tendering_steps(project, package, 'award') }}
 
-{# ── Procurement sub-nav ─────────────────────────────────────────── #}
 {% if awarded_bidder %}
 
 <div class="summary-cards">

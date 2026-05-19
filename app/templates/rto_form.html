@@ -22,13 +22,13 @@
       {% if mode == 'create' %}New RTO — {{ next_number }}{% else %}Edit {{ rto.rto_number }}{% endif %}
     </div>
     <div class="subheader-subtitle">{{ package.description }}</div>
+    {{ nav.package_sections(project, package, 'tendering') }}
   </div>
 </div>
 {% endblock %}
 
 {% block content %}
 <div class="workspace-shell">
-  {{ nav.package_sections(project, package, 'tendering') }}
   <div class="workspace-main">
     {{ nav.tendering_steps(project, package, 'rto') }}
     <div class="card" style="max-width:780px;">

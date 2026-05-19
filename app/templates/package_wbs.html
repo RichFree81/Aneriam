@@ -60,6 +60,7 @@
   <div class="subheader-inner">
     <div class="subheader-crumb"><a href="/">Portfolio</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}">{{ project.project_number }} {{ proj_name }}</a><span>&rsaquo;</span><a href="/project/{{ project.project_number }}/packages">Packages</a></div>
     <div class="subheader-title">{{ package.package_number }}: {{ package.description }}</div>
+    {{ nav.package_sections(project, package, 'costings') }}
   </div>
 </div>
 {% endblock %}
@@ -769,7 +770,6 @@
 </style>
 
 <div class="workspace-shell">
-  {{ nav.package_sections(project, package, 'costings') }}
   <div class="workspace-main">
 
 <div class="summary-cards">
