@@ -499,8 +499,8 @@
   #costNodeGrid .tabulator .tabulator-header,
   #costSheetGrid .tabulator-header,
   #costSheetGrid .tabulator .tabulator-header {
-    border-bottom: 2px solid #d0d8e4;
-    background: #f0f4f8;
+    border-bottom: 2px solid #ccd8e4;
+    background: #eef3f7;
     color: #334;
     font-weight: 600;
   }
@@ -508,7 +508,7 @@
   #costNodeGrid .tabulator-col,
   #costSheetGrid .tabulator-header .tabulator-col,
   #costSheetGrid .tabulator-col {
-    background: #f0f4f8;
+    background: #eef3f7;
     border-right: none;
     min-height: 32px;
   }
@@ -528,12 +528,12 @@
   #costSheetGrid .tabulator-row.tabulator-row-even,
   #costSheetGrid .tabulator-row.tabulator-row-odd {
     background: #fff;
-    border-bottom: 1px solid #edf0f4;
+    border-bottom: 1px solid #edf2f6;
     min-height: 32px;
   }
   #costNodeGrid .tabulator-row.cost-group-row,
   #costNodeGrid .tabulator-row.cost-group-row .tabulator-cell {
-    background: #f7f9fc;
+    background: #f8fafc;
     font-weight: 600;
   }
   #costNodeGrid .tabulator-row .tabulator-cell,
@@ -768,7 +768,7 @@
   <div class="workspace-main">
 
 {% if not cost_sheet_open %}
-<div class="card">
+<div class="card table-card">
   <div id="costSheetGrid"></div>
 </div>
 {% else %}
@@ -795,7 +795,7 @@
     {% elif package.is_contracted %}
     <div class="baseline-lock-note">The package has been awarded. New estimate baselines cannot be created after award.</div>
     {% endif %}
-    <div class="card">
+    <div class="card table-card">
       <div id="costNodeGrid"></div>
       <div class="cost-total-strip">
         <div>Grand Total</div>
