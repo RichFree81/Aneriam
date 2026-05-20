@@ -347,26 +347,26 @@
     .hier-toggle.collapsed { transform: rotate(0deg); }
 
     /* ── Summary cards (project page) ───────────────────── */
-    /* Single row that scrolls horizontally when too narrow — never wraps to
-       a second row. flex-shrink:0 prevents cards from being squashed below
-       their natural width; overflow-x:auto on the wrapper produces a
-       horizontal scrollbar when the row exceeds container width. */
+    /* Equal-width KPI cards that wrap with the available screen width and
+       keep a stable minimum height when labels or values span two lines. */
     .summary-cards {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 10px;
       margin-bottom: 20px;
-      flex-wrap: nowrap;
-      overflow-x: auto;
-      padding-bottom: 4px;
-      scrollbar-width: thin;
+      align-items: stretch;
     }
     .summary-card {
-      flex: 1 0 140px;
+      min-width: 0;
+      min-height: 78px;
       background: #fff;
       border: 1px solid #dde6ee;
       border-radius: 6px;
       padding: 12px 14px;
       box-shadow: 0 1px 3px rgba(0,0,0,.07);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
     }
     .summary-card.sc-main { border-color: #e0c87a; border-left: 3px solid #c8840a; }
     .summary-card.fy      { background: #fff; border-color: #c8d8e8; border-left: 3px solid #8aaac8; }
@@ -375,12 +375,10 @@
       padding-bottom: 0;
     }
     .package-kpi-cards .summary-card {
-      min-height: 72px;
+      min-height: 78px;
     }
-    .sc-label { font-size: 10px; color: #667; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; white-space: nowrap; }
-    /* nowrap on the value too — currency strings like "R 325,842,308.00"
-       must not break inside a card. */
-    .sc-value { font-size: 13px; font-weight: 700; color: #1a2e4a; white-space: nowrap; }
+    .sc-label { font-size: 10px; color: #667; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+    .sc-value { font-size: 13px; font-weight: 700; color: #1a2e4a; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
 
     /* ── Project filter modal fields ─────────────────────── */
     .fm-fields { display: flex; flex-direction: column; gap: 14px; padding: 16px 20px; }
