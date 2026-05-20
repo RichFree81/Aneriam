@@ -27,21 +27,6 @@
 {% block content %}
 {{ nav.commitments_tabs(project, 'rto') }}
 
-<div class="summary-cards">
-  <div class="summary-card sc-main">
-    <div class="sc-label">RTOs</div>
-    <div class="sc-value">{{ summary.rto_count }}</div>
-  </div>
-  <div class="summary-card sc-main">
-    <div class="sc-label">RTO Value</div>
-    <div class="sc-value">{{ summary.rto_amount | zar }}</div>
-  </div>
-  <div class="summary-card fy">
-    <div class="sc-label">Linked PO Value</div>
-    <div class="sc-value">{{ summary.linked_po_total | zar }}</div>
-  </div>
-</div>
-
 <div class="card">
   {% if rtos %}
   <table>

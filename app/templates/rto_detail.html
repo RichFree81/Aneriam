@@ -43,43 +43,6 @@
 
 {% if rto %}
 
-<div class="summary-cards">
-  <div class="summary-card sc-main">
-    <div class="sc-label">RTO No.</div>
-    <div class="sc-value" style="font-family:monospace;">{{ rto.rto_number }}</div>
-  </div>
-  <div class="summary-card sc-main">
-    <div class="sc-label">Status</div>
-    <div class="sc-value"><span class="chip">{{ rto.status }}</span></div>
-  </div>
-  <div class="summary-card sc-main">
-    <div class="sc-label">RTO Total (excl. VAT)</div>
-    <div class="sc-value">{{ rto.total_amount | zar }}</div>
-  </div>
-  <div class="summary-card sc-main">
-    <div class="sc-label">Linked PO Total</div>
-    <div class="sc-value">{% if linked_pos %}{{ linked_po_total | zar }}{% else %}—{% endif %}</div>
-  </div>
-  <div class="summary-card sc-main">
-    <div class="sc-label">Variance</div>
-    <div class="sc-value">
-      {% if variance is none %}
-        —
-      {% elif variance > 0 %}
-        <span style="color:#a83232;">+{{ variance | zar }}</span>
-      {% elif variance < 0 %}
-        <span style="color:#1a7a3c;">{{ variance | zar }}</span>
-      {% else %}
-        <span style="color:#666;">{{ variance | zar }}</span>
-      {% endif %}
-    </div>
-  </div>
-  <div class="summary-card fy">
-    <div class="sc-label">Linked POs</div>
-    <div class="sc-value">{{ linked_pos | length }}</div>
-  </div>
-</div>
-
 <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start;">
 
   <div>

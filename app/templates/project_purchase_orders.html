@@ -29,29 +29,6 @@
 
 {{ nav.commitments_tabs(project, 'purchase_orders') }}
 
-<div class="summary-cards">
-  <div class="summary-card sc-main">
-    <div class="sc-label">Total Orders</div>
-    <div class="sc-value">{{ summary.po_count }}</div>
-  </div>
-  <div class="summary-card sc-main">
-    <div class="sc-label">Order Value</div>
-    <div class="sc-value">{{ summary.order | zar }}</div>
-  </div>
-  <div class="summary-card sc-main">
-    <div class="sc-label">Actual Billed</div>
-    <div class="sc-value">{{ summary.actual | zar }}</div>
-  </div>
-  <div class="summary-card sc-main">
-    <div class="sc-label">Remaining</div>
-    <div class="sc-value">{{ summary.remaining | zar }}</div>
-  </div>
-  <div class="summary-card fy">
-    <div class="sc-label">Unassigned</div>
-    <div class="sc-value">{{ summary.unassigned }}</div>
-  </div>
-</div>
-
 <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;">
   <a href="{{ commitments_base }}/purchase-orders?filter=all"
      class="btn btn-sm{% if active_filter != 'all' %} btn-ghost{% endif %}">

@@ -457,33 +457,6 @@
   }
 </style>
 
-<div class="summary-cards">
-  <div class="summary-card sc-main">
-    <div class="sc-label">Current Budget</div>
-    <div class="sc-value">{{ project.current_budget | zar }}</div>
-  </div>
-  <div class="summary-card sc-main">
-    <div class="sc-label">Approved Capex</div>
-    <div class="sc-value">{{ (project.approved_capex or 0) | zar }}</div>
-  </div>
-  <div class="summary-card fy">
-    <div class="sc-label">Unallocated</div>
-    <div class="sc-value">{{ pkg_stats.unallocated | zar }}</div>
-  </div>
-  <div class="summary-card fy">
-    <div class="sc-label">Provisional Allocation</div>
-    <div class="sc-value">{{ pkg_stats.provisional_allocation | zar }}</div>
-  </div>
-  <div class="summary-card fy">
-    <div class="sc-label">Estimate</div>
-    <div class="sc-value">{{ pkg_stats.assigned | zar }}</div>
-  </div>
-  <div class="summary-card fy">
-    <div class="sc-label">Committed</div>
-    <div class="sc-value">{{ pkg_stats.committed | zar }}</div>
-  </div>
-</div>
-
 <div class="card">
   {% if packages %}
   <div id="packageGrid"></div>

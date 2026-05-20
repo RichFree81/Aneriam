@@ -18,11 +18,9 @@ from ..models import (
     ControlAccount,
     CostComponent,
     CostComponentPlantArea,
-    CostItemCode,
     ImportBatch,
     Package,
     PackageCostSheet,
-    PackageCostNode,
     PlantArea,
     PORtoLink,
     ProjectScopeItem,
@@ -295,23 +293,11 @@ def project_scope_page(
 
     rows = []
     scope_grid_rows = []
-    cost_component_count = 0
-    incomplete_record_count = 0
     for item in scope_items:
         item_state = scope_item_state(item)
         cost_components = []
         child_rows = []
-        if not item.description.strip() or not item.work_type_code:
-            incomplete_record_count += 1
         for cost_component in item.cost_components:
-            cost_component_count += 1
-            if (
-                not cost_component.description.strip()
-                or not cost_component.commodity_code
-                or not cost_component.cbs_l2_code
-                or not cost_component.plant_area_links
-            ):
-                incomplete_record_count += 1
             area_contexts = [
                 _plant_area_context(link.plant_area_ref, areas_by_id)
                 for link in cost_component.plant_area_links
@@ -364,35 +350,10 @@ def project_scope_page(
             "_children": child_rows,
         })
 
-    linked_component_ids = {
-        component_id
-        for (component_id,) in (
-            db.query(CostItemCode.cost_component_id)
-            .join(PackageCostNode, PackageCostNode.code == CostItemCode.code)
-            .join(Package, Package.id == PackageCostNode.package_id)
-            .filter(
-                CostItemCode.project_number == project_number,
-                CostItemCode.cost_component_id.isnot(None),
-                Package.project_number == project_number,
-                PackageCostNode.is_item.is_(True),
-            )
-            .distinct()
-            .all()
-        )
-    }
-    unpackaged_component_count = cost_component_count - len(linked_component_ids)
-    scope_summary_cards = {
-        "scope_items": len(scope_items),
-        "cost_components": cost_component_count,
-        "unpackaged_components": unpackaged_component_count,
-        "incomplete_records": incomplete_record_count,
-    }
-
     return templates.TemplateResponse("project_scope.html", {
         "request": request,
         "project": project,
         "rows": rows,
-        "scope_summary_cards": scope_summary_cards,
         "work_types": work_types,
         "facility_groups": facility_groups,
         "plant_units": plant_units,

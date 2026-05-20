@@ -37,29 +37,6 @@
 
 {% if tender %}
 
-<div class="summary-cards">
-  <div class="summary-card sc-main">
-    <div class="sc-label">Tender No.</div>
-    <div class="sc-value" style="font-family:monospace;">{{ tender.tender_number }}</div>
-  </div>
-  <div class="summary-card sc-main">
-    <div class="sc-label">Status</div>
-    <div class="sc-value"><span class="chip">{{ tender.status }}</span></div>
-  </div>
-  <div class="summary-card sc-main">
-    <div class="sc-label">Issued</div>
-    <div class="sc-value">{{ tender.issued_date or '—' }}</div>
-  </div>
-  <div class="summary-card sc-main">
-    <div class="sc-label">Closing</div>
-    <div class="sc-value">{{ tender.closing_date or '—' }}</div>
-  </div>
-  <div class="summary-card sc-main">
-    <div class="sc-label">Bidders</div>
-    <div class="sc-value">{{ tender.bidders | length }}</div>
-  </div>
-</div>
-
 <div style="display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start;">
 
   <div>

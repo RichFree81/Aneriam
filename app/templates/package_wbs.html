@@ -767,24 +767,6 @@
 <div class="workspace-shell">
   <div class="workspace-main">
 
-<div class="summary-cards package-kpi-cards">
-  <div class="summary-card sc-main"><div class="sc-label">Pricing basis</div><div class="sc-value">{{ pricing_bases.get(package.pricing_basis, package.pricing_basis) }}</div></div>
-  <div class="summary-card sc-main"><div class="sc-label">Package category</div><div class="sc-value">{{ package.package_type }}</div></div>
-  <div class="summary-card fy"><div class="sc-label">Provisional Allocation</div><div class="sc-value">{{ package.planned_value | zar }}</div></div>
-  <div class="summary-card fy">
-    <div class="sc-label">Estimate</div>
-    <div class="sc-value">{{ active_baseline_estimate | zar }}</div>
-  </div>
-  <div class="summary-card fy">
-    <div class="sc-label">Commercial Status</div>
-    <div class="sc-value">{{ commercial_status.status }}</div>
-  </div>
-  <div class="summary-card fy">
-    <div class="sc-label">Committed Cost</div>
-    <div class="sc-value">{{ commercial_status.linked_po_total | zar }}</div>
-  </div>
-</div>
-
 {% if not cost_sheet_open %}
 <div class="card">
   <div id="costSheetGrid"></div>

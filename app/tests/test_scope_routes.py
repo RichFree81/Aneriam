@@ -121,12 +121,6 @@ def test_scope_page_uses_facility_unit_area_hierarchy():
         assert "Facility Group" in response.text
         assert "Plant Unit" in response.text
         assert "Area" in response.text
-        assert "Scope Items" in response.text
-        assert "Cost Components" in response.text
-        assert "Unpackaged Components" in response.text
-        assert "Incomplete Records" in response.text
-        assert '<div class="sc-value">1</div>' in response.text
-        assert '<div class="sc-value">0</div>' in response.text
         assert "valueField === 'code' ? item.code : String(item.id)" in response.text
         assert "setAreaOptions(areaSelect, areas, selectedArea, true, 'All Areas', 'code')" in response.text
         assert '<option value="205">205 - Structures</option>' in response.text
